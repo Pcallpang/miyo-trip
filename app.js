@@ -8,6 +8,47 @@ var store = {
     try { localStorage.setItem(this._p + k, JSON.stringify(v)); } catch (e) {}
   }
 };
+
+var SPEND_CATS = ["식비", "교통", "쇼핑", "관광", "기타"];
+
+function spendList() {
+  var v = store.get("spend", []);
+  return Array.isArray(v) ? v : [];
+}
+function spendFx() {
+  var n = Number(store.get("fx", 900));
+  return isFinite(n) && n > 0 ? n : 0;
+}
+function spendTotalJpy(list) {
+  return list.reduce(function (s, e) {
+    var n = Number(e.jpy);
+    return s + (isFinite(n) ? n : 0);
+  }, 0);
+}
+function jpyToKrw(jpy, fx) {
+  return Math.round(jpy * fx / 100);
+}
+function spendByCat(list) {
+  var m = {};
+  list.forEach(function (e) {
+    var n = Number(e.jpy);
+    m[e.cat] = (m[e.cat] || 0) + (isFinite(n) ? n : 0);
+  });
+  return SPEND_CATS.filter(function (c) { return m[c]; })
+    .map(function (c) { return { cat: c, jpy: m[c] }; });
+}
+function spendByDate(list) {
+  var m = {}, dates = [];
+  list.forEach(function (e) {
+    if (!m[e.date]) { m[e.date] = []; dates.push(e.date); }
+    m[e.date].push(e);
+  });
+  dates.sort().reverse();
+  return dates.map(function (d) {
+    return { date: d, items: m[d].slice().reverse() };
+  });
+}
+
 function mealKey(dayN, i) { return "meal:" + dayN + ":" + i; }
 
 function dday(todayISO, startISO, endISO) {
@@ -203,6 +244,7 @@ function renderPacking() {
 }
 
 document.addEventListener("DOMContentLoaded", function () {
+  if (!window.TRIP) return;
   renderSummary(window.TRIP.meta);
 
   const days = window.TRIP.days;

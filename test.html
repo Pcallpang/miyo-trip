@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="ko">
+<head><meta charset="utf-8"><title>경비 함수 테스트</title>
+<style>body{font:14px monospace;padding:16px}.f{color:#c92a2a;font-weight:700}.p{color:#0b7043}</style>
+</head>
+<body>
+<h1>경비 함수 테스트</h1>
+<div id="out"></div>
+<script src="app.js"></script>
+<script>
+var results = [], failed = 0;
+function eq(name, got, want) {
+  var ok = JSON.stringify(got) === JSON.stringify(want);
+  if (!ok) failed++;
+  results.push('<div class="' + (ok ? 'p' : 'f') + '">' + (ok ? 'PASS' : 'FAIL') + ' ' + name +
+    (ok ? '' : '<br>&nbsp;&nbsp;got&nbsp;: ' + JSON.stringify(got) +
+               '<br>&nbsp;&nbsp;want: ' + JSON.stringify(want)) + '</div>');
+}
+
+var L = [
+  { id: 1, date: "2026-07-29", jpy: 1200, cat: "식비", note: "이치란" },
+  { id: 2, date: "2026-07-29", jpy: 800,  cat: "교통", note: "지하철" },
+  { id: 3, date: "2026-07-30", jpy: 2000, cat: "식비", note: "저녁" },
+  { id: 4, date: "2026-07-28", jpy: 500,  cat: "기타", note: "" }
+];
+
+eq('합계', spendTotalJpy(L), 4500);
+eq('빈 목록 합계', spendTotalJpy([]), 0);
+eq('잘못된 금액은 0으로', spendTotalJpy([{jpy:"abc"},{jpy:100}]), 100);
+
+eq('환산 900', jpyToKrw(4500, 900), 40500);
+eq('환산 반올림', jpyToKrw(1234, 900), 11106);
+eq('환율 0이면 0', jpyToKrw(4500, 0), 0);
+
+eq('분류별 집계', spendByCat(L), [
+  { cat: "식비", jpy: 3200 },
+  { cat: "교통", jpy: 800 },
+  { cat: "기타", jpy: 500 }
+]);
+eq('빈 목록 분류', spendByCat([]), []);
+
+eq('날짜별 그룹', spendByDate(L).map(function (g) {
+  return { date: g.date, ids: g.items.map(function (e) { return e.id; }) };
+}), [
+  { date: "2026-07-30", ids: [3] },
+  { date: "2026-07-29", ids: [2, 1] },
+  { date: "2026-07-28", ids: [4] }
+]);
+
+eq('분류 목록', SPEND_CATS, ["식비", "교통", "쇼핑", "관광", "기타"]);
+
+document.getElementById('out').innerHTML =
+  '<h2>' + (failed ? failed + '개 실패' : '전부 통과') + '</h2>' + results.join('');
+</script>
+</body>
+</html>
