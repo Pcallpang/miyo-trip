@@ -49,6 +49,29 @@ eq('날짜별 그룹', spendByDate(L).map(function (g) {
 
 eq('분류 목록', SPEND_CATS, ["식비", "교통", "쇼핑", "관광", "기타"]);
 
+eq('wxIcon 맑음', wxIcon(0), { e: "☀️", t: "맑음" });
+eq('wxIcon 구름', wxIcon(2), { e: "🌤️", t: "구름 조금" });
+eq('wxIcon 흐림', wxIcon(3), { e: "☁️", t: "흐림" });
+eq('wxIcon 이슬비', wxIcon(55), { e: "🌦️", t: "이슬비" });
+eq('wxIcon 비', wxIcon(63), { e: "🌧️", t: "비" });
+eq('wxIcon 소나기', wxIcon(81), { e: "🌧️", t: "소나기" });
+eq('wxIcon 뇌우', wxIcon(96), { e: "⛈️", t: "뇌우" });
+eq('wxIcon 미지 코드', wxIcon(42), { e: "🌡️", t: "" });
+
+var WXAPI = { daily: {
+  time: ["2026-07-28", "2026-07-29"],
+  weather_code: [1, 61],
+  temperature_2m_max: [33.4, 29.6],
+  temperature_2m_min: [26.2, 25.5],
+  precipitation_probability_max: [10, null]
+} };
+eq('wxDailyMap 변환', wxDailyMap(WXAPI)["2026-07-28"],
+  { code: 1, tmax: 33, tmin: 26, rain: 10 });
+eq('wxDailyMap null api', wxDailyMap(null), {});
+eq('wxLine 포맷', wxLine(wxDailyMap(WXAPI), "2026-07-28"), "🌤️ 33° / 26° · 비 10%");
+eq('wxLine 강수 null 생략', wxLine(wxDailyMap(WXAPI), "2026-07-29"), "🌧️ 30° / 26°");
+eq('wxLine 없는 날짜', wxLine(wxDailyMap(WXAPI), "2026-08-09"), "");
+
 document.getElementById('out').innerHTML =
   '<h2>' + (failed ? failed + '개 실패' : '전부 통과') + '</h2>' + results.join('');
 </script>
