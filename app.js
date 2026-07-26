@@ -110,9 +110,13 @@ function wxRefresh() {
     wxState.map = wxDailyMap(cached.api);
     wxState.at = cached.at;
   }
-  fetch(WX_URL).then(function (r) { return r.json(); }).then(function (api) {
+  fetch(WX_URL).then(function (r) {
+    if (!r.ok) throw new Error("wx " + r.status);
+    return r.json();
+  }).then(function (api) {
+    var map = wxDailyMap(api);
     store.set("weather", { at: new Date().toISOString(), api: api });
-    wxState.map = wxDailyMap(api);
+    wxState.map = map;
     wxState.at = null;
     wxState.live = true;
     wxRepaint();
@@ -417,7 +421,7 @@ function renderPacking() {
 
 document.addEventListener("DOMContentLoaded", function () {
   if (!window.TRIP) return;
-  renderSummary(window.TRIP.meta);
+  wxRefresh();
 
   const days = window.TRIP.days;
   const today = todayLocal();
@@ -428,5 +432,5 @@ document.addEventListener("DOMContentLoaded", function () {
   renderFixed(window.TRIP);
   renderPacking();
   renderSpend();
-  wxRefresh();
+  renderSummary(window.TRIP.meta);
 });
