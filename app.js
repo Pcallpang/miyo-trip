@@ -231,6 +231,45 @@ function renderSpend() {
     (groups || '<div class="sempty">아직 기록이 없습니다.</div>') +
     '<div class="sfx">100엔 = <input class="sfx-in" type="number" min="0" step="1" value="' +
       fx + '"> 원</div>';
+
+  const form = body.querySelector('.spend-add');
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    const jin = form.querySelector('.sjpy-in');
+    const jpy = Math.round(Number(jin.value));
+    if (!isFinite(jpy) || jpy <= 0) { jin.focus(); return; }
+    const cur = spendList();
+    let id = Date.now();
+    while (cur.some(function (x) { return x.id === id; })) id++;
+    cur.push({
+      id: id,
+      date: new Date().toISOString().slice(0, 10),
+      jpy: jpy,
+      cat: form.querySelector('.scat-in').value,
+      note: form.querySelector('.snote-in').value.trim()
+    });
+    store.set("spend", cur);
+    renderSpend();
+    renderSummary(window.TRIP.meta);
+    const next = body.querySelector('.sjpy-in');
+    if (next) next.focus();
+  });
+
+  body.querySelectorAll('.spend-del').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      const id = Number(btn.dataset.id);
+      store.set("spend", spendList().filter(function (x) { return x.id !== id; }));
+      renderSpend();
+      renderSummary(window.TRIP.meta);
+    });
+  });
+
+  const fxin = body.querySelector('.sfx-in');
+  fxin.addEventListener('change', function () {
+    store.set("fx", Number(fxin.value) || 0);
+    renderSpend();
+    renderSummary(window.TRIP.meta);
+  });
 }
 
 function renderPacking() {
