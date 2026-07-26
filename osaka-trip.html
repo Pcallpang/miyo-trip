@@ -114,6 +114,9 @@ body { margin:0; background:var(--bg); color:var(--text);
 .sfx { margin-top:14px; font-size:.82rem; color:var(--muted); }
 .sfx input { width:70px; padding:5px 8px; border:1px solid #d5dde1; border-radius:6px;
   font:inherit; text-align:right; }
+#summary .wx { font-size:.9rem; opacity:.95; margin-top:2px; }
+.dayhead .dwx { font-size:.85rem; color:var(--muted); margin-top:2px; }
+.wxstamp { font-size:.75rem; opacity:.75; }
 
 </style>
 </head>
@@ -591,6 +594,76 @@ function todayLocal() {
   var d = new Date();
   return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
 }
+
+var WX_URL = "https://api.open-meteo.com/v1/forecast?latitude=34.69&longitude=135.5" +
+  "&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max" +
+  "&timezone=Asia%2FTokyo&forecast_days=7";
+
+function wxIcon(code) {
+  if (code === 0) return { e: "☀️", t: "맑음" };
+  if (code === 1 || code === 2) return { e: "🌤️", t: "구름 조금" };
+  if (code === 3) return { e: "☁️", t: "흐림" };
+  if (code === 45 || code === 48) return { e: "🌫️", t: "안개" };
+  if (code >= 51 && code <= 57) return { e: "🌦️", t: "이슬비" };
+  if (code >= 61 && code <= 67) return { e: "🌧️", t: "비" };
+  if ((code >= 71 && code <= 77) || code === 85 || code === 86) return { e: "🌨️", t: "눈" };
+  if (code >= 80 && code <= 82) return { e: "🌧️", t: "소나기" };
+  if (code >= 95) return { e: "⛈️", t: "뇌우" };
+  return { e: "🌡️", t: "" };
+}
+function wxDailyMap(api) {
+  var m = {};
+  if (!api || !api.daily || !api.daily.time) return m;
+  api.daily.time.forEach(function (d, i) {
+    var rain = api.daily.precipitation_probability_max[i];
+    m[d] = {
+      code: api.daily.weather_code[i],
+      tmax: Math.round(api.daily.temperature_2m_max[i]),
+      tmin: Math.round(api.daily.temperature_2m_min[i]),
+      rain: (rain === null || rain === undefined) ? null : rain
+    };
+  });
+  return m;
+}
+function wxLine(map, date) {
+  var w = map[date];
+  if (!w) return "";
+  var rain = w.rain === null ? "" : " · 비 " + w.rain + "%";
+  return wxIcon(w.code).e + " " + w.tmax + "° / " + w.tmin + "°" + rain;
+}
+
+var wxState = { map: {}, at: null, live: false };
+var currentDayN = null;
+
+function wxStamp() {
+  if (wxState.live || !wxState.at) return "";
+  var d = new Date(wxState.at);
+  var hh = ("0" + d.getHours()).slice(-2);
+  var mm = ("0" + d.getMinutes()).slice(-2);
+  return ' <span class="wxstamp">(' + (d.getMonth() + 1) + "/" + d.getDate() +
+    " " + hh + ":" + mm + " 기준)</span>";
+}
+function wxRefresh() {
+  var cached = store.get("weather", null);
+  if (cached && cached.api) {
+    wxState.map = wxDailyMap(cached.api);
+    wxState.at = cached.at;
+  }
+  fetch(WX_URL).then(function (r) { return r.json(); }).then(function (api) {
+    store.set("weather", { at: new Date().toISOString(), api: api });
+    wxState.map = wxDailyMap(api);
+    wxState.at = null;
+    wxState.live = true;
+    wxRepaint();
+  }).catch(function () {
+    if (wxState.at) wxRepaint();
+  });
+}
+function wxRepaint() {
+  renderSummary(window.TRIP.meta);
+  if (currentDayN !== null) selectDay(currentDayN);
+}
+
 function dday(todayISO, startISO, endISO) {
   const day = 86400000;
   const t = Date.parse(todayISO + "T00:00:00");
@@ -610,6 +683,10 @@ function renderSummary(meta) {
     '<div class="period">' + meta.start + ' ~ ' + meta.end +
       ' · ' + meta.nights + '박 ' + meta.days + '일</div>' +
     '<div class="hotel">🏨 ' + meta.hotel + '</div>' +
+    (function () {
+      var line = wxLine(wxState.map, todayLocal());
+      return line ? '<div class="wx">' + line.replace(" ", " 오늘 ") + wxStamp() + '</div>' : '';
+    })() +
     '<div class="cost">💰 총 ' + meta.totalCostKRW.toLocaleString('ko-KR') + '원 (2인)' +
       summarySpend() + '</div>';
 }
@@ -692,7 +769,11 @@ function renderTimeline(day) {
     '<div class="daycard"><div class="dayhead">' +
       '<span class="dnum">' + day.n + '일차</span> ' +
       '<span class="ddate">' + day.date + '(' + day.dow + ')</span>' +
-      '<div class="dtheme">' + day.theme.replace(/\n/g, ' · ') + '</div></div>' +
+      '<div class="dtheme">' + day.theme.replace(/\n/g, ' · ') + '</div>' +
+      (function () {
+        var line = wxLine(wxState.map, day.date);
+        return line ? '<div class="dwx">' + line + wxStamp() + '</div>' : '';
+      })() + '</div>' +
       map +
       '<div class="slots">' + rows + '</div>' + meals + '</div>';
   main.querySelectorAll('.memo').forEach(function (inp) {
@@ -700,6 +781,7 @@ function renderTimeline(day) {
   });
 }
 function selectDay(n) {
+  currentDayN = n;
   const days = window.TRIP.days;
   const day = days.find(function (d) { return d.n === n; });
   renderTabs(days, n);
@@ -885,6 +967,7 @@ document.addEventListener("DOMContentLoaded", function () {
   renderFixed(window.TRIP);
   renderPacking();
   renderSpend();
+  wxRefresh();
 });
 
 </script>

@@ -1,4 +1,4 @@
-const CACHE = "osaka-trip-v6";
+const CACHE = "osaka-trip-v7";
 const ASSETS = ["./", "./index.html", "./styles.css", "./data.js", "./app.js",
   "./manifest.json", "./icon.svg", "./icon-180.png", "./icon-512.png",
   "./usj-map-ko.webp"];
@@ -19,6 +19,7 @@ self.addEventListener("activate", function (e) {
 // 네트워크 우선 + 캐시 폴백: 온라인이면 항상 최신 일정, 오프라인이면 캐시.
 self.addEventListener("fetch", function (e) {
   if (e.request.method !== "GET") return;
+  if (new URL(e.request.url).origin !== self.location.origin) return;
   e.respondWith(
     fetch(e.request).then(function (res) {
       const copy = res.clone();
