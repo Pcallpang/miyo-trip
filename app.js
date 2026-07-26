@@ -179,6 +179,7 @@ function renderFixed(trip) {
       rapitRows(trip.rapit.from) + '</tbody></table></div></div></details>' +
     '<details><summary>🏨 숙소</summary><div class="acc">' + trip.meta.hotel + '</div></details>' +
     '<details><summary>🎒 준비물</summary><div class="acc" id="packing-body"></div></details>' +
+    '<details><summary>💸 현지 경비</summary><div class="acc" id="spend-body"></div></details>' +
     '<details><summary>💰 경비 내역</summary><div class="acc"><div class="tblwrap"><table>' +
       '<thead><tr><th>항목</th><th>상세</th><th class="num">금액(원)</th></tr></thead><tbody>' +
       expRows + '</tbody><tfoot><tr><td colspan="2">합계</td><td class="num">' +
@@ -191,6 +192,47 @@ function escHtml(s) {
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
     .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
+
+function renderSpend() {
+  const body = document.getElementById("spend-body");
+  if (!body) return;
+  const list = spendList();
+  const fx = spendFx();
+  const tot = spendTotalJpy(list);
+  const krw = fx
+    ? ' <span class="skrw">(약 ' + jpyToKrw(tot, fx).toLocaleString('ko-KR') + '원)</span>'
+    : '';
+  const chips = spendByCat(list).map(function (c) {
+    return '<li>' + c.cat + ' <b>¥' + c.jpy.toLocaleString('ko-KR') + '</b></li>';
+  }).join('');
+  const groups = spendByDate(list).map(function (g) {
+    const rows = g.items.map(function (e) {
+      const n = Number(e.jpy);
+      return '<li><span class="scat">' + escHtml(e.cat) + '</span>' +
+        '<span class="snote">' + escHtml(e.note || e.cat) + '</span>' +
+        '<span class="sjpy">¥' + (isFinite(n) ? n : 0).toLocaleString('ko-KR') + '</span>' +
+        '<button class="spend-del" type="button" data-id="' + e.id + '" aria-label="삭제">×</button></li>';
+    }).join('');
+    return '<div class="sgroup"><div class="sdate">' + escHtml(g.date) + '</div>' +
+      '<ul class="slist">' + rows + '</ul></div>';
+  }).join('');
+  body.innerHTML =
+    '<div class="stotal">¥' + tot.toLocaleString('ko-KR') + krw + '</div>' +
+    (chips ? '<ul class="scats">' + chips + '</ul>' : '') +
+    '<form class="spend-add">' +
+      '<input class="sjpy-in" type="number" inputmode="numeric" min="1" step="1" ' +
+        'placeholder="금액 ¥" aria-label="금액(엔)">' +
+      '<input class="snote-in" type="text" placeholder="내용" aria-label="내용">' +
+      '<select class="scat-in" aria-label="분류">' +
+        SPEND_CATS.map(function (c) { return '<option>' + c + '</option>'; }).join('') +
+      '</select>' +
+      '<button type="submit">추가</button>' +
+    '</form>' +
+    (groups || '<div class="sempty">아직 기록이 없습니다.</div>') +
+    '<div class="sfx">100엔 = <input class="sfx-in" type="number" min="0" step="1" value="' +
+      fx + '"> 원</div>';
+}
+
 function renderPacking() {
   const body = document.getElementById("packing-body");
   if (!body) return;
@@ -255,4 +297,5 @@ document.addEventListener("DOMContentLoaded", function () {
 
   renderFixed(window.TRIP);
   renderPacking();
+  renderSpend();
 });

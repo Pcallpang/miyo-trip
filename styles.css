@@ -75,3 +75,32 @@ body { margin:0; background:var(--bg); color:var(--text);
 .meal-note .line { font-size:.9rem; }
 .memo { display:block; width:100%; margin-top:6px; padding:8px 10px;
   border:1px solid #ffd8a8; border-radius:8px; font:inherit; background:#fff; }
+.stotal { font-size:1.35rem; font-weight:800; color:var(--accent); margin-top:8px; }
+.stotal .skrw { font-size:.85rem; font-weight:600; color:var(--muted); }
+.scats { list-style:none; padding:0; margin:10px 0 0; display:flex; flex-wrap:wrap; gap:6px; }
+.scats li { font-size:.78rem; background:#f1f5f7; border-radius:999px; padding:4px 10px; color:var(--muted); }
+.scats li b { color:var(--text); }
+.spend-add { display:flex; flex-wrap:wrap; gap:6px; margin:12px 0; }
+.spend-add input,.spend-add select { padding:8px 10px; border:1px solid #d5dde1;
+  border-radius:8px; font:inherit; min-width:0; }
+.spend-add .sjpy-in { flex:0 0 90px; }
+.spend-add .snote-in { flex:1 1 110px; }
+.spend-add .scat-in { flex:0 0 auto; background:#fff; }
+.spend-add button { flex:0 0 auto; padding:8px 14px; border:none; border-radius:8px;
+  background:var(--accent); color:#fff; font:inherit; font-weight:600; cursor:pointer; }
+.sgroup { margin-top:12px; }
+.sdate { font-size:.78rem; font-weight:700; color:var(--muted); padding-bottom:4px;
+  border-bottom:1px solid #eef2f4; }
+.slist { list-style:none; padding:0; margin:0; }
+.slist li { display:flex; align-items:center; gap:8px; padding:8px 0;
+  border-bottom:1px solid #f4f7f8; }
+.slist .scat { flex:0 0 auto; font-size:.72rem; font-weight:700; color:#fff;
+  background:var(--accent); border-radius:999px; padding:2px 8px; }
+.slist .snote { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.slist .sjpy { flex:0 0 auto; font-weight:700; white-space:nowrap; }
+.spend-del { flex:0 0 auto; border:none; background:#f1f3f5; color:var(--muted);
+  width:26px; height:26px; border-radius:50%; font-size:1.1rem; line-height:1; cursor:pointer; }
+.sempty { color:var(--muted); padding:10px 0; }
+.sfx { margin-top:14px; font-size:.82rem; color:var(--muted); }
+.sfx input { width:70px; padding:5px 8px; border:1px solid #d5dde1; border-radius:6px;
+  font:inherit; text-align:right; }
