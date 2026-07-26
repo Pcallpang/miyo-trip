@@ -93,6 +93,38 @@ function wxLine(map, date) {
   return wxIcon(w.code).e + " " + w.tmax + "° / " + w.tmin + "°" + rain;
 }
 
+var wxState = { map: {}, at: null, live: false };
+var currentDayN = null;
+
+function wxStamp() {
+  if (wxState.live || !wxState.at) return "";
+  var d = new Date(wxState.at);
+  var hh = ("0" + d.getHours()).slice(-2);
+  var mm = ("0" + d.getMinutes()).slice(-2);
+  return ' <span class="wxstamp">(' + (d.getMonth() + 1) + "/" + d.getDate() +
+    " " + hh + ":" + mm + " 기준)</span>";
+}
+function wxRefresh() {
+  var cached = store.get("weather", null);
+  if (cached && cached.api) {
+    wxState.map = wxDailyMap(cached.api);
+    wxState.at = cached.at;
+  }
+  fetch(WX_URL).then(function (r) { return r.json(); }).then(function (api) {
+    store.set("weather", { at: new Date().toISOString(), api: api });
+    wxState.map = wxDailyMap(api);
+    wxState.at = null;
+    wxState.live = true;
+    wxRepaint();
+  }).catch(function () {
+    if (wxState.at) wxRepaint();
+  });
+}
+function wxRepaint() {
+  renderSummary(window.TRIP.meta);
+  if (currentDayN !== null) selectDay(currentDayN);
+}
+
 function dday(todayISO, startISO, endISO) {
   const day = 86400000;
   const t = Date.parse(todayISO + "T00:00:00");
@@ -112,6 +144,10 @@ function renderSummary(meta) {
     '<div class="period">' + meta.start + ' ~ ' + meta.end +
       ' · ' + meta.nights + '박 ' + meta.days + '일</div>' +
     '<div class="hotel">🏨 ' + meta.hotel + '</div>' +
+    (function () {
+      var line = wxLine(wxState.map, todayLocal());
+      return line ? '<div class="wx">' + line.replace(" ", " 오늘 ") + wxStamp() + '</div>' : '';
+    })() +
     '<div class="cost">💰 총 ' + meta.totalCostKRW.toLocaleString('ko-KR') + '원 (2인)' +
       summarySpend() + '</div>';
 }
@@ -194,7 +230,11 @@ function renderTimeline(day) {
     '<div class="daycard"><div class="dayhead">' +
       '<span class="dnum">' + day.n + '일차</span> ' +
       '<span class="ddate">' + day.date + '(' + day.dow + ')</span>' +
-      '<div class="dtheme">' + day.theme.replace(/\n/g, ' · ') + '</div></div>' +
+      '<div class="dtheme">' + day.theme.replace(/\n/g, ' · ') + '</div>' +
+      (function () {
+        var line = wxLine(wxState.map, day.date);
+        return line ? '<div class="dwx">' + line + wxStamp() + '</div>' : '';
+      })() + '</div>' +
       map +
       '<div class="slots">' + rows + '</div>' + meals + '</div>';
   main.querySelectorAll('.memo').forEach(function (inp) {
@@ -202,6 +242,7 @@ function renderTimeline(day) {
   });
 }
 function selectDay(n) {
+  currentDayN = n;
   const days = window.TRIP.days;
   const day = days.find(function (d) { return d.n === n; });
   renderTabs(days, n);
@@ -387,4 +428,5 @@ document.addEventListener("DOMContentLoaded", function () {
   renderFixed(window.TRIP);
   renderPacking();
   renderSpend();
+  wxRefresh();
 });

@@ -105,3 +105,6 @@ body { margin:0; background:var(--bg); color:var(--text);
 .sfx { margin-top:14px; font-size:.82rem; color:var(--muted); }
 .sfx input { width:70px; padding:5px 8px; border:1px solid #d5dde1; border-radius:6px;
   font:inherit; text-align:right; }
+#summary .wx { font-size:.9rem; opacity:.95; margin-top:2px; }
+.dayhead .dwx { font-size:.85rem; color:var(--muted); margin-top:2px; }
+.wxstamp { font-size:.75rem; opacity:.75; }
