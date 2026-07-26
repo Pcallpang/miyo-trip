@@ -203,7 +203,7 @@ function renderSpend() {
     ? ' <span class="skrw">(약 ' + jpyToKrw(tot, fx).toLocaleString('ko-KR') + '원)</span>'
     : '';
   const chips = spendByCat(list).map(function (c) {
-    return '<li>' + c.cat + ' <b>¥' + c.jpy.toLocaleString('ko-KR') + '</b></li>';
+    return '<li>' + escHtml(c.cat) + ' <b>¥' + c.jpy.toLocaleString('ko-KR') + '</b></li>';
   }).join('');
   const groups = spendByDate(list).map(function (g) {
     const rows = g.items.map(function (e) {
