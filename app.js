@@ -51,6 +51,10 @@ function spendByDate(list) {
 
 function mealKey(dayN, i) { return "meal:" + dayN + ":" + i; }
 
+function todayLocal() {
+  var d = new Date();
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+}
 function dday(todayISO, startISO, endISO) {
   const day = 86400000;
   const t = Date.parse(todayISO + "T00:00:00");
@@ -62,7 +66,7 @@ function dday(todayISO, startISO, endISO) {
 }
 
 function renderSummary(meta) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayLocal();
   const el = document.getElementById("summary");
   el.innerHTML =
     '<div class="dday">' + dday(today, meta.start, meta.end) + '</div>' +
@@ -251,7 +255,7 @@ function renderSpend() {
     while (cur.some(function (x) { return x.id === id; })) id++;
     cur.push({
       id: id,
-      date: new Date().toISOString().slice(0, 10),
+      date: todayLocal(),
       jpy: jpy,
       cat: form.querySelector('.scat-in').value,
       note: form.querySelector('.snote-in').value.trim()
@@ -337,7 +341,7 @@ document.addEventListener("DOMContentLoaded", function () {
   renderSummary(window.TRIP.meta);
 
   const days = window.TRIP.days;
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayLocal();
   let initial = days.find(function (d) { return d.date === today; });
   if (!initial) initial = today < days[0].date ? days[0] : days[days.length - 1];
   selectDay(initial.n);
