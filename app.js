@@ -70,7 +70,15 @@ function renderSummary(meta) {
     '<div class="period">' + meta.start + ' ~ ' + meta.end +
       ' · ' + meta.nights + '박 ' + meta.days + '일</div>' +
     '<div class="hotel">🏨 ' + meta.hotel + '</div>' +
-    '<div class="cost">💰 총 ' + meta.totalCostKRW.toLocaleString('ko-KR') + '원 (2인)</div>';
+    '<div class="cost">💰 총 ' + meta.totalCostKRW.toLocaleString('ko-KR') + '원 (2인)' +
+      summarySpend() + '</div>';
+}
+function summarySpend() {
+  const tot = spendTotalJpy(spendList());
+  if (!tot) return '';
+  const fx = spendFx();
+  const krw = fx ? ' (약 ' + jpyToKrw(tot, fx).toLocaleString('ko-KR') + '원)' : '';
+  return ' <span class="spent">· 💸 현지 ¥' + tot.toLocaleString('ko-KR') + krw + '</span>';
 }
 function isUndecided(text) {
   return /뭐먹지|\?$/.test(text.trim()) || text.trim() === "";

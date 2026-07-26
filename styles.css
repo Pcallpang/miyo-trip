@@ -75,6 +75,7 @@ body { margin:0; background:var(--bg); color:var(--text);
 .meal-note .line { font-size:.9rem; }
 .memo { display:block; width:100%; margin-top:6px; padding:8px 10px;
   border:1px solid #ffd8a8; border-radius:8px; font:inherit; background:#fff; }
+#summary .cost .spent { display:inline-block; opacity:.95; }
 .stotal { font-size:1.35rem; font-weight:800; color:var(--accent); margin-top:8px; }
 .stotal .skrw { font-size:.85rem; font-weight:600; color:var(--muted); }
 .scats { list-style:none; padding:0; margin:10px 0 0; display:flex; flex-wrap:wrap; gap:6px; }

@@ -84,6 +84,36 @@ body { margin:0; background:var(--bg); color:var(--text);
 .meal-note .line { font-size:.9rem; }
 .memo { display:block; width:100%; margin-top:6px; padding:8px 10px;
   border:1px solid #ffd8a8; border-radius:8px; font:inherit; background:#fff; }
+#summary .cost .spent { display:inline-block; opacity:.95; }
+.stotal { font-size:1.35rem; font-weight:800; color:var(--accent); margin-top:8px; }
+.stotal .skrw { font-size:.85rem; font-weight:600; color:var(--muted); }
+.scats { list-style:none; padding:0; margin:10px 0 0; display:flex; flex-wrap:wrap; gap:6px; }
+.scats li { font-size:.78rem; background:#f1f5f7; border-radius:999px; padding:4px 10px; color:var(--muted); }
+.scats li b { color:var(--text); }
+.spend-add { display:flex; flex-wrap:wrap; gap:6px; margin:12px 0; }
+.spend-add input,.spend-add select { padding:8px 10px; border:1px solid #d5dde1;
+  border-radius:8px; font:inherit; min-width:0; }
+.spend-add .sjpy-in { flex:0 0 90px; }
+.spend-add .snote-in { flex:1 1 110px; }
+.spend-add .scat-in { flex:0 0 auto; background:#fff; }
+.spend-add button { flex:0 0 auto; padding:8px 14px; border:none; border-radius:8px;
+  background:var(--accent); color:#fff; font:inherit; font-weight:600; cursor:pointer; }
+.sgroup { margin-top:12px; }
+.sdate { font-size:.78rem; font-weight:700; color:var(--muted); padding-bottom:4px;
+  border-bottom:1px solid #eef2f4; }
+.slist { list-style:none; padding:0; margin:0; }
+.slist li { display:flex; align-items:center; gap:8px; padding:8px 0;
+  border-bottom:1px solid #f4f7f8; }
+.slist .scat { flex:0 0 auto; font-size:.72rem; font-weight:700; color:#fff;
+  background:var(--accent); border-radius:999px; padding:2px 8px; }
+.slist .snote { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.slist .sjpy { flex:0 0 auto; font-weight:700; white-space:nowrap; }
+.spend-del { flex:0 0 auto; border:none; background:#f1f3f5; color:var(--muted);
+  width:26px; height:26px; border-radius:50%; font-size:1.1rem; line-height:1; cursor:pointer; }
+.sempty { color:var(--muted); padding:10px 0; }
+.sfx { margin-top:14px; font-size:.82rem; color:var(--muted); }
+.sfx input { width:70px; padding:5px 8px; border:1px solid #d5dde1; border-radius:6px;
+  font:inherit; text-align:right; }
 
 </style>
 </head>
@@ -514,6 +544,47 @@ var store = {
     try { localStorage.setItem(this._p + k, JSON.stringify(v)); } catch (e) {}
   }
 };
+
+var SPEND_CATS = ["식비", "교통", "쇼핑", "관광", "기타"];
+
+function spendList() {
+  var v = store.get("spend", []);
+  return Array.isArray(v) ? v : [];
+}
+function spendFx() {
+  var n = Number(store.get("fx", 900));
+  return isFinite(n) && n > 0 ? n : 0;
+}
+function spendTotalJpy(list) {
+  return list.reduce(function (s, e) {
+    var n = Number(e.jpy);
+    return s + (isFinite(n) ? n : 0);
+  }, 0);
+}
+function jpyToKrw(jpy, fx) {
+  return Math.round(jpy * fx / 100);
+}
+function spendByCat(list) {
+  var m = {};
+  list.forEach(function (e) {
+    var n = Number(e.jpy);
+    m[e.cat] = (m[e.cat] || 0) + (isFinite(n) ? n : 0);
+  });
+  return SPEND_CATS.filter(function (c) { return m[c]; })
+    .map(function (c) { return { cat: c, jpy: m[c] }; });
+}
+function spendByDate(list) {
+  var m = {}, dates = [];
+  list.forEach(function (e) {
+    if (!m[e.date]) { m[e.date] = []; dates.push(e.date); }
+    m[e.date].push(e);
+  });
+  dates.sort().reverse();
+  return dates.map(function (d) {
+    return { date: d, items: m[d].slice().reverse() };
+  });
+}
+
 function mealKey(dayN, i) { return "meal:" + dayN + ":" + i; }
 
 function dday(todayISO, startISO, endISO) {
@@ -535,7 +606,15 @@ function renderSummary(meta) {
     '<div class="period">' + meta.start + ' ~ ' + meta.end +
       ' · ' + meta.nights + '박 ' + meta.days + '일</div>' +
     '<div class="hotel">🏨 ' + meta.hotel + '</div>' +
-    '<div class="cost">💰 총 ' + meta.totalCostKRW.toLocaleString('ko-KR') + '원 (2인)</div>';
+    '<div class="cost">💰 총 ' + meta.totalCostKRW.toLocaleString('ko-KR') + '원 (2인)' +
+      summarySpend() + '</div>';
+}
+function summarySpend() {
+  const tot = spendTotalJpy(spendList());
+  if (!tot) return '';
+  const fx = spendFx();
+  const krw = fx ? ' (약 ' + jpyToKrw(tot, fx).toLocaleString('ko-KR') + '원)' : '';
+  return ' <span class="spent">· 💸 현지 ¥' + tot.toLocaleString('ko-KR') + krw + '</span>';
 }
 function isUndecided(text) {
   return /뭐먹지|\?$/.test(text.trim()) || text.trim() === "";
@@ -644,6 +723,7 @@ function renderFixed(trip) {
       rapitRows(trip.rapit.from) + '</tbody></table></div></div></details>' +
     '<details><summary>🏨 숙소</summary><div class="acc">' + trip.meta.hotel + '</div></details>' +
     '<details><summary>🎒 준비물</summary><div class="acc" id="packing-body"></div></details>' +
+    '<details><summary>💸 현지 경비</summary><div class="acc" id="spend-body"></div></details>' +
     '<details><summary>💰 경비 내역</summary><div class="acc"><div class="tblwrap"><table>' +
       '<thead><tr><th>항목</th><th>상세</th><th class="num">금액(원)</th></tr></thead><tbody>' +
       expRows + '</tbody><tfoot><tr><td colspan="2">합계</td><td class="num">' +
@@ -656,6 +736,86 @@ function escHtml(s) {
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
     .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
+
+function renderSpend() {
+  const body = document.getElementById("spend-body");
+  if (!body) return;
+  const list = spendList();
+  const fx = spendFx();
+  const tot = spendTotalJpy(list);
+  const krw = fx
+    ? ' <span class="skrw">(약 ' + jpyToKrw(tot, fx).toLocaleString('ko-KR') + '원)</span>'
+    : '';
+  const chips = spendByCat(list).map(function (c) {
+    return '<li>' + escHtml(c.cat) + ' <b>¥' + c.jpy.toLocaleString('ko-KR') + '</b></li>';
+  }).join('');
+  const groups = spendByDate(list).map(function (g) {
+    const rows = g.items.map(function (e) {
+      const n = Number(e.jpy);
+      return '<li><span class="scat">' + escHtml(e.cat) + '</span>' +
+        '<span class="snote">' + escHtml(e.note || e.cat) + '</span>' +
+        '<span class="sjpy">¥' + (isFinite(n) ? n : 0).toLocaleString('ko-KR') + '</span>' +
+        '<button class="spend-del" type="button" data-id="' + e.id + '" aria-label="삭제">×</button></li>';
+    }).join('');
+    return '<div class="sgroup"><div class="sdate">' + escHtml(g.date) + '</div>' +
+      '<ul class="slist">' + rows + '</ul></div>';
+  }).join('');
+  body.innerHTML =
+    '<div class="stotal">¥' + tot.toLocaleString('ko-KR') + krw + '</div>' +
+    (chips ? '<ul class="scats">' + chips + '</ul>' : '') +
+    '<form class="spend-add">' +
+      '<input class="sjpy-in" type="number" inputmode="numeric" min="1" step="1" ' +
+        'placeholder="금액 ¥" aria-label="금액(엔)">' +
+      '<input class="snote-in" type="text" placeholder="내용" aria-label="내용">' +
+      '<select class="scat-in" aria-label="분류">' +
+        SPEND_CATS.map(function (c) { return '<option>' + c + '</option>'; }).join('') +
+      '</select>' +
+      '<button type="submit">추가</button>' +
+    '</form>' +
+    (groups || '<div class="sempty">아직 기록이 없습니다.</div>') +
+    '<div class="sfx">100엔 = <input class="sfx-in" type="number" min="0" step="1" value="' +
+      fx + '"> 원</div>';
+
+  const form = body.querySelector('.spend-add');
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    const jin = form.querySelector('.sjpy-in');
+    const jpy = Math.round(Number(jin.value));
+    if (!isFinite(jpy) || jpy <= 0) { jin.focus(); return; }
+    const cur = spendList();
+    let id = Date.now();
+    while (cur.some(function (x) { return x.id === id; })) id++;
+    cur.push({
+      id: id,
+      date: new Date().toISOString().slice(0, 10),
+      jpy: jpy,
+      cat: form.querySelector('.scat-in').value,
+      note: form.querySelector('.snote-in').value.trim()
+    });
+    store.set("spend", cur);
+    renderSpend();
+    renderSummary(window.TRIP.meta);
+    const next = body.querySelector('.sjpy-in');
+    if (next) next.focus();
+  });
+
+  body.querySelectorAll('.spend-del').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      const id = Number(btn.dataset.id);
+      store.set("spend", spendList().filter(function (x) { return x.id !== id; }));
+      renderSpend();
+      renderSummary(window.TRIP.meta);
+    });
+  });
+
+  const fxin = body.querySelector('.sfx-in');
+  fxin.addEventListener('change', function () {
+    store.set("fx", Number(fxin.value) || 0);
+    renderSpend();
+    renderSummary(window.TRIP.meta);
+  });
+}
+
 function renderPacking() {
   const body = document.getElementById("packing-body");
   if (!body) return;
@@ -709,6 +869,7 @@ function renderPacking() {
 }
 
 document.addEventListener("DOMContentLoaded", function () {
+  if (!window.TRIP) return;
   renderSummary(window.TRIP.meta);
 
   const days = window.TRIP.days;
@@ -719,6 +880,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
   renderFixed(window.TRIP);
   renderPacking();
+  renderSpend();
 });
 
 </script>

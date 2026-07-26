@@ -1,4 +1,4 @@
-const CACHE = "osaka-trip-v5";
+const CACHE = "osaka-trip-v6";
 const ASSETS = ["./", "./index.html", "./styles.css", "./data.js", "./app.js",
   "./manifest.json", "./icon.svg", "./icon-180.png", "./icon-512.png",
   "./usj-map-ko.webp"];
