@@ -1,9 +1,12 @@
-const CACHE = "osaka-trip-v4";
+const CACHE = "osaka-trip-v5";
 const ASSETS = ["./", "./index.html", "./styles.css", "./data.js", "./app.js",
   "./manifest.json", "./icon.svg", "./icon-180.png", "./icon-512.png",
   "./usj-map-ko.webp"];
 self.addEventListener("install", function (e) {
-  e.waitUntil(caches.open(CACHE).then(function (c) { return c.addAll(ASSETS); }));
+  // {cache:"reload"}: 브라우저 HTTP 캐시를 건너뛰고 서버에서 새로 받는다.
+  e.waitUntil(caches.open(CACHE).then(function (c) {
+    return c.addAll(ASSETS.map(function (u) { return new Request(u, { cache: "reload" }); }));
+  }));
   self.skipWaiting();
 });
 self.addEventListener("activate", function (e) {
@@ -13,6 +16,18 @@ self.addEventListener("activate", function (e) {
   }));
   self.clients.claim();
 });
+// 네트워크 우선 + 캐시 폴백: 온라인이면 항상 최신 일정, 오프라인이면 캐시.
 self.addEventListener("fetch", function (e) {
-  e.respondWith(caches.match(e.request).then(function (r) { return r || fetch(e.request); }));
+  if (e.request.method !== "GET") return;
+  e.respondWith(
+    fetch(e.request).then(function (res) {
+      const copy = res.clone();
+      caches.open(CACHE).then(function (c) { c.put(e.request, copy); });
+      return res;
+    }).catch(function () {
+      return caches.match(e.request).then(function (r) {
+        return r || caches.match("./index.html");
+      });
+    })
+  );
 });
