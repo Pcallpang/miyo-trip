@@ -93,3 +93,49 @@ deleteTrip('t_a');
 eq('삭제 후 목록', listTrips(), []);
 eq('삭제 후 본체', loadTrip('t_a'), null);
 eq('삭제 후 런타임 키도 제거', lsGet('trip:t_a:spend', 'gone'), 'gone');
+
+// ---- schema.js ----
+eq('요일 파생', dowOf('2026-07-28'), '화');
+eq('요일 일요일', dowOf('2026-08-02'), '일');
+eq('날짜 더하기', addDays('2026-07-28', 3), '2026-07-31');
+eq('월 넘김', addDays('2026-07-30', 5), '2026-08-04');
+eq('기간 일수', daysBetween('2026-07-28', '2026-08-03'), 7);
+eq('같은 날 하루', daysBetween('2026-07-28', '2026-07-28'), 1);
+
+var D = buildDays('2026-07-28', '2026-07-30');
+eq('일차 개수', D.length, 3);
+eq('일차 번호와 날짜', D.map(function (d) { return d.n + ':' + d.date; }),
+  ['1:2026-07-28', '2:2026-07-29', '3:2026-07-30']);
+eq('빈 일차 형태', D[0],
+  { n: 1, date: '2026-07-28', theme: '', place: null, curCode: null,
+    items: [], meals: [], images: [] });
+
+// 재동기화: 앞을 하루 자르고 뒤를 하루 늘려도 남는 날짜의 일정은 보존된다
+D[1].items.push({ id: 'i_x', time: '09:00', text: '유니버셜' });
+D[1].theme = '테마파크';
+var R = resyncDays(D, '2026-07-29', '2026-07-31');
+eq('재동기화 개수', R.length, 3);
+eq('재동기화 번호 재부여', R.map(function (d) { return d.n + ':' + d.date; }),
+  ['1:2026-07-29', '2:2026-07-30', '3:2026-07-31']);
+eq('남은 날짜의 일정 보존', R[0].items, [{ id: 'i_x', time: '09:00', text: '유니버셜' }]);
+eq('남은 날짜의 테마 보존', R[0].theme, '테마파크');
+eq('새로 생긴 날짜는 비어 있음', R[2].items, []);
+
+eq('내장 섹션 4개', defaultSections().map(function (s) { return s.body; }),
+  ['hotel', 'packing', 'spend', 'expenses']);
+eq('내장 섹션 타입', defaultSections()[0].type, 'builtin');
+
+var NT = emptyTrip({ title: '방콕', start: '2026-09-01', end: '2026-09-04' });
+eq('새 여행 스키마 버전', NT.schema, 1);
+eq('새 여행 일차 수', NT.days.length, 4);
+eq('새 여행 기본 인원', NT.party, 2);
+eq('새 여행 기본 통화', NT.currency, { code: 'KRW', symbol: '₩', decimals: 0, unit: 1 });
+eq('새 여행 빈 준비물', NT.packing, []);
+eq('새 여행 id 접두사', NT.id.slice(0, 2), 't_');
+
+// 상속 헬퍼
+var TP = { place: { name: '파리' }, currency: { code: 'EUR' } };
+eq('일차 장소 상속', dayPlace(TP, { place: null }), { name: '파리' });
+eq('일차 장소 오버라이드', dayPlace(TP, { place: { name: '로마' } }), { name: '로마' });
+eq('일차 통화 상속', dayCurrency(TP, { curCode: null }).code, 'EUR');
+eq('일차 통화 오버라이드', dayCurrency(TP, { curCode: 'CHF' }).code, 'CHF');
