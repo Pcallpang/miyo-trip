@@ -22,6 +22,10 @@ function itemLinesHtml(text) {
   }).join('');
 }
 
+// 여행 화면의 편집 토글 상태. 여행을 넘나들거나 새로고침하면 꺼진 상태로 돌아간다 —
+// 세션에 묶인 UI 상태일 뿐 trip 데이터가 아니므로 저장소에 넣지 않는다.
+var EDIT_MODE = false;
+
 function isUndecided(text) {
   return /뭐먹지|\?$/.test(text.trim()) || text.trim() === "";
 }
@@ -96,6 +100,8 @@ function renderSummary(trip, st) {
   const nights = daysBetween(trip.start, trip.end) - 1;
   el.innerHTML =
     '<button class="edit-trip" type="button" aria-label="여행 설정">⚙</button>' +
+    '<button class="edit-mode" type="button" aria-pressed="' + (EDIT_MODE ? 'true' : 'false') +
+      '">' + (EDIT_MODE ? '완료' : '편집') + '</button>' +
     '<div class="dday">' + dday(today, trip.start, trip.end) + '</div>' +
     '<h1>' + escHtml(trip.title) + '</h1>' +
     '<div class="period">' + escHtml(trip.start) + ' ~ ' + escHtml(trip.end) +
@@ -111,6 +117,15 @@ function renderSummary(trip, st) {
       : '');
   var eb = el.querySelector('.edit-trip');
   if (eb) eb.addEventListener('click', function () { go('#/t/' + trip.id + '/edit'); });
+  var mb = el.querySelector('.edit-mode');
+  if (mb) mb.addEventListener('click', function () {
+    // showTrip(trip.id, ...)로는 안 된다 — 같은 여행을 다시 "열게" 되면 opening 경로를
+    // 타서 #fixed 전체가 다시 그려지며 열어 둔 아코디언이 닫힌다(showDay 위 주석 참고).
+    // 여기서는 요약(토글 버튼 자체)과 타임라인(수정/삭제 버튼)만 다시 그리면 된다.
+    EDIT_MODE = !EDIT_MODE;
+    renderSummary(trip, CUR.st);
+    showDay(trip, CUR.dayN);
+  });
 }
 
 // ---- 일차 탭 / 타임라인 ----
@@ -131,13 +146,34 @@ function renderTabs(trip, selectedN, onSelect) {
   if (sel && sel.scrollIntoView) sel.scrollIntoView({ inline: "center", block: "nearest" });
 }
 
+// EDIT_MODE에서 일정 추가·수정·삭제 후 공통으로 거치는 경로.
+// saveTrip의 성공 여부를 반드시 확인한다 — 확인 없이 넘기면 저장이 조용히 실패해도
+// 화면은 성공한 것처럼 보인다(이 파일 상단 saveTrip 관련 주석 참고). 실패하면 사용자에게
+// 알리고, 이미 메모리 위에서 고쳐놓은 trip.days를 저장소의 실제 값으로 되돌려
+// 다음 조작이 이번에 실패한 시도 위에 쌓이지 않게 한다. 다시 그리는 범위는 타임라인뿐이다
+// (요구사항: 일차 전환/편집 토글과 마찬가지로 #fixed는 건드리지 않는다).
+function afterItemEdit(trip, day, st, ok) {
+  if (!ok) {
+    alert('일정 저장에 실패했습니다. 기기 저장 공간을 확인해 주세요.');
+    var fresh = loadTrip(trip.id);
+    if (fresh) trip.days = fresh.days;
+  }
+  var d = trip.days.filter(function (x) { return x.n === day.n; })[0] || day;
+  renderTimeline(trip, d, st);
+}
+
 function renderTimeline(trip, day, st) {
   const main = document.getElementById("timeline");
   const rows = day.items.map(function (it) {
     const cls = isUndecided(it.text) ? ' undecided' : '';
+    const btns = EDIT_MODE
+      ? '<div class="slot-btns">' +
+        '<button class="it-edit" type="button" data-id="' + escHtml(it.id) + '">수정</button>' +
+        '<button class="it-del" type="button" data-id="' + escHtml(it.id) + '">삭제</button></div>'
+      : '';
     return '<div class="slot' + cls + '" data-item="' + escHtml(it.id) + '">' +
       '<div class="time">' + escHtml(it.time) + '</div>' +
-      '<div class="what">' + itemLinesHtml(it.text) + '</div></div>';
+      '<div class="what">' + itemLinesHtml(it.text) + btns + '</div></div>';
   }).join('');
   const meals = (day.meals && day.meals.length)
     ? '<div class="meals"><div class="meals-h">🍽 뭐먹지</div>' +
@@ -157,10 +193,48 @@ function renderTimeline(trip, day, st) {
         var line = wxLine(wxState.map, day.date);
         return line ? '<div class="dwx">' + line + wxStamp() + '</div>' : '';
       })() + '</div>' +
-      '<div class="slots">' + rows + '</div>' + meals + '</div>';
+      '<div class="slots">' + rows + '</div>' +
+      (EDIT_MODE
+        ? '<form class="item-add">' +
+          '<input class="ia-time" type="time" step="300" required aria-label="시간">' +
+          '<textarea class="ia-text" rows="2" placeholder="일정 내용" required ' +
+            'aria-label="일정 내용"></textarea>' +
+          '<button type="submit">일정 추가</button></form>'
+        : '') +
+      meals + '</div>';
   main.querySelectorAll('.memo').forEach(function (inp) {
     inp.addEventListener('input', function () { st.set(inp.dataset.key, inp.value); });
   });
+  if (EDIT_MODE) {
+    main.querySelectorAll('.it-del').forEach(function (b) {
+      b.addEventListener('click', function () {
+        if (!confirm('이 일정을 삭제할까요?')) return;
+        removeItem(trip, day.n, b.dataset.id);
+        afterItemEdit(trip, day, st, saveTrip(trip));
+      });
+    });
+    main.querySelectorAll('.it-edit').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var it = day.items.filter(function (x) { return x.id === b.dataset.id; })[0];
+        if (!it) return;
+        var time = prompt('시간 (HH:MM)', it.time);
+        if (time === null) return;
+        var text = prompt('일정 내용', it.text);
+        if (text === null) return;
+        updateItem(trip, day.n, it.id, { time: time, text: text });
+        afterItemEdit(trip, day, st, saveTrip(trip));
+      });
+    });
+    var af = main.querySelector('.item-add');
+    if (af) af.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var t = af.querySelector('.ia-time').value;
+      var x = af.querySelector('.ia-text').value.trim();
+      if (!t || !x) return;
+      addItem(trip, day.n, { time: t, text: x });
+      afterItemEdit(trip, day, st, saveTrip(trip));
+    });
+  }
 }
 
 // ---- 하단 고정 섹션 ----

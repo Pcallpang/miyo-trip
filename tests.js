@@ -480,3 +480,50 @@ eq('파싱 불가능한 연도는 검증에서 거부됨',
     listTrips().filter(function (r) { return r.id === id; })[0].title, '원래 제목');
   eq('수정 시 본체 쓰기 실패해도 본체 저장소는 예전 값 그대로', loadTrip(id).title, '원래 제목');
 })();
+
+// ---- 일정 카드 편집 ----
+function fixture() {
+  return { id: 't_e', days: [
+    { n: 1, date: '2026-09-01', items: [
+      { id: 'a', time: '09:00', text: '출발' },
+      { id: 'b', time: '14:00', text: '체크인' }
+    ] },
+    { n: 2, date: '2026-09-02', items: [] }
+  ] };
+}
+
+eq('시간 정렬', sortItems([
+  { id: 'x', time: '14:00' }, { id: 'y', time: '09:00' }, { id: 'z', time: '11:30' }
+]).map(function (i) { return i.id; }), ['y', 'z', 'x']);
+eq('같은 시간은 원래 순서', sortItems([
+  { id: 'p', time: '09:00' }, { id: 'q', time: '09:00' }
+]).map(function (i) { return i.id; }), ['p', 'q']);
+
+var F = fixture();
+addItem(F, 1, { time: '11:00', text: '점심' });
+eq('추가 후 개수', F.days[0].items.length, 3);
+eq('시간순 삽입', F.days[0].items.map(function (i) { return i.time; }),
+  ['09:00', '11:00', '14:00']);
+eq('추가 항목에 id 부여', F.days[0].items[1].id.slice(0, 2), 'i_');
+
+var F2 = fixture();
+updateItem(F2, 1, 'b', { time: '15:30', text: '체크인 변경' });
+eq('수정된 텍스트', F2.days[0].items[1].text, '체크인 변경');
+eq('수정된 시간', F2.days[0].items[1].time, '15:30');
+eq('수정 후에도 정렬 유지', F2.days[0].items.map(function (i) { return i.time; }),
+  ['09:00', '15:30']);
+
+var F3 = fixture();
+removeItem(F3, 1, 'a');
+eq('삭제 후 개수', F3.days[0].items.length, 1);
+eq('남은 항목', F3.days[0].items[0].id, 'b');
+
+var F4 = fixture();
+removeItem(F4, 1, '없는id');
+eq('없는 id 삭제는 무해', F4.days[0].items.length, 2);
+addItem(F4, 99, { time: '09:00', text: '없는 일차' });
+eq('없는 일차 추가는 무해', F4.days.length, 2);
+
+var F5 = fixture();
+addItem(F5, 2, { time: '08:00', text: '첫 항목' });
+eq('빈 일차에 추가', F5.days[1].items.length, 1);

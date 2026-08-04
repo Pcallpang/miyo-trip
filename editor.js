@@ -109,3 +109,48 @@ function showEdit(id) {
     go('#/t/' + res.trip.id);
   });
 }
+
+// ---- 일정 카드 편집 (Task 8) ----
+// 모두 순수 함수: 인자로 받은 trip을 그대로 고쳐서 돌려준다(전달받은 day 객체를
+// 공유하는 applyTripForm과 같은 결) — 호출부가 저장 여부를 직접 챙긴다.
+
+// 안정 정렬 — 같은 시간이면 원래 순서를 유지한다.
+function sortItems(items) {
+  return items.map(function (it, i) { return { it: it, i: i }; })
+    .sort(function (a, b) {
+      if (a.it.time === b.it.time) return a.i - b.i;
+      return a.it.time < b.it.time ? -1 : 1;
+    })
+    .map(function (w) { return w.it; });
+}
+
+function findDay(trip, dayN) {
+  return trip.days.filter(function (d) { return d.n === dayN; })[0] || null;
+}
+
+function addItem(trip, dayN, o) {
+  var day = findDay(trip, dayN);
+  if (!day) return trip;
+  day.items.push({ id: newItemId(), time: o.time, text: o.text });
+  day.items = sortItems(day.items);
+  return trip;
+}
+
+function updateItem(trip, dayN, itemId, o) {
+  var day = findDay(trip, dayN);
+  if (!day) return trip;
+  day.items.forEach(function (it) {
+    if (it.id !== itemId) return;
+    it.time = o.time;
+    it.text = o.text;
+  });
+  day.items = sortItems(day.items);
+  return trip;
+}
+
+function removeItem(trip, dayN, itemId) {
+  var day = findDay(trip, dayN);
+  if (!day) return trip;
+  day.items = day.items.filter(function (it) { return it.id !== itemId; });
+  return trip;
+}
