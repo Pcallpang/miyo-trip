@@ -55,3 +55,41 @@ eq('wxDailyMap null api', wxDailyMap(null), {});
 eq('wxLine 포맷', wxLine(wxDailyMap(WXAPI), "2026-07-28"), "🌤️ 33° / 26° · 비 10%");
 eq('wxLine 강수 null 생략', wxLine(wxDailyMap(WXAPI), "2026-07-29"), "🌧️ 30° / 26°");
 eq('wxLine 없는 날짜', wxLine(wxDailyMap(WXAPI), "2026-08-09"), "");
+
+// ---- store.js ----
+__resetStorage();
+
+eq('lsGet 기본값', lsGet('없는키', 42), 42);
+lsSet('k', { a: 1 });
+eq('lsSet/lsGet 왕복', lsGet('k', null), { a: 1 });
+lsDel('k');
+eq('lsDel 후 기본값', lsGet('k', 'gone'), 'gone');
+
+eq('tripKey 조합', tripKey('t_1', 'spend'), 'trip:t_1:spend');
+eq('newTripId 접두사', newTripId().slice(0, 2), 't_');
+eq('newTripId 유일', newTripId() === newTripId(), false);
+
+eq('빈 여행 목록', listTrips(), []);
+
+var T1 = { schema: 1, id: 't_a', title: '오사카', start: '2026-07-28', end: '2026-08-03', days: [] };
+saveTrip(T1);
+eq('저장 후 목록', listTrips(),
+  [{ id: 't_a', title: '오사카', start: '2026-07-28', end: '2026-08-03' }]);
+eq('불러오기', loadTrip('t_a').title, '오사카');
+eq('없는 여행', loadTrip('t_zzz'), null);
+
+T1.title = '오사카 재방문';
+saveTrip(T1);
+eq('같은 id 재저장은 중복 안 만듦', listTrips().length, 1);
+eq('인덱스 제목 갱신', listTrips()[0].title, '오사카 재방문');
+
+var st = tripStore('t_a');
+st.set('spend', [{ id: 1, jpy: 100 }]);
+eq('여행별 저장소', st.get('spend', []), [{ id: 1, jpy: 100 }]);
+eq('여행별 저장소는 raw 키를 쓴다', lsGet('trip:t_a:spend', null), [{ id: 1, jpy: 100 }]);
+eq('다른 여행과 격리', tripStore('t_b').get('spend', []), []);
+
+deleteTrip('t_a');
+eq('삭제 후 목록', listTrips(), []);
+eq('삭제 후 본체', loadTrip('t_a'), null);
+eq('삭제 후 런타임 키도 제거', lsGet('trip:t_a:spend', 'gone'), 'gone');
