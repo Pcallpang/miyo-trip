@@ -363,9 +363,13 @@ eq('기간 연장 후 일차', edited.days.length, 5);
 eq('연장해도 기존 일정 보존', edited.days[1].items, [{ id: 'i_k', time: '10:00', text: '왕궁' }]);
 eq('id 유지', edited.id, madeId);
 eq('제목 갱신', edited.title, '방콕 5일');
-// 편집 경로는 호출자의 trip 객체를 그대로 변형한다(새 객체를 만들지 않는다) — 실제
-// 동작을 그대로 문서화한다. reference 동일성이 이를 보장한다.
-eq('편집 경로는 caller의 trip 객체를 그대로 변형함(새 객체 아님)', edited === made, true);
+// 편집 경로는 호출자의 trip 객체를 건드리지 않고(non-mutating) 새 객체를 돌려준다 —
+// showEdit가 재제출마다 같은 trip 참조를 넘기므로, 실패한 시도의 값으로 그 참조가
+// 오염되면 재시도 성공 시 저장소의 온전한 값이 아니라 오염된 값을 써버리기 때문이다.
+// reference 비동일성과, made(호출자 쪽 원본)가 그대로인지를 함께 확인한다.
+eq('편집 경로는 caller의 trip 객체를 건드리지 않음(새 객체를 돌려줌)', edited === made, false);
+eq('편집 경로 호출 후에도 caller의 원본 title은 그대로', made.title, '방콕');
+eq('편집 경로 호출 후에도 caller의 원본 일차 수는 그대로', made.days.length, 4);
 
 // 앞을 잘라내는 경우(shrink-from-start)도 보존이 성립해야 한다 — 인덱스 기반으로만
 // 재동기화하는 잘못된 구현이면 날짜가 아니라 위치로 일정을 옮겨버려 여기서 걸린다.
@@ -414,4 +418,65 @@ eq('파싱 불가능한 연도는 검증에서 거부됨',
   eq('수정 저장 실패도 ok:false로 보고됨', r2.ok, false);
   eq('수정 저장 실패 시 저장소의 예전 값이 그대로 남음(덮어써지지 않음)',
     loadTrip(r0.trip.id).title, beforeTitle);
+})();
+
+// ---- Important 3: showEdit는 폼 제출마다 loadTrip(id)로 한 번 얻은 trip 참조를
+// 재사용한다(재렌더하지 않으므로). 첫 시도가 실패했다가(예: 09-04에 일정이 있는데 종료일을
+// 09-02로 줄여 제출) 그다음 시도를 원래 기간으로 재제출해 성공하면, 실패한 시도가 남긴
+// 흔적이 아니라 저장소의 온전한 값 위에 적용돼야 한다. applyTripForm이 trip을 그 자리에서
+// 고치던 예전 구현에서는 실패한 시도만으로도 참조가 오염돼 재시도가 성공해도 09-04
+// 일정이 영구히 사라졌다 — non-mutating으로 바뀐 뒤에는 그 참조가 항상 저장소와 일치한
+// 원본으로 남아 이 문제가 생기지 않는다.
+(function () {
+  __resetStorage();
+  var r0 = submitTripForm(null,
+    { title: '방콕', start: '2026-09-01', end: '2026-09-05', party: 2, hotel: '' });
+  var tripRef = r0.trip; // showEdit의 closure가 붙들고 있는 것과 같은 참조
+  tripRef.days[3].items.push({ id: 'i_r', time: '09:00', text: '왕궁' }); // 2026-09-04
+  eq('사전 준비: 09-04 일정 저장 성공', saveTrip(tripRef), true);
+
+  __setWritesFail(true);
+  var rFail = submitTripForm(tripRef,
+    { title: '방콕', start: '2026-09-01', end: '2026-09-02', party: 2, hotel: '' }); // 09-04를 떨구는 잘못된 제출
+  __setWritesFail(false);
+  eq('일차를 떨구는 제출은 실패로 보고됨', rFail.ok, false);
+  eq('실패해도 저장소의 09-04 일정은 그대로', loadTrip(tripRef.id).days[3].items,
+    [{ id: 'i_r', time: '09:00', text: '왕궁' }]);
+
+  var rRetry = submitTripForm(tripRef,
+    { title: '방콕', start: '2026-09-01', end: '2026-09-05', party: 2, hotel: '' }); // 원래 기간으로 재시도
+  eq('원래 기간으로 재시도하면 성공', rRetry.ok, true);
+  eq('재시도 성공 후에도 09-04 일정 보존(실패한 시도로 오염되지 않음)',
+    loadTrip(tripRef.id).days[3].items, [{ id: 'i_r', time: '09:00', text: '왕궁' }]);
+})();
+
+// ---- Minor: saveTrip은 본체(큰 쓰기)와 인덱스(작은 쓰기)를 나눠 쓴다. 실제 용량 초과처럼
+// 큰 쓰기만 실패하고 작은 쓰기는 성공하는 상황을 __setWriteSizeLimit으로 재현해, 본체
+// 쓰기가 실패하면 인덱스도 건드리지 않는지 확인한다. __setWritesFail(모든 쓰기 실패)만으로는
+// 이 본체/인덱스 분리 문제를 드러낼 수 없다(둘 다 실패하면 어떤 구현이든 통과해버림).
+(function () {
+  __resetStorage();
+  var t = emptyTrip({ title: '큰 여행', start: '2026-09-01', end: '2026-09-05', party: 2, hotel: '' });
+  __setWriteSizeLimit(300); // 인덱스 행(수십 바이트)은 통과, 본체(days 포함, 수백 바이트)는 실패
+  var ok = saveTrip(t);
+  __setWriteSizeLimit(-1);
+  eq('본체 쓰기가 실패하면 saveTrip은 false', ok, false);
+  eq('본체 쓰기 실패 시 목록에 고아 항목 없음', listTrips(), []);
+  eq('본체 쓰기 실패 시 본체도 저장 안 됨(반쪽짜리 없음)', loadTrip(t.id), null);
+})();
+
+(function () {
+  __resetStorage();
+  var r0 = submitTripForm(null,
+    { title: '원래 제목', start: '2026-09-01', end: '2026-09-03', party: 2, hotel: '' });
+  var id = r0.trip.id;
+  var edited = applyTripForm(loadTrip(id),
+    { title: '고친 제목', start: '2026-09-01', end: '2026-09-03', party: 2, hotel: '' });
+  __setWriteSizeLimit(300);
+  var ok2 = saveTrip(edited);
+  __setWriteSizeLimit(-1);
+  eq('수정 시 본체 쓰기 실패는 saveTrip false', ok2, false);
+  eq('수정 시 본체 쓰기 실패해도 목록의 제목은 예전 값 그대로(고스트 갱신 없음)',
+    listTrips().filter(function (r) { return r.id === id; })[0].title, '원래 제목');
+  eq('수정 시 본체 쓰기 실패해도 본체 저장소는 예전 값 그대로', loadTrip(id).title, '원래 제목');
 })();

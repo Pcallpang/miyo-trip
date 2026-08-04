@@ -17,24 +17,30 @@ function validateTripForm(f) {
   return null;
 }
 
-// trip이 null이면 새로 만들고, 있으면 필드를 갱신한다. days는 항상 재동기화한다.
-// 참고(편집 경로): trip을 새로 만들지 않고 그 자리에서 고쳐 그대로 돌려준다 — 즉
-// 반환값은 인자로 받은 trip과 동일한 객체다. saveTrip이 실패해도 이미 메모리 위의
-// trip은 새 값으로 바뀌어 있다는 뜻이라, 실패 시 화면을 그대로 두면 저장 안 된 값이
-// 저장된 것처럼 보일 수 있다 — 그래서 submitTripForm은 실패 시에도 절대 navigate하지
-// 않고 에러를 보여준다(아래 참고).
+// trip이 null이면 새로 만들고, 있으면 필드를 갱신한 새 객체를 돌려준다. days는 항상
+// 재동기화한다.
+// 참고(편집 경로): 인자로 받은 trip은 건드리지 않는다(non-mutating) — 갱신된 필드를
+// 얹은 새 객체를 돌려준다. showEdit는 폼 제출마다 이 함수에 같은 trip 참조를 넘기는데,
+// 만약 그 자리에서 고쳤다면 실패한 시도의 값(예: 일차가 줄어들며 사라진 일정)이 메모리
+// 위 trip에 그대로 남아, 그다음 재시도가 성공할 때 저장소의 온전한 값이 아니라 실패한
+// 시도로 오염된 값을 써버린다. trip을 그대로 두면 재시도할 때마다 항상 저장소와 일치하는
+// 원본에서 다시 시작하므로 이 문제가 애초에 생기지 않는다. saveTrip이 실패해도 caller가
+// 들고 있는 trip은 여전히 저장소와 일치한다 — 그래도 submitTripForm은 실패 시 절대
+// navigate하지 않고 에러를 보여준다(아래 참고).
 function applyTripForm(trip, f) {
   if (!trip) {
     return emptyTrip({ title: f.title.trim(), start: f.start, end: f.end,
                        party: Number(f.party), hotel: (f.hotel || '').trim() });
   }
-  trip.title = f.title.trim();
-  trip.start = f.start;
-  trip.end = f.end;
-  trip.party = Number(f.party);
-  trip.hotel = (f.hotel || '').trim();
-  trip.days = resyncDays(trip.days, f.start, f.end);
-  return trip;
+  var next = {};
+  for (var k in trip) { if (Object.prototype.hasOwnProperty.call(trip, k)) next[k] = trip[k]; }
+  next.title = f.title.trim();
+  next.start = f.start;
+  next.end = f.end;
+  next.party = Number(f.party);
+  next.hotel = (f.hotel || '').trim();
+  next.days = resyncDays(trip.days, f.start, f.end);
+  return next;
 }
 
 // 검증 → 적용 → 저장까지의 순수 로직. DOM에 손대지 않아 테스트에서 직접 호출할 수 있다.

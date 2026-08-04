@@ -4,10 +4,19 @@ var fs = require("fs");
 var mem = {};
 // __failWrites 가 true면 setItem이 조용히 no-op(쓴 척만 함)한다 — 예외를 던지지 않는
 // 프라이빗 모드/용량 초과류의 "silent no-op" 실패를 흉내내기 위함. 다른 모든 동작은 그대로.
+// __writeSizeLimit(바이트, -1이면 무제한)이 설정돼 있으면 그 값을 넘는 쓰기만 no-op한다 —
+// saveTrip처럼 큰 본체 쓰기와 작은 인덱스 쓰기를 함께 하는 코드에서, 실제 용량 초과처럼
+// "큰 쓰기만 실패하고 작은 쓰기는 성공"하는 상황을 흉내내기 위함(모든 쓰기를 실패시키는
+// __failWrites만으로는 본체/인덱스 분리 문제를 드러낼 수 없다).
 var failWrites = false;
+var writeSizeLimit = -1;
 global.localStorage = {
   getItem: function (k) { return Object.prototype.hasOwnProperty.call(mem, k) ? mem[k] : null; },
-  setItem: function (k, v) { if (failWrites) return; mem[k] = String(v); },
+  setItem: function (k, v) {
+    if (failWrites) return;
+    if (writeSizeLimit >= 0 && String(v).length > writeSizeLimit) return;
+    mem[k] = String(v);
+  },
   removeItem: function (k) { delete mem[k]; },
   key: function (i) { return Object.keys(mem)[i]; },
   get length() { return Object.keys(mem).length; }
@@ -47,8 +56,9 @@ global.window = global;
 // 없으므로 no-op으로 채운다. location은 라우터가 읽고 쓰는 해시만 흉내낸다.
 global.addEventListener = function () {};
 global.location = { hash: "" };
-global.__resetStorage = function () { mem = {}; failWrites = false; };
+global.__resetStorage = function () { mem = {}; failWrites = false; writeSizeLimit = -1; };
 global.__setWritesFail = function (v) { failWrites = v; };
+global.__setWriteSizeLimit = function (n) { writeSizeLimit = n; };
 
 var failed = 0, out = [];
 global.eq = function (name, got, want) {

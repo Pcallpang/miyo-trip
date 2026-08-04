@@ -40,15 +40,20 @@ function listTrips() {
   return Array.isArray(v) ? v : [];
 }
 
+// 본체(큰 쓰기)와 인덱스(작은 쓰기)를 나눠 쓴다. 용량 초과 등으로 본체 쓰기만 실패하고
+// 인덱스 쓰기는 성공하는 경우(실제로 재현됨), 인덱스만 갱신되고 본체는 예전 값 그대로
+// 남으면 목록과 본체가 서로 다른 얘기를 하게 된다(새 여행이면 목록에 loadTrip이 null인
+// 고아 항목이 생기고, 수정이면 목록엔 새 제목/날짜가 보이는데 본체는 예전 값). 그래서
+// 본체 쓰기가 실패하면 인덱스는 아예 건드리지 않는다.
 function saveTrip(trip) {
   var okBody = lsSet("trip:" + trip.id, trip);
+  if (!okBody) return false;
   var idx = listTrips();
   var row = { id: trip.id, title: trip.title, start: trip.start, end: trip.end };
   var at = -1;
   idx.forEach(function (r, i) { if (r.id === trip.id) at = i; });
   if (at >= 0) idx[at] = row; else idx.push(row);
-  var okIdx = lsSet("trip:index", idx);
-  return okBody && okIdx;
+  return lsSet("trip:index", idx);
 }
 
 function loadTrip(id) {
