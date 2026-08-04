@@ -121,10 +121,13 @@ function renderSummary(trip, st) {
   if (mb) mb.addEventListener('click', function () {
     // showTrip(trip.id, ...)로는 안 된다 — 같은 여행을 다시 "열게" 되면 opening 경로를
     // 타서 #fixed 전체가 다시 그려지며 열어 둔 아코디언이 닫힌다(showDay 위 주석 참고).
+    // showDay(trip, CUR.dayN)도 안 된다 — 그건 renderTabs를 다시 불러 탭 목록의
+    // scrollIntoView가 실행되는데, 여기서 바뀐 건 EDIT_MODE뿐이라 탭은 그대로다(wxRepaint가
+    // 같은 이유로 renderTimeline을 직접 부르는 것과 동일한 사정 — app.js의 repaintDay 참고).
     // 여기서는 요약(토글 버튼 자체)과 타임라인(수정/삭제 버튼)만 다시 그리면 된다.
     EDIT_MODE = !EDIT_MODE;
     renderSummary(trip, CUR.st);
-    showDay(trip, CUR.dayN);
+    repaintDay(trip, CUR.dayN, CUR.st);
   });
 }
 
@@ -146,20 +149,37 @@ function renderTabs(trip, selectedN, onSelect) {
   if (sel && sel.scrollIntoView) sel.scrollIntoView({ inline: "center", block: "nearest" });
 }
 
+// saveTripBody가 실패했을 때 trip.days를 저장소 값으로 되돌릴지 판단하는 순수 로직.
+// DOM에도 alert에도 손대지 않으므로 테스트에서 바로 호출할 수 있다(afterItemEdit을
+// 통째로 테스트하려면 alert 스텁이 필요한데, 그 스텁 없이도 이 판단 로직 자체는
+// 검증할 수 있게 분리했다). ok가 true면 아무 것도 하지 않는다.
+// 저장소에서 이 여행 자체를 못 찾으면(예: 다른 탭에서 삭제됨) 되돌릴 원본이 없다는
+// 뜻이라 lost:true를 돌려준다 — 이 경우 메모리 위 trip.days는 여전히 실패한 시도로
+// 오염된 phantom 상태이므로, 호출부는 그 화면을 그대로 다시 그리지 말고 안전한 곳으로
+// 옮겨야 한다.
+function reconcileAfterSaveFail(trip, ok) {
+  if (ok) return { reverted: false, lost: false };
+  var fresh = loadTrip(trip.id);
+  if (fresh) { trip.days = fresh.days; return { reverted: true, lost: false }; }
+  return { reverted: false, lost: true };
+}
+
 // EDIT_MODE에서 일정 추가·수정·삭제 후 공통으로 거치는 경로.
-// saveTrip의 성공 여부를 반드시 확인한다 — 확인 없이 넘기면 저장이 조용히 실패해도
-// 화면은 성공한 것처럼 보인다(이 파일 상단 saveTrip 관련 주석 참고). 실패하면 사용자에게
-// 알리고, 이미 메모리 위에서 고쳐놓은 trip.days를 저장소의 실제 값으로 되돌려
-// 다음 조작이 이번에 실패한 시도 위에 쌓이지 않게 한다. 다시 그리는 범위는 타임라인뿐이다
-// (요구사항: 일차 전환/편집 토글과 마찬가지로 #fixed는 건드리지 않는다).
+// saveTripBody의 성공 여부를 반드시 확인한다 — 확인 없이 넘기면 저장이 조용히 실패해도
+// 화면은 성공한 것처럼 보인다. 실패하면 사용자에게 알리고, 이미 메모리 위에서 고쳐놓은
+// trip.days를 저장소의 실제 값으로 되돌려 다음 조작이 이번에 실패한 시도 위에 쌓이지
+// 않게 한다(reconcileAfterSaveFail). 다시 그리는 범위는 타임라인뿐이다(요구사항: 일차
+// 전환/편집 토글과 마찬가지로 #fixed는 건드리지 않는다) — repaintDay가 day.items가
+// 배열이 아닌 경우의 보정도 함께 해 준다(showDay가 여는 경로에서 하는 것과 동일).
 function afterItemEdit(trip, day, st, ok) {
-  if (!ok) {
+  var res = reconcileAfterSaveFail(trip, ok);
+  if (res.lost) {
     alert('일정 저장에 실패했습니다. 기기 저장 공간을 확인해 주세요.');
-    var fresh = loadTrip(trip.id);
-    if (fresh) trip.days = fresh.days;
+    go('#/');
+    return;
   }
-  var d = trip.days.filter(function (x) { return x.n === day.n; })[0] || day;
-  renderTimeline(trip, d, st);
+  if (res.reverted) alert('일정 저장에 실패했습니다. 기기 저장 공간을 확인해 주세요.');
+  repaintDay(trip, day.n, st);
 }
 
 function renderTimeline(trip, day, st) {
@@ -210,7 +230,7 @@ function renderTimeline(trip, day, st) {
       b.addEventListener('click', function () {
         if (!confirm('이 일정을 삭제할까요?')) return;
         removeItem(trip, day.n, b.dataset.id);
-        afterItemEdit(trip, day, st, saveTrip(trip));
+        afterItemEdit(trip, day, st, saveTripBody(trip));
       });
     });
     main.querySelectorAll('.it-edit').forEach(function (b) {
@@ -219,10 +239,27 @@ function renderTimeline(trip, day, st) {
         if (!it) return;
         var time = prompt('시간 (HH:MM)', it.time);
         if (time === null) return;
+        // 추가 폼은 <input type=time>이 형식을 강제하지만 prompt()는 아무 문자열이나
+        // 받는다 — '9:00'처럼 자릿수만 틀린 흔한 실수는 정규화해서 받아주고, 그 밖의
+        // ('9시', 'abc' 등) 잘못된 값은 저장하지 않고 알린다. 정규화 없이 그대로 저장하면
+        // sortItems의 사전순 비교에서 '9:00'이 '14:00'보다 뒤로 밀려버린다(review 지적).
+        var normTime = normalizeTimeInput(time);
+        if (!normTime) {
+          alert('시간 형식이 올바르지 않습니다. 예: 09:00');
+          return;
+        }
         var text = prompt('일정 내용', it.text);
         if (text === null) return;
-        updateItem(trip, day.n, it.id, { time: time, text: text });
-        afterItemEdit(trip, day, st, saveTrip(trip));
+        text = text.trim();
+        // 추가 폼(item-add)은 빈 내용을 거부한다(required + trim 확인) — prompt 경로만
+        // 빈 문자열을 그대로 받아주면 "시간만 있고 내용은 빈" undecided 행이 생긴다.
+        // 두 입력 경로의 보장을 맞춘다.
+        if (!text) {
+          alert('일정 내용을 입력해 주세요.');
+          return;
+        }
+        updateItem(trip, day.n, it.id, { time: normTime, text: text });
+        afterItemEdit(trip, day, st, saveTripBody(trip));
       });
     });
     var af = main.querySelector('.item-add');
@@ -232,7 +269,7 @@ function renderTimeline(trip, day, st) {
       var x = af.querySelector('.ia-text').value.trim();
       if (!t || !x) return;
       addItem(trip, day.n, { time: t, text: x });
-      afterItemEdit(trip, day, st, saveTrip(trip));
+      afterItemEdit(trip, day, st, saveTripBody(trip));
     });
   }
 }

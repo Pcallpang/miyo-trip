@@ -60,6 +60,14 @@ function loadTrip(id) {
   return lsGet("trip:" + id, null);
 }
 
+// 일정 항목(추가·수정·삭제) 전용 저장. 인덱스 행(id/title/start/end)은 항목 편집으로
+// 바뀌지 않으므로 본체만 쓴다 — saveTrip처럼 인덱스까지 같이 쓰면, 실제로는 본체 저장이
+// 성공했는데 인덱스 쓰기만(용량 초과 등으로) 실패한 경우에도 saveTrip이 false를 돌려줘
+// 정상 반영된 편집을 실패로 취급해버린다. 본체만 쓰면 그 모호함 자체가 없어진다.
+function saveTripBody(trip) {
+  return lsSet("trip:" + trip.id, trip);
+}
+
 // 여행 본체 + 그 여행의 런타임 키(trip:<id>:*) + 인덱스 항목을 모두 지운다.
 function deleteTrip(id) {
   lsDel("trip:" + id);

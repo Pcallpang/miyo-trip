@@ -84,6 +84,20 @@ function wxRefresh(st) {
     if (wxState.at) wxRepaint();
   });
 }
+// dayN에 해당하는 day를 찾아 타임라인만 다시 그린다. renderTabs(따라서 tab strip의
+// scrollIntoView)는 건드리지 않는다 — 탭 목록이나 선택된 탭이 바뀌지 않은 상황(날씨 갱신,
+// 편집 모드 토글)에서 renderTabs까지 다시 부르면 스크롤이 제자리서 튄다.
+// showDay가 하던 "day.items가 배열이 아니면 빈 배열로 고쳐 넣는" 보정도 여기서 함께
+// 한다 — renderTimeline을 직접 부르는 경로(wxRepaint, 편집 모드 토글, afterItemEdit)가
+// 전부 이 보정을 거치게 해서, 손상된 저장값(items 없는 day)을 만나도 던지지 않는다.
+function repaintDay(trip, dayN, st) {
+  var day = pickDay(trip, dayN);
+  if (!day) return null;
+  if (!Array.isArray(day.items)) day.items = [];
+  renderTimeline(trip, day, st);
+  return day;
+}
+
 // 날씨가 바뀌면 날씨를 쓰는 화면(요약·타임라인)만 다시 그린다.
 // showTrip 전체를 다시 부르면 renderTabs의 scrollIntoView로 스크롤이 튀고
 // renderFixed가 열려 있던 아코디언(details)과 입력 중이던 값을 날린다.
@@ -91,8 +105,7 @@ function wxRepaint() {
   if (!CUR.trip) return;
   if (document.getElementById("screen-trip").hidden) return;
   renderSummary(CUR.trip, CUR.st);
-  var day = pickDay(CUR.trip, CUR.dayN);
-  if (day) renderTimeline(CUR.trip, day, CUR.st);
+  repaintDay(CUR.trip, CUR.dayN, CUR.st);
 }
 
 // ---- 라우터 ----
@@ -185,7 +198,11 @@ function showTrip(id, dayN) {
   var opening = switched || document.getElementById("screen-trip").hidden;
 
   CUR.id = id; CUR.trip = trip; CUR.st = tripStore(id);
-  if (switched) wxReset();
+  // EDIT_MODE는 세션에 묶인 UI 상태일 뿐 trip 데이터가 아니다(views.js 위 주석 참고) —
+  // 다른 여행으로 전환하면서 편집 모드가 그대로 넘어가면, A에서 편집 모드를 켠 채 목록으로
+  // 돌아가 B를 열었을 때 B가 편집 모드로 열려버린다. 새로고침은 전역 변수 자체가 초기화되며
+  // 자연히 꺼지므로 여기서는 "여행이 바뀌는" 경우만 챙기면 된다.
+  if (switched) { wxReset(); EDIT_MODE = false; }
   showScreen("trip");
 
   if (opening) renderSummary(trip, CUR.st);

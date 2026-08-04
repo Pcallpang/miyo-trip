@@ -527,3 +527,127 @@ eq('없는 일차 추가는 무해', F4.days.length, 2);
 var F5 = fixture();
 addItem(F5, 2, { time: '08:00', text: '첫 항목' });
 eq('빈 일차에 추가', F5.days[1].items.length, 1);
+
+// ---- 일차 격리(cross-day isolation): 대상 일차만 바뀌어야 한다. 개수만 보면
+// "두 일차 모두에 쓰는" 잘못된 구현도 통과할 수 있으므로, 건드리지 않은 일차의
+// items가 원래 값(빈 배열)과 완전히 같은지까지 확인한다.
+var F6 = fixture();
+addItem(F6, 1, { time: '10:00', text: '새 항목' });
+eq('일정 추가는 다른 일차를 건드리지 않음', F6.days[1].items, []);
+
+var F7 = fixture();
+updateItem(F7, 1, 'b', { time: '16:00', text: '수정' });
+eq('일정 수정은 다른 일차를 건드리지 않음', F7.days[1].items, []);
+
+var F8 = fixture();
+removeItem(F8, 1, 'a');
+eq('일정 삭제는 다른 일차를 건드리지 않음', F8.days[1].items, []);
+
+// ---- updateItem: 존재하지 않는 item id는 무해해야 한다(추가되지도, 기존 항목이
+// 바뀌지도 않아야 함).
+var F9 = fixture();
+updateItem(F9, 1, '없는id', { time: '20:00', text: '유령 수정' });
+eq('없는 item id 수정은 개수를 바꾸지 않음', F9.days[0].items.length, 2);
+eq('없는 item id 수정은 기존 항목을 바꾸지 않음', F9.days[0].items, fixture().days[0].items);
+
+// ---- Important 1: sortItems의 비교자는 time이 없거나 문자열이 아닌 항목이 섞여도
+// 정상 항목끼리의 상대 순서를 지켜야 한다(예전엔 a<b, b<a가 둘 다 false가 되어
+// 비교자가 모순에 빠졌고, V8에서 12개 중 6개가 time이 없는 목록이 통째로 뒤섞였다).
+// malformed 항목은 정렬 키가 없는 셈이므로 맨 뒤로 보낸다(이 파일의 sortItems 주석 참고).
+eq('time이 없는 항목은 맨 뒤로, 정상 항목끼리는 정렬 유지', sortItems([
+  { id: 'a', time: '09:00' }, { id: 'b' }, { id: 'c', time: '05:00' }
+]).map(function (i) { return i.id; }), ['c', 'a', 'b']);
+eq('time이 문자열이 아닌 항목도 맨 뒤로, 정상 항목끼리는 정렬 유지', sortItems([
+  { id: 'x', time: '14:00' }, { id: 'y', time: null }, { id: 'z', time: '09:00' },
+  { id: 'w', time: 123 }
+]).map(function (i) { return i.id; }), ['z', 'x', 'y', 'w']);
+eq('malformed 항목끼리는 원래 순서를 유지(안정 정렬)', sortItems([
+  { id: 'm1' }, { id: 'm2', time: undefined }, { id: 'm3', time: NaN }
+]).map(function (i) { return i.id; }), ['m1', 'm2', 'm3']);
+
+// ---- Important 2: normalizeTimeInput — prompt() 편집 경로가 저장 전에 거치는 검증/정규화.
+eq('normalizeTimeInput: 정상 HH:MM은 그대로', normalizeTimeInput('09:00'), '09:00');
+eq('normalizeTimeInput: 한 자리 시는 0-padding으로 정규화', normalizeTimeInput('9:00'), '09:00');
+eq('normalizeTimeInput: 앞뒤 공백은 허용', normalizeTimeInput(' 9:05 '), '09:05');
+eq('normalizeTimeInput: 24시는 범위 밖이라 null', normalizeTimeInput('24:00'), null);
+eq('normalizeTimeInput: 분이 두 자리가 아니면 null', normalizeTimeInput('9:5'), null);
+eq('normalizeTimeInput: 시각 형식이 아니면 null', normalizeTimeInput('9시'), null);
+eq('normalizeTimeInput: 빈 문자열은 null', normalizeTimeInput(''), null);
+
+// ---- Minor: renderTimeline(EDIT_MODE=true) — Task 8에서 새로 생긴 두 data-id 싱크
+// (.it-edit, .it-del)는 지금까지 자동화된 이스케이프 커버리지가 없었다.
+(function () {
+  var HOSTILE = '"><img src=x onerror=alert(1)>';
+  var escHostile = escHtml(HOSTILE);
+  var day = {
+    n: 1, date: "2026-07-28", theme: "", meals: [],
+    items: [{ id: HOSTILE, time: "09:00", text: "테스트 일정" }]
+  };
+  var trip = { days: [day] };
+  var st = { get: function (k, fb) { return fb; }, set: function () {} };
+  var el = global.__setDomTarget("timeline");
+  var prevEditMode = EDIT_MODE;
+  EDIT_MODE = true;
+  renderTimeline(trip, day, st);
+  EDIT_MODE = prevEditMode;
+  var html = el.innerHTML;
+
+  eq('EDIT_MODE renderTimeline: raw <img> 태그가 어디에도 없음', html.indexOf('<img') === -1, true);
+  eq('EDIT_MODE renderTimeline: it-edit 버튼의 data-id는 이스케이프됨',
+    html.indexOf('class="it-edit" type="button" data-id="' + escHostile + '"') !== -1, true);
+  eq('EDIT_MODE renderTimeline: it-del 버튼의 data-id는 이스케이프됨',
+    html.indexOf('class="it-del" type="button" data-id="' + escHostile + '"') !== -1, true);
+})();
+
+// ---- Minor: afterItemEdit의 saveTripBody 실패 경로 — 이전 두 차례 리뷰가 계속 돌려보냈던
+// 지점인데도 지금까지 자동화된 커버리지가 전혀 없었다. alert 호출, trip.days의 저장소
+// 재동기화, 그리고(항목 편집이 실제로 실패한 게 아니라 재저장에 실패한 뒤에도) 올바른
+// 재렌더까지 확인한다.
+(function () {
+  __resetStorage();
+  var t0 = applyTripForm(null,
+    { title: '실패 재현용', start: '2026-09-01', end: '2026-09-01', party: 2, hotel: '' });
+  eq('사전 준비: 여행 저장 성공', saveTrip(t0), true);
+
+  var trip = loadTrip(t0.id);
+  var day = trip.days[0];
+  addItem(trip, day.n, { time: '09:00', text: '원래 일정' });
+  eq('사전 준비: 일정 추가 저장 성공', saveTripBody(trip), true);
+
+  // 메모리 위에서만 한 번 더 편집한다(= 저장 직전 상태를 흉내). 이 편집은 저장에
+  // 실패할 것이므로 저장소에는 반영되면 안 된다.
+  addItem(trip, day.n, { time: '10:00', text: '저장 실패할 일정' });
+  __setWriteSizeLimit(10); // 본체 JSON이 10바이트를 넘으므로 확실히 실패
+  var ok = saveTripBody(trip);
+  __setWriteSizeLimit(-1);
+  eq('본체 쓰기 크기 초과로 실패', ok, false);
+
+  var el = global.__setDomTarget('timeline');
+  afterItemEdit(trip, day, tripStore(trip.id), ok);
+
+  eq('저장 실패 시 alert가 호출됨', __alerts.length > 0, true);
+  eq('저장 실패 시 trip.days가 저장소 값으로 되돌아감(phantom 일정 제거)',
+    trip.days.filter(function (d) { return d.n === day.n; })[0].items.map(function (i) { return i.text; }),
+    ['원래 일정']);
+  eq('저장 실패해도 재렌더는 실행됨(빈 innerHTML 아님)', el.innerHTML.length > 0, true);
+})();
+
+// ---- Minor: afterItemEdit이 실패 후 되돌린 day에 items가 없어도(손상된 저장값) 던지지
+// 않아야 한다 — showDay가 여는 경로에서 적용하는 보정(repaintDay)을 afterItemEdit도
+// 거치는지 확인한다.
+(function () {
+  __resetStorage();
+  var t0 = applyTripForm(null,
+    { title: '손상된 일차', start: '2026-09-01', end: '2026-09-01', party: 1, hotel: '' });
+  delete t0.days[0].items; // 저장소에 items 없는 day를 흉내
+  eq('사전 준비: items 없는 day 저장 성공', saveTrip(t0), true);
+
+  var trip = loadTrip(t0.id);
+  var day = { n: trip.days[0].n };
+  var el = global.__setDomTarget('timeline');
+  var threw = false;
+  try {
+    afterItemEdit(trip, day, tripStore(trip.id), false);
+  } catch (e) { threw = true; }
+  eq('저장소에 items 없는 day가 있어도 afterItemEdit이 던지지 않음', threw, false);
+})();

@@ -29,9 +29,14 @@ var __fakeStorage = {
   get length() { return Object.keys(__mem).length; }
 };
 Object.defineProperty(window, 'localStorage', { value: __fakeStorage, configurable: true });
-var __resetStorage = function () { __mem = {}; __failWrites = false; __writeSizeLimit = -1; };
+var __resetStorage = function () { __mem = {}; __failWrites = false; __writeSizeLimit = -1; window.__alerts = []; };
 var __setWritesFail = function (v) { __failWrites = v; };
 var __setWriteSizeLimit = function (n) { __writeSizeLimit = n; };
+// afterItemEdit(views.js)이 실패 시 window.alert를 직접 부른다. 진짜 alert()를 그대로
+// 두면 테스트 실행이 다이얼로그에서 멈추므로, test-node.js와 같은 전략으로 호출을
+// 기록만 하는 스텁으로 치환한다.
+window.__alerts = [];
+window.alert = function (msg) { window.__alerts.push(msg); };
 
 // tests.js는 Node 러너와 맞추려고 global.__setDomTarget(...) 형태로 호출한다.
 // Node에서는 global === window이므로, 브라우저에서도 같은 관계를 만들어 둔다.

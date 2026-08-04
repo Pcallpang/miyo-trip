@@ -111,17 +111,43 @@ function showEdit(id) {
 }
 
 // ---- 일정 카드 편집 (Task 8) ----
-// 모두 순수 함수: 인자로 받은 trip을 그대로 고쳐서 돌려준다(전달받은 day 객체를
-// 공유하는 applyTripForm과 같은 결) — 호출부가 저장 여부를 직접 챙긴다.
+// applyTripForm과 달리 여기 있는 addItem/updateItem/removeItem은 순수 함수가 아니다 —
+// 인자로 받은 trip(과 그 trip.days 안의 day 객체)을 그 자리에서 고쳐 같은 참조를
+// 돌려준다. 호출부(views.js)가 이 mutation을 전제로 저장 여부를 직접 챙긴다.
 
 // 안정 정렬 — 같은 시간이면 원래 순서를 유지한다.
+// time이 없거나 문자열이 아닌 항목(가져온 데이터가 손상됐거나 손으로 편집된 경우 등)은
+// 정렬 키가 없는 셈이므로 목록 맨 뒤로 보낸다 — "시간 미정" 항목이 화면 아래쪽에 몰리는
+// 게 자연스럽고, 무엇보다 a<b와 b<a가 둘 다 false가 되어 비교자가 모순(양방향 모두 1을
+// 반환)에 빠지는 걸 피할 수 있다. 그 모순 때문에 정상 시간을 가진 항목들끼리도 상대
+// 순서가 깨지는 게 원래 버그였다 — malformed 항목이 하나만 섞여도 Array.sort 구현에 따라
+// 결과가 정의되지 않는다.
 function sortItems(items) {
+  function timeKey(it) {
+    return typeof it.time === 'string' ? it.time : null;
+  }
   return items.map(function (it, i) { return { it: it, i: i }; })
     .sort(function (a, b) {
-      if (a.it.time === b.it.time) return a.i - b.i;
-      return a.it.time < b.it.time ? -1 : 1;
+      var ta = timeKey(a.it), tb = timeKey(b.it);
+      if (ta === tb) return a.i - b.i;
+      if (ta === null) return 1;
+      if (tb === null) return -1;
+      return ta < tb ? -1 : 1;
     })
     .map(function (w) { return w.it; });
+}
+
+// prompt()로 받은 시간 문자열을 "HH:MM"(24시간, 0-padded)으로 정규화한다. <input type=time>은
+// 브라우저가 이미 이 형식을 강제하지만, prompt 경로는 아무 검증도 거치지 않으므로 여기서
+// 막아야 한다. '9:00'처럼 시가 한 자리인 흔한 실수는 정규화해서 받아준다(sortItems가 문자열
+// 사전순으로 비교하므로 '9:00'을 그대로 저장하면 '14:00'보다 뒤로 밀려버린다) — 그 밖의
+// 잘못된 입력('9시', '', 'abc')은 null을 돌려줘 호출부가 거부하게 한다.
+function normalizeTimeInput(s) {
+  var m = /^([0-9]{1,2}):([0-9]{2})$/.exec(String(s).trim());
+  if (!m) return null;
+  var h = Number(m[1]), mi = Number(m[2]);
+  if (h < 0 || h > 23 || mi < 0 || mi > 59) return null;
+  return (h < 10 ? '0' : '') + h + ':' + m[2];
 }
 
 function findDay(trip, dayN) {

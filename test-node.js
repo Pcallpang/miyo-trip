@@ -56,9 +56,13 @@ global.window = global;
 // 없으므로 no-op으로 채운다. location은 라우터가 읽고 쓰는 해시만 흉내낸다.
 global.addEventListener = function () {};
 global.location = { hash: "" };
-global.__resetStorage = function () { mem = {}; failWrites = false; writeSizeLimit = -1; };
+global.__resetStorage = function () { mem = {}; failWrites = false; writeSizeLimit = -1; global.__alerts = []; };
 global.__setWritesFail = function (v) { failWrites = v; };
 global.__setWriteSizeLimit = function (n) { writeSizeLimit = n; };
+// alert()는 브라우저 전용이라 Node에는 없다 — afterItemEdit(views.js)이 실패 시 이걸
+// 직접 부르므로, 호출을 그냥 삼키는 대신 기록해 두어 테스트에서 확인할 수 있게 한다.
+global.__alerts = [];
+global.alert = function (msg) { global.__alerts.push(msg); };
 
 var failed = 0, out = [];
 global.eq = function (name, got, want) {
