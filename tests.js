@@ -150,6 +150,7 @@ lsSet('osaka-trip:v1:fx', 920);
 lsSet('osaka-trip:v1:packing_checked', { '여권 + 사본': true });
 lsSet('osaka-trip:v1:packing_add', ['멀미약']);
 lsSet('osaka-trip:v1:meal:2:0', '구시카츠 다루마');
+lsSet('osaka-trip:v1:weather', { fetchedAt: '2026-07-27', daily: {} });
 
 var mid = migrateLegacy();
 eq('이관 후 여행 id 반환', typeof mid, 'string');
@@ -161,8 +162,28 @@ eq('환율 이관', tripStore(mid).get('fx', 0), 920);
 eq('준비물 체크 이관', tripStore(mid).get('packing_checked', {}), { '여권 + 사본': true });
 eq('추가 준비물 이관', tripStore(mid).get('packing_add', []), ['멀미약']);
 eq('식사 메모 이관', tripStore(mid).get('meal:2:0', ''), '구시카츠 다루마');
+eq('날씨 이관', tripStore(mid).get('weather', null), { fetchedAt: '2026-07-27', daily: {} });
 eq('구 키 제거', lsGet('osaka-trip:v1:spend', 'gone'), 'gone');
+eq('구 날씨 키 제거', lsGet('osaka-trip:v1:weather', 'gone'), 'gone');
 eq('두 번째 호출은 null', migrateLegacy(), null);
+
+// 쓰기가 조용히 실패하는 경우: 구 키는 그대로 남아야 하고, 반쪽짜리 새 여행은 만들어지지 않는다
+__resetStorage();
+lsSet('osaka-trip:v1:spend', [{ id: 1, date: '2026-07-29', jpy: 1200, cat: '식비', note: '이치란' }]);
+lsSet('osaka-trip:v1:fx', 920);
+__setWritesFail(true);
+var midFail = migrateLegacy();
+__setWritesFail(false);
+eq('쓰기 실패 시 null 반환', midFail, null);
+eq('쓰기 실패해도 구 spend 키 보존', lsGet('osaka-trip:v1:spend', 'gone'),
+  [{ id: 1, date: '2026-07-29', jpy: 1200, cat: '식비', note: '이치란' }]);
+eq('쓰기 실패해도 구 fx 키 보존', lsGet('osaka-trip:v1:fx', 'gone'), 920);
+eq('쓰기 실패 시 여행 목록에 반쪽짜리 여행 없음', listTrips(), []);
+
+// 재시도: 정상 쓰기로 돌아오면 남아있던 구 데이터가 이관된다
+var midRetry = migrateLegacy();
+eq('실패 후 재시도는 성공', typeof midRetry, 'string');
+eq('재시도로 구 키 제거', lsGet('osaka-trip:v1:spend', 'gone'), 'gone');
 
 __resetStorage();
 var sid = installSample();

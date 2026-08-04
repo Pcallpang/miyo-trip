@@ -2,16 +2,20 @@
 var fs = require("fs");
 
 var mem = {};
+// __failWrites 가 true면 setItem이 조용히 no-op(쓴 척만 함)한다 — 예외를 던지지 않는
+// 프라이빗 모드/용량 초과류의 "silent no-op" 실패를 흉내내기 위함. 다른 모든 동작은 그대로.
+var failWrites = false;
 global.localStorage = {
   getItem: function (k) { return Object.prototype.hasOwnProperty.call(mem, k) ? mem[k] : null; },
-  setItem: function (k, v) { mem[k] = String(v); },
+  setItem: function (k, v) { if (failWrites) return; mem[k] = String(v); },
   removeItem: function (k) { delete mem[k]; },
   key: function (i) { return Object.keys(mem)[i]; },
   get length() { return Object.keys(mem).length; }
 };
 global.document = { addEventListener: function () {}, getElementById: function () { return null; } };
 global.window = global;
-global.__resetStorage = function () { mem = {}; };
+global.__resetStorage = function () { mem = {}; failWrites = false; };
+global.__setWritesFail = function (v) { failWrites = v; };
 
 var failed = 0, out = [];
 global.eq = function (name, got, want) {
