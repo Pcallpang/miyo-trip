@@ -108,3 +108,21 @@ body { margin:0; background:var(--bg); color:var(--text);
 #summary .wx { font-size:.9rem; opacity:.95; margin-top:2px; }
 .dayhead .dwx { font-size:.85rem; color:var(--muted); margin-top:2px; }
 .wxstamp { font-size:.75rem; opacity:.75; }
+
+/* ---- 여행 목록 화면 ---- */
+.lhead { background:var(--accent); color:#fff; padding:20px 16px; }
+.lhead h1 { margin:0; font-size:1.4rem; }
+#triplist { padding:12px; }
+.tripcard { position:relative; background:var(--card); border-radius:14px; padding:14px 16px;
+  margin-bottom:10px; box-shadow:0 1px 4px rgba(0,0,0,.06); cursor:pointer; }
+.tripcard .tc-title { font-weight:700; font-size:1.05rem; }
+.tripcard .tc-period { color:var(--muted); font-size:.85rem; margin-top:2px; }
+.tripcard .tc-dday { color:var(--accent); font-weight:700; font-size:.8rem; margin-top:4px; }
+.tripcard .tc-del { position:absolute; top:10px; right:10px; border:0; background:none;
+  color:var(--muted); font-size:1.2rem; line-height:1; padding:4px 8px; cursor:pointer; }
+#triplist .empty { color:var(--muted); text-align:center; padding:32px 16px; }
+.lactions { display:flex; flex-direction:column; gap:8px; padding:0 12px 24px; }
+.lactions button { font:inherit; padding:12px; border-radius:12px; border:1px solid #d5dde1;
+  background:var(--card); color:var(--text); cursor:pointer; }
+.lactions #new-trip { background:var(--accent); color:#fff; border-color:var(--accent);
+  font-weight:700; }

@@ -43,6 +43,10 @@ global.document = {
   }
 };
 global.window = global;
+// app.js는 로드 시점에 window.addEventListener("hashchange", ...)를 건다. Node의 global에는
+// 없으므로 no-op으로 채운다. location은 라우터가 읽고 쓰는 해시만 흉내낸다.
+global.addEventListener = function () {};
+global.location = { hash: "" };
 global.__resetStorage = function () { mem = {}; failWrites = false; };
 global.__setWritesFail = function (v) { failWrites = v; };
 
@@ -57,7 +61,7 @@ global.eq = function (name, got, want) {
 // 로드 순서 = index.html의 script 순서
 // forEach 콜백 안에서 direct eval을 쓰면 함수 선언이 콜백 스코프에 묶여
 // 반복이 끝나면 사라지므로, 모듈 최상위에서 for 루프로 실행한다.
-var files = ["sample-trip.js", "store.js", "schema.js", "views.js", "app.js", "tests.js"];
+var files = ["sample-trip.js", "store.js", "schema.js", "views.js", "editor.js", "app.js", "tests.js"];
 for (var i = 0; i < files.length; i++) {
   eval(fs.readFileSync(files[i], "utf8"));
 }

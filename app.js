@@ -1,4 +1,4 @@
-// 날씨 조회 + 부팅. 렌더는 views.js에 있다.
+// 날씨 조회 + 해시 라우터. 렌더는 views.js에 있다.
 
 function todayLocal() {
   var d = new Date();
@@ -43,7 +43,6 @@ function wxLine(map, date) {
 }
 
 var wxState = { map: {}, at: null, live: false };
-var currentDayN = null;
 
 function wxStamp() {
   if (wxState.live || !wxState.at) return "";
@@ -73,45 +72,123 @@ function wxRefresh(st) {
     if (wxState.at) wxRepaint();
   });
 }
+// 날씨가 바뀌면 날씨를 쓰는 화면(요약·타임라인)만 다시 그린다.
+// showTrip 전체를 다시 부르면 renderTabs의 scrollIntoView로 스크롤이 튀고
+// renderFixed가 열려 있던 아코디언(details)과 입력 중이던 값을 날린다.
 function wxRepaint() {
-  if (!bootTrip) return;
-  renderSummary(bootTrip, bootSt);
-  if (currentDayN !== null) selectDay(currentDayN);
+  if (!CUR.trip) return;
+  if (document.getElementById("screen-trip").hidden) return;
+  renderSummary(CUR.trip, CUR.st);
+  var day = pickDay(CUR.trip, CUR.dayN);
+  if (day) renderTimeline(CUR.trip, day, CUR.st);
 }
 
-// ---- 부팅 ----
-// Task 6의 라우터가 오기 전까지 쓰는 임시 코드다. 여행 하나를 그대로 그린다.
+// ---- 라우터 ----
 
-var bootTrip = null;
-var bootSt = null;
+var CUR = { id: null, trip: null, st: null, dayN: null };
 
-// 기존 osaka-trip:v1: 키를 그대로 쓰는 tripStore 모양의 어댑터.
-// 라우터가 붙으면 migrateLegacy() + tripStore(id)로 대체된다.
-var LEGACY_ST = {
-  get: function (k, fb) { return lsGet("osaka-trip:v1:" + k, fb); },
-  set: function (k, v) { return lsSet("osaka-trip:v1:" + k, v); }
-};
+function currentTrip() { return CUR.trip; }
 
-function selectDay(n) {
-  currentDayN = n;
-  var day = bootTrip.days.find(function (d) { return d.n === n; });
-  renderTabs(bootTrip, n, selectDay);
-  renderTimeline(bootTrip, day, bootSt);
+function go(hash) {
+  if (location.hash === hash) route(); else location.hash = hash;
 }
+
+function showScreen(which) {
+  ["list", "trip", "edit"].forEach(function (s) {
+    document.getElementById("screen-" + s).hidden = (s !== which);
+  });
+}
+
+function showList() {
+  showScreen("list");
+  var trips = listTrips();
+  document.getElementById("triplist").innerHTML = trips.length
+    ? trips.map(function (t) {
+        return '<article class="tripcard" data-id="' + escHtml(t.id) + '">' +
+          '<div class="tc-title">' + escHtml(t.title) + '</div>' +
+          '<div class="tc-period">' + escHtml(t.start) + ' ~ ' + escHtml(t.end) + '</div>' +
+          '<div class="tc-dday">' + dday(todayLocal(), t.start, t.end) + '</div>' +
+          '<button class="tc-del" type="button" aria-label="삭제">×</button></article>';
+      }).join('')
+    : '<p class="empty">아직 여행이 없습니다. 새로 만들어 보세요.</p>';
+
+  document.querySelectorAll('.tripcard').forEach(function (c) {
+    c.addEventListener('click', function (e) {
+      if (e.target.classList.contains('tc-del')) return;
+      go('#/t/' + c.dataset.id);
+    });
+  });
+  document.querySelectorAll('.tc-del').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var card = b.closest('.tripcard');
+      var name = card.querySelector('.tc-title').textContent;
+      if (!confirm('"' + name + '" 여행을 삭제할까요? 되돌릴 수 없습니다.')) return;
+      deleteTrip(card.dataset.id);
+      showList();
+    });
+  });
+}
+
+// 그릴 일차를 고른다. 요청한 일차가 없거나(손상된 JSON을 가져온 경우 등)
+// days 자체가 비어 있으면 던지지 않고 대신 오늘 → 첫날/마지막날 순으로 물러난다.
+// 고를 수 있는 일차가 하나도 없으면 null.
+function pickDay(trip, dayN) {
+  var days = (trip && Array.isArray(trip.days)) ? trip.days : [];
+  if (!days.length) return null;
+  var day = null;
+  if (dayN) day = days.filter(function (d) { return d.n === dayN; })[0];
+  var today = todayLocal();
+  if (!day) day = days.filter(function (d) { return d.date === today; })[0];
+  if (!day) day = today < days[0].date ? days[0] : days[days.length - 1];
+  return day || null;
+}
+
+function showTrip(id, dayN) {
+  var trip = loadTrip(id);
+  if (!trip) { go('#/'); return; }
+  CUR.id = id; CUR.trip = trip; CUR.st = tripStore(id);
+  showScreen("trip");
+
+  var day = pickDay(trip, dayN);
+  CUR.dayN = day ? day.n : null;
+
+  renderSummary(trip, CUR.st);
+  if (day) {
+    renderTabs(trip, day.n, function (n) { go('#/t/' + id + '/d/' + n); });
+    if (!Array.isArray(day.items)) day.items = [];
+    renderTimeline(trip, day, CUR.st);
+  } else {
+    document.getElementById("daytabs").innerHTML = '';
+    document.getElementById("timeline").innerHTML =
+      '<p class="empty">표시할 일정이 없습니다.</p>';
+  }
+  renderFixed(trip, CUR.st);
+  wxRefresh(CUR.st);
+}
+
+function route() {
+  var h = location.hash || "#/";
+  var m = h.match(/^#\/t\/([^/]+)(?:\/d\/(\d+))?$/);
+  if (m) { showTrip(m[1], m[2] ? parseInt(m[2], 10) : null); return; }
+  if (/^#\/t\/[^/]+\/edit$/.test(h)) { showEdit(h.split('/')[2]); return; }
+  if (h === "#/new") { showEdit(null); return; }
+  showList();
+}
+
+window.addEventListener("hashchange", route);
 
 document.addEventListener("DOMContentLoaded", function () {
-  bootTrip = window.SAMPLE_TRIP;
-  bootSt = LEGACY_ST;
-  if (!bootTrip) return;
+  // 앱 화면이 없는 페이지(test.html 등)에서는 부팅하지 않는다.
+  if (!document.getElementById("screen-list")) return;
+  migrateLegacy();
 
-  wxRefresh(bootSt);
+  document.getElementById("new-trip")
+    .addEventListener("click", function () { go('#/new'); });
+  document.getElementById("add-sample")
+    .addEventListener("click", function () { go('#/t/' + installSample()); });
 
-  var days = bootTrip.days;
-  var today = todayLocal();
-  var initial = days.find(function (d) { return d.date === today; });
-  if (!initial) initial = today < days[0].date ? days[0] : days[days.length - 1];
-  selectDay(initial.n);
-
-  renderFixed(bootTrip, bootSt);
-  renderSummary(bootTrip, bootSt);
+  // 여행이 하나뿐이면 목록을 건너뛰고 바로 연다.
+  var trips = listTrips();
+  if (!location.hash && trips.length === 1) { go('#/t/' + trips[0].id); return; }
+  route();
 });
