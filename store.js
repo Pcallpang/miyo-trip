@@ -60,3 +60,39 @@ function deleteTrip(id) {
   doomed.forEach(lsDel);
   lsSet("trip:index", listTrips().filter(function (r) { return r.id !== id; }));
 }
+
+var LEGACY_PREFIX = "osaka-trip:v1:";
+var LEGACY_KEYS = ["spend", "fx", "packing_checked", "packing_add", "weather"];
+
+function cloneSample() {
+  return JSON.parse(JSON.stringify(window.SAMPLE_TRIP));
+}
+
+function installSample() {
+  var t = cloneSample();
+  t.id = newTripId();
+  saveTrip(t);
+  return t.id;
+}
+
+// 구 osaka-trip:v1:* 를 새 여행 하나로 옮긴다. 옮길 게 없으면 null.
+function migrateLegacy() {
+  var found = [];
+  for (var i = 0; i < localStorage.length; i++) {
+    var k = localStorage.key(i);
+    if (k && k.indexOf(LEGACY_PREFIX) === 0) found.push(k);
+  }
+  if (!found.length) return null;
+
+  var id = installSample();
+  var st = tripStore(id);
+  found.forEach(function (k) {
+    var sub = k.slice(LEGACY_PREFIX.length);
+    // 알려진 키와 meal:<n>:<i> 형태만 옮긴다
+    if (LEGACY_KEYS.indexOf(sub) >= 0 || sub.indexOf("meal:") === 0) {
+      st.set(sub, lsGet(k, null));
+    }
+  });
+  found.forEach(lsDel);
+  return id;
+}

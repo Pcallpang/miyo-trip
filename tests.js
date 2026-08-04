@@ -139,3 +139,33 @@ eq('일차 장소 상속', dayPlace(TP, { place: null }), { name: '파리' });
 eq('일차 장소 오버라이드', dayPlace(TP, { place: { name: '로마' } }), { name: '로마' });
 eq('일차 통화 상속', dayCurrency(TP, { curCode: null }).code, 'EUR');
 eq('일차 통화 오버라이드', dayCurrency(TP, { curCode: 'CHF' }).code, 'CHF');
+
+// ---- 마이그레이션 ----
+__resetStorage();
+eq('구 데이터 없으면 null', migrateLegacy(), null);
+
+__resetStorage();
+lsSet('osaka-trip:v1:spend', [{ id: 1, date: '2026-07-29', jpy: 1200, cat: '식비', note: '이치란' }]);
+lsSet('osaka-trip:v1:fx', 920);
+lsSet('osaka-trip:v1:packing_checked', { '여권 + 사본': true });
+lsSet('osaka-trip:v1:packing_add', ['멀미약']);
+lsSet('osaka-trip:v1:meal:2:0', '구시카츠 다루마');
+
+var mid = migrateLegacy();
+eq('이관 후 여행 id 반환', typeof mid, 'string');
+eq('이관된 여행이 목록에 있음', listTrips().length, 1);
+eq('이관된 여행 제목', loadTrip(mid).title, '오사카 여행');
+eq('경비 이관', tripStore(mid).get('spend', []),
+  [{ id: 1, date: '2026-07-29', jpy: 1200, cat: '식비', note: '이치란' }]);
+eq('환율 이관', tripStore(mid).get('fx', 0), 920);
+eq('준비물 체크 이관', tripStore(mid).get('packing_checked', {}), { '여권 + 사본': true });
+eq('추가 준비물 이관', tripStore(mid).get('packing_add', []), ['멀미약']);
+eq('식사 메모 이관', tripStore(mid).get('meal:2:0', ''), '구시카츠 다루마');
+eq('구 키 제거', lsGet('osaka-trip:v1:spend', 'gone'), 'gone');
+eq('두 번째 호출은 null', migrateLegacy(), null);
+
+__resetStorage();
+var sid = installSample();
+eq('샘플 설치', loadTrip(sid).title, '오사카 여행');
+eq('샘플에 id 부여', loadTrip(sid).id, sid);
+eq('샘플 일차 수', loadTrip(sid).days.length, 7);
