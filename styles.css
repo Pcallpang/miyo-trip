@@ -4,8 +4,8 @@ html { background:var(--bg); }
 body { margin:0; background:var(--bg); color:var(--text);
   font-family:-apple-system,"Segoe UI",Roboto,"Noto Sans KR",sans-serif; line-height:1.5; }
 #summary { background:var(--accent); color:#fff; padding:20px 16px; }
-#summary h1 { margin:4px 0; font-size:1.5rem; }
-#summary .dday { font-weight:700; opacity:.9; }
+#summary h1 { margin:4px 0; font-size:1.5rem; padding-right:56px; }
+#summary .dday { font-weight:700; opacity:.9; padding-right:56px; }
 #summary .period,#summary .hotel,#summary .cost { font-size:.9rem; opacity:.95; margin-top:2px; }
 #daytabs { display:flex; gap:6px; overflow-x:auto; padding:10px 12px;
   position:sticky; top:0; background:var(--bg); z-index:5; -webkit-overflow-scrolling:touch; }

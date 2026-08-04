@@ -352,10 +352,66 @@ eq('새 여행 일차', made.days.length, 4);
 eq('새 여행 인원', made.party, 3);
 eq('새 여행 숙소', made.hotel, '아속');
 
+// applyTripForm(trip, f)는 trip을 그 자리에서 고쳐 동일 객체를 돌려준다(새로 만들지
+// 않는다). edited와 made를 서로 비교하는 건 항상 참인 동어반복이므로(같은 객체이니
+// 당연히 id도 같다) 호출 전에 따로 값을 떠 둔 madeId와 비교해야 실제로 실패할 수 있다.
+var madeId = made.id;
 made.days[1].items.push({ id: 'i_k', time: '10:00', text: '왕궁' });
 var edited = applyTripForm(made,
   { title: '방콕 5일', start: '2026-09-01', end: '2026-09-05', party: 3, hotel: '아속' });
 eq('기간 연장 후 일차', edited.days.length, 5);
 eq('연장해도 기존 일정 보존', edited.days[1].items, [{ id: 'i_k', time: '10:00', text: '왕궁' }]);
-eq('id 유지', edited.id, made.id);
+eq('id 유지', edited.id, madeId);
 eq('제목 갱신', edited.title, '방콕 5일');
+// 편집 경로는 호출자의 trip 객체를 그대로 변형한다(새 객체를 만들지 않는다) — 실제
+// 동작을 그대로 문서화한다. reference 동일성이 이를 보장한다.
+eq('편집 경로는 caller의 trip 객체를 그대로 변형함(새 객체 아님)', edited === made, true);
+
+// 앞을 잘라내는 경우(shrink-from-start)도 보존이 성립해야 한다 — 인덱스 기반으로만
+// 재동기화하는 잘못된 구현이면 날짜가 아니라 위치로 일정을 옮겨버려 여기서 걸린다.
+var made2 = applyTripForm(null,
+  { title: '삿포로', start: '2026-09-01', end: '2026-09-05', party: 2, hotel: '' });
+made2.days[3].items.push({ id: 'i_s', time: '11:00', text: '오도리공원' }); // 2026-09-04
+made2.days[3].theme = '공원';
+var shrunk = applyTripForm(made2,
+  { title: '삿포로', start: '2026-09-03', end: '2026-09-05', party: 2, hotel: '' });
+eq('앞을 잘라내도 일차 수는 새 기간 기준', shrunk.days.length, 3);
+eq('앞을 잘라내도 남은 날짜(09-04)의 일정 보존',
+  shrunk.days[1].items, [{ id: 'i_s', time: '11:00', text: '오도리공원' }]);
+eq('앞을 잘라내도 남은 날짜(09-04)의 테마 보존', shrunk.days[1].theme, '공원');
+eq('앞을 잘라내면 번호도 새 위치로 재부여', shrunk.days[1].n, 2);
+
+// ---- Important 1: <input type=date>가 허용하는 비정상 연도(예: 275760) → Date.parse가
+// NaN을 돌려주고 daysBetween도 NaN이 되는데, 고치기 전에는 "NaN > 90"이 false라서
+// 검증을 그냥 통과해버렸다(그 뒤 resyncDays가 일차 0개짜리 여행을 만듦).
+eq('파싱 불가능한 연도는 daysBetween이 NaN', isNaN(daysBetween('275760-09-01', '275760-09-03')), true);
+eq('파싱 불가능한 연도는 검증에서 거부됨',
+  validateTripForm({ title: '방콕', start: '275760-09-01', end: '275760-09-03', party: 2 }),
+  '날짜가 올바르지 않습니다.');
+
+// ---- Important 2: saveTrip 실패(용량 초과·프라이빗 모드 등 조용한 no-op)를
+// submitTripForm이 삼키지 않고 표면화하는지 — 새 여행/수정 두 경로 모두 확인.
+(function () {
+  __resetStorage();
+  __setWritesFail(true);
+  var r1 = submitTripForm(null,
+    { title: '실패 여행', start: '2026-09-01', end: '2026-09-03', party: 2, hotel: '' });
+  __setWritesFail(false);
+  eq('새 여행 저장 실패는 ok:false로 보고됨', r1.ok, false);
+  eq('새 여행 저장 실패 메시지', r1.message, '저장에 실패했습니다. 기기 저장 공간을 확인해 주세요.');
+  eq('새 여행 저장 실패 시 목록에 고아 여행 없음', listTrips(), []);
+
+  __resetStorage();
+  var r0 = submitTripForm(null,
+    { title: '원래 제목', start: '2026-09-01', end: '2026-09-03', party: 2, hotel: '' });
+  eq('사전 준비: 정상 저장은 ok:true', r0.ok, true);
+  var beforeTitle = loadTrip(r0.trip.id).title;
+
+  __setWritesFail(true);
+  var r2 = submitTripForm(r0.trip,
+    { title: '고친 제목', start: '2026-09-01', end: '2026-09-04', party: 2, hotel: '' });
+  __setWritesFail(false);
+  eq('수정 저장 실패도 ok:false로 보고됨', r2.ok, false);
+  eq('수정 저장 실패 시 저장소의 예전 값이 그대로 남음(덮어써지지 않음)',
+    loadTrip(r0.trip.id).title, beforeTitle);
+})();
