@@ -190,3 +190,36 @@ var sid = installSample();
 eq('샘플 설치', loadTrip(sid).title, '오사카 여행');
 eq('샘플에 id 부여', loadTrip(sid).id, sid);
 eq('샘플 일차 수', loadTrip(sid).days.length, 7);
+
+// ---- views.js 순수 함수 ----
+eq('escHtml 기본', escHtml('<b>&"'), '&lt;b&gt;&amp;&quot;');
+eq('escHtml 숫자', escHtml(3), '3');
+
+eq('itemLinesHtml 한 줄',
+  itemLinesHtml('도톤보리 구경'),
+  '<div class="line">도톤보리 구경</div>');
+eq('itemLinesHtml 여러 줄',
+  itemLinesHtml('a\nb'),
+  '<div class="line">a</div><div class="line">b</div>');
+eq('itemLinesHtml 시간지정 배지',
+  itemLinesHtml('닌텐도 월드(패스권-시간)'),
+  '<div class="line timed"><span class="tag">⏰ 시간지정</span>닌텐도 월드(패스권-시간)</div>');
+eq('itemLinesHtml 예약 배지',
+  itemLinesHtml('스키야끼 후지모토 19:30 예약 완료'),
+  '<div class="line booked"><span class="tag">✅ 예약완료</span>스키야끼 후지모토 19:30 예약 완료</div>');
+eq('itemLinesHtml XSS 차단',
+  itemLinesHtml('<img src=x onerror=alert(1)>'),
+  '<div class="line">&lt;img src=x onerror=alert(1)&gt;</div>');
+eq('itemLinesHtml 배지 줄도 escape',
+  itemLinesHtml('<b>(시간)</b>'),
+  '<div class="line timed"><span class="tag">⏰ 시간지정</span>&lt;b&gt;(시간)&lt;/b&gt;</div>');
+
+eq('미정 판정 뭐먹지', isUndecided('뭐먹지'), true);
+eq('미정 판정 물음표', isUndecided('라멘?'), true);
+eq('미정 판정 빈칸', isUndecided('  '), true);
+eq('미정 아님', isUndecided('이치란 라멘'), false);
+
+eq('D-day 이전', dday('2026-07-25', '2026-07-28', '2026-08-03'), 'D-3');
+eq('D-day 당일', dday('2026-07-28', '2026-07-28', '2026-08-03'), '여행 중 1일차');
+eq('D-day 중간', dday('2026-07-30', '2026-07-28', '2026-08-03'), '여행 중 3일차');
+eq('D-day 이후', dday('2026-08-05', '2026-07-28', '2026-08-03'), '여행 종료');
