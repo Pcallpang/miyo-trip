@@ -325,3 +325,37 @@ eq('D-day 이후', dday('2026-08-05', '2026-07-28', '2026-08-03'), '여행 종�
       html.indexOf('NaN원 (NaN인)') !== -1, true);
   })();
 })();
+
+// ---- editor.js 순수 로직 ----
+eq('폼 검증 통과',
+  validateTripForm({ title: '방콕', start: '2026-09-01', end: '2026-09-04', party: 2 }), null);
+eq('제목 없음',
+  validateTripForm({ title: '  ', start: '2026-09-01', end: '2026-09-04', party: 2 }),
+  '여행 제목을 입력하세요.');
+eq('날짜 없음',
+  validateTripForm({ title: '방콕', start: '', end: '2026-09-04', party: 2 }),
+  '시작일과 종료일을 입력하세요.');
+eq('종료가 시작보다 빠름',
+  validateTripForm({ title: '방콕', start: '2026-09-05', end: '2026-09-04', party: 2 }),
+  '종료일이 시작일보다 빠릅니다.');
+eq('너무 긴 여행',
+  validateTripForm({ title: '세계일주', start: '2026-01-01', end: '2027-01-01', party: 2 }),
+  '여행 기간은 최대 90일입니다.');
+eq('인원 0',
+  validateTripForm({ title: '방콕', start: '2026-09-01', end: '2026-09-04', party: 0 }),
+  '인원은 1명 이상이어야 합니다.');
+
+var made = applyTripForm(null,
+  { title: '방콕', start: '2026-09-01', end: '2026-09-04', party: 3, hotel: '아속' });
+eq('새 여행 제목', made.title, '방콕');
+eq('새 여행 일차', made.days.length, 4);
+eq('새 여행 인원', made.party, 3);
+eq('새 여행 숙소', made.hotel, '아속');
+
+made.days[1].items.push({ id: 'i_k', time: '10:00', text: '왕궁' });
+var edited = applyTripForm(made,
+  { title: '방콕 5일', start: '2026-09-01', end: '2026-09-05', party: 3, hotel: '아속' });
+eq('기간 연장 후 일차', edited.days.length, 5);
+eq('연장해도 기존 일정 보존', edited.days[1].items, [{ id: 'i_k', time: '10:00', text: '왕궁' }]);
+eq('id 유지', edited.id, made.id);
+eq('제목 갱신', edited.title, '방콕 5일');

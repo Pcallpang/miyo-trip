@@ -126,3 +126,18 @@ body { margin:0; background:var(--bg); color:var(--text);
   background:var(--card); color:var(--text); cursor:pointer; }
 .lactions #new-trip { background:var(--accent); color:#fff; border-color:var(--accent);
   font-weight:700; }
+
+#summary { position:relative; }
+.edit-trip { position:absolute; top:16px; right:14px; border:0; background:rgba(255,255,255,.18);
+  color:#fff; font-size:1.05rem; line-height:1; padding:7px 10px; border-radius:10px; cursor:pointer; }
+.ehead { background:var(--accent); color:#fff; padding:16px; display:flex; align-items:center; gap:10px; }
+.ehead h1 { margin:0; font-size:1.2rem; }
+.ehead button { border:0; background:none; color:#fff; font-size:1.3rem; cursor:pointer; padding:0 4px; }
+.eform { display:flex; flex-direction:column; gap:14px; padding:16px; }
+.eform label { display:flex; flex-direction:column; gap:5px; font-size:.85rem; color:var(--muted); }
+.eform input, .eform textarea, .eform select { font:inherit; color:var(--text);
+  padding:10px; border:1px solid #d5dde1; border-radius:10px; background:var(--card); }
+.eform button[type=submit] { font:inherit; font-weight:700; padding:13px; border:0;
+  border-radius:12px; background:var(--accent); color:#fff; cursor:pointer; }
+.eerr { background:#fff0f0; color:#c92a2a; border-left:4px solid #e03131;
+  padding:9px 12px; border-radius:8px; font-size:.85rem; }

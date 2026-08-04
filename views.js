@@ -95,6 +95,7 @@ function renderSummary(trip, st) {
   const el = document.getElementById("summary");
   const nights = daysBetween(trip.start, trip.end) - 1;
   el.innerHTML =
+    '<button class="edit-trip" type="button" aria-label="여행 설정">⚙</button>' +
     '<div class="dday">' + dday(today, trip.start, trip.end) + '</div>' +
     '<h1>' + escHtml(trip.title) + '</h1>' +
     '<div class="period">' + escHtml(trip.start) + ' ~ ' + escHtml(trip.end) +
@@ -108,6 +109,8 @@ function renderSummary(trip, st) {
       ? '<div class="cost">💰 총 ' + Number(trip.budgetKRW).toLocaleString('ko-KR') + '원 (' +
         Number(trip.party) + '인)' + summarySpend(st) + '</div>'
       : '');
+  var eb = el.querySelector('.edit-trip');
+  if (eb) eb.addEventListener('click', function () { go('#/t/' + trip.id + '/edit'); });
 }
 
 // ---- 일차 탭 / 타임라인 ----
