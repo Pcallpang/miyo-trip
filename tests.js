@@ -192,7 +192,7 @@ eq('샘플에 id 부여', loadTrip(sid).id, sid);
 eq('샘플 일차 수', loadTrip(sid).days.length, 7);
 
 // ---- views.js 순수 함수 ----
-eq('escHtml 기본', escHtml('<b>&"'), '&lt;b&gt;&amp;&quot;');
+eq('escHtml 기본', escHtml('<b>&"\''), '&lt;b&gt;&amp;&quot;&#39;');
 eq('escHtml 숫자', escHtml(3), '3');
 
 eq('itemLinesHtml 한 줄',
@@ -223,3 +223,84 @@ eq('D-day 이전', dday('2026-07-25', '2026-07-28', '2026-08-03'), 'D-3');
 eq('D-day 당일', dday('2026-07-28', '2026-07-28', '2026-08-03'), '여행 중 1일차');
 eq('D-day 중간', dday('2026-07-30', '2026-07-28', '2026-08-03'), '여행 중 3일차');
 eq('D-day 이후', dday('2026-08-05', '2026-07-28', '2026-08-03'), '여행 종료');
+
+// ---- 속성 컨텍스트(attribute context) 이스케이프 — 렌더 함수를 실제로 호출해
+// innerHTML을 검사한다. 문자열이어야 할 자리에 악의적인 문자열이 들어와도
+// (imported trip JSON을 검증하지 않으므로 가능) raw 마크업이 살아남지 않아야 한다.
+(function () {
+  var HOSTILE = '"><img src=x onerror=alert(1)>';
+  var escHostile = escHtml(HOSTILE);
+
+  function makeSt() {
+    var mem = {};
+    return {
+      get: function (k, fb) { return Object.prototype.hasOwnProperty.call(mem, k) ? mem[k] : fb; },
+      set: function (k, v) { mem[k] = v; },
+      _mem: mem
+    };
+  }
+
+  // renderTimeline: 악의적인 day.n(숫자여야 하는 필드), 악의적인 item.id,
+  // 악의적인 meal memo 저장값(모두 value="..." / data-*="..." 속성 컨텍스트)
+  (function () {
+    var day = {
+      n: HOSTILE,
+      date: "2026-07-28",
+      theme: "",
+      items: [{ id: HOSTILE, time: "09:00", text: "테스트 일정" }],
+      meals: ["저녁"]
+    };
+    var trip = { days: [day] };
+    var st = makeSt();
+    st.set(mealKey(day.n, 0), HOSTILE);
+
+    var el = global.__setDomTarget("timeline");
+    renderTimeline(trip, day, st);
+    var html = el.innerHTML;
+
+    eq('renderTimeline: raw <img> 태그가 어디에도 없음', html.indexOf('<img') === -1, true);
+    eq('renderTimeline: 문자열이 와야 할 data-item 속성은 이스케이프됨',
+      html.indexOf('data-item="' + escHostile + '"') !== -1, true);
+    eq('renderTimeline: 악의적인 meal memo 저장값은 value 속성에서 이스케이프됨',
+      html.indexOf('value="' + escHostile + '"') !== -1, true);
+    // day.n은 숫자 필드 — 문자열이 들어오면 이스케이프 대신 숫자로 강제 변환해
+    // data-key(=storage key로 그대로 흘러감)와 표시 라벨 양쪽 모두 안전해진다.
+    eq('renderTimeline: 숫자 필드 day.n은 NaN으로 강제 변환되어 data-key가 안전함',
+      html.indexOf('data-key="meal:NaN:0"') !== -1, true);
+    eq('renderTimeline: 숫자 필드 day.n은 표시 라벨에서도 NaN으로 강제 변환됨',
+      html.indexOf('<span class="dnum">NaN일차</span>') !== -1, true);
+  })();
+
+  // renderTabs: 악의적인 d.n(숫자여야 하는 필드) — data-n 속성과 탭 라벨 양쪽.
+  (function () {
+    var trip = { days: [
+      { n: HOSTILE, date: "2026-07-28" },
+      { n: 2, date: "2026-07-29" }
+    ] };
+    var el = global.__setDomTarget("daytabs");
+    renderTabs(trip, 2, function () {});
+    var html = el.innerHTML;
+
+    eq('renderTabs: raw <img> 태그가 어디에도 없음', html.indexOf('<img') === -1, true);
+    eq('renderTabs: 숫자 필드 d.n은 data-n 속성에서 NaN으로 강제 변환됨',
+      html.indexOf('data-n="NaN"') !== -1, true);
+    eq('renderTabs: 숫자 필드 d.n은 탭 라벨에서도 NaN으로 강제 변환됨',
+      html.indexOf('<span class="tn">NaN일차</span>') !== -1, true);
+  })();
+
+  // renderSummary: 악의적인 budgetKRW/party(숫자여야 하는 필드).
+  (function () {
+    var trip = {
+      title: "테스트 여행", start: "2026-07-28", end: "2026-08-03",
+      hotel: "", budgetKRW: HOSTILE, party: HOSTILE
+    };
+    var st = makeSt();
+    var el = global.__setDomTarget("summary");
+    renderSummary(trip, st);
+    var html = el.innerHTML;
+
+    eq('renderSummary: raw <img> 태그가 어디에도 없음', html.indexOf('<img') === -1, true);
+    eq('renderSummary: budgetKRW/party 문자열은 숫자로 강제 변환되어 안전함',
+      html.indexOf('NaN원 (NaN인)') !== -1, true);
+  })();
+})();

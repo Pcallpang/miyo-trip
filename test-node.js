@@ -12,7 +12,36 @@ global.localStorage = {
   key: function (i) { return Object.keys(mem)[i]; },
   get length() { return Object.keys(mem).length; }
 };
-global.document = { addEventListener: function () {}, getElementById: function () { return null; } };
+// 렌더 함수(renderTabs/renderTimeline 등)는 document.getElementById(id)로 렌더 대상을
+// 찾는다. 기본은 기존과 동일하게 null(등록되지 않은 id는 그대로 null) — 순수 함수만
+// 테스트하던 기존 단언에 영향이 없다. 속성 컨텍스트를 검증하는 단언은 호출 직전에
+// __setDomTarget(id)로 그 id 전용의 새 가짜 엘리먼트를 만들어 쓴다. 매번 새로 만들어
+// 끼워 넣으므로 이전 단언이 같은 id를 썼어도 상태가 새지 않고, 단언 실행 순서도
+// 결과에 영향을 주지 않는다.
+var domTargets = {};
+function makeFakeElement(id) {
+  var html = "";
+  return {
+    id: id,
+    get innerHTML() { return html; },
+    set innerHTML(v) { html = v; },
+    querySelectorAll: function () { return []; },
+    querySelector: function () { return null; },
+    addEventListener: function () {},
+    scrollIntoView: function () {}
+  };
+}
+global.__setDomTarget = function (id) {
+  var el = makeFakeElement(id);
+  domTargets[id] = el;
+  return el;
+};
+global.document = {
+  addEventListener: function () {},
+  getElementById: function (id) {
+    return Object.prototype.hasOwnProperty.call(domTargets, id) ? domTargets[id] : null;
+  }
+};
 global.window = global;
 global.__resetStorage = function () { mem = {}; failWrites = false; };
 global.__setWritesFail = function (v) { failWrites = v; };

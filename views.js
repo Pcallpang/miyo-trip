@@ -5,7 +5,7 @@
 // 사용자가 입력한 문자열이 HTML로 해석되지 않게 막는다.
 function escHtml(s) {
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
 // escape를 먼저 하고, 배지 판정은 원본 텍스트로 한다.
@@ -78,7 +78,7 @@ function spendByDate(list) {
   });
 }
 
-function mealKey(dayN, i) { return "meal:" + dayN + ":" + i; }
+function mealKey(dayN, i) { return "meal:" + Number(dayN) + ":" + i; }
 
 // ---- 상단 요약 ----
 
@@ -105,8 +105,8 @@ function renderSummary(trip, st) {
       return line ? '<div class="wx">' + line.replace(" ", " 오늘 ") + wxStamp() + '</div>' : '';
     })() +
     (trip.budgetKRW
-      ? '<div class="cost">💰 총 ' + trip.budgetKRW.toLocaleString('ko-KR') + '원 (' +
-        trip.party + '인)' + summarySpend(st) + '</div>'
+      ? '<div class="cost">💰 총 ' + Number(trip.budgetKRW).toLocaleString('ko-KR') + '원 (' +
+        Number(trip.party) + '인)' + summarySpend(st) + '</div>'
       : '');
 }
 
@@ -116,8 +116,8 @@ function renderTabs(trip, selectedN, onSelect) {
   const nav = document.getElementById("daytabs");
   nav.innerHTML = trip.days.map(function (d) {
     const on = d.n === selectedN ? ' data-selected="1"' : '';
-    return '<button class="tab"' + on + ' data-n="' + d.n + '">' +
-      '<span class="tn">' + d.n + '일차</span>' +
+    return '<button class="tab"' + on + ' data-n="' + Number(d.n) + '">' +
+      '<span class="tn">' + Number(d.n) + '일차</span>' +
       '<span class="td">' + escHtml(d.date.slice(5)) + '(' + dowOf(d.date) + ')</span></button>';
   }).join('');
   nav.querySelectorAll('.tab').forEach(function (b) {
@@ -147,7 +147,7 @@ function renderTimeline(trip, day, st) {
     : '';
   main.innerHTML =
     '<div class="daycard"><div class="dayhead">' +
-      '<span class="dnum">' + day.n + '일차</span> ' +
+      '<span class="dnum">' + Number(day.n) + '일차</span> ' +
       '<span class="ddate">' + escHtml(day.date) + '(' + dowOf(day.date) + ')</span>' +
       '<div class="dtheme">' + escHtml(day.theme).replace(/\n/g, ' · ') + '</div>' +
       (function () {
