@@ -1,5 +1,5 @@
 const CACHE = "osaka-trip-v7";
-const ASSETS = ["./", "./index.html", "./styles.css", "./data.js", "./app.js",
+const ASSETS = ["./", "./index.html", "./styles.css", "./app.js",
   "./manifest.json", "./icon.svg", "./icon-180.png", "./icon-512.png",
   "./usj-map-ko.webp"];
 self.addEventListener("install", function (e) {

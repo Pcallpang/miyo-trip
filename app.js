@@ -42,7 +42,17 @@ function wxLine(map, date) {
   return wxIcon(w.code).e + " " + w.tmax + "° / " + w.tmin + "°" + rain;
 }
 
-var wxState = { map: {}, at: null, live: false };
+var wxState = { map: {}, at: null, live: false, fetchedAt: 0 };
+// 여행이 바뀌면 이전 여행의 날씨가 남아 첫 페인트에 엉뚱한 도시가 보인다(지금은
+// WX_URL이 좌표를 고정하고 있어 안 보이지만, 좌표가 여행별이 되는 순간 버그가 된다).
+function wxReset() {
+  wxState = { map: {}, at: null, live: false, fetchedAt: 0 };
+}
+// 같은 세션에서 방금 받아온 예보는 다시 받지 않는다(일 단위 예보라 30분이면 충분).
+var WX_TTL_MS = 30 * 60 * 1000;
+function wxIsFresh() {
+  return wxState.live && (Date.now() - wxState.fetchedAt) < WX_TTL_MS;
+}
 
 function wxStamp() {
   if (wxState.live || !wxState.at) return "";
@@ -53,6 +63,7 @@ function wxStamp() {
     " " + hh + ":" + mm + " 기준)</span>";
 }
 function wxRefresh(st) {
+  if (wxIsFresh()) return;
   var cached = st.get("weather", null);
   if (cached && cached.api) {
     wxState.map = wxDailyMap(cached.api);
@@ -67,6 +78,7 @@ function wxRefresh(st) {
     wxState.map = map;
     wxState.at = null;
     wxState.live = true;
+    wxState.fetchedAt = Date.now();
     wxRepaint();
   }).catch(function () {
     if (wxState.at) wxRepaint();
@@ -112,13 +124,15 @@ function showList() {
       }).join('')
     : '<p class="empty">아직 여행이 없습니다. 새로 만들어 보세요.</p>';
 
-  document.querySelectorAll('.tripcard').forEach(function (c) {
+  var list = document.getElementById("triplist");
+  list.querySelectorAll('.tripcard').forEach(function (c) {
     c.addEventListener('click', function (e) {
-      if (e.target.classList.contains('tc-del')) return;
+      // closest: 삭제 버튼이 나중에 아이콘 같은 자식을 갖게 돼도 그대로 동작한다.
+      if (e.target.closest('.tc-del')) return;
       go('#/t/' + c.dataset.id);
     });
   });
-  document.querySelectorAll('.tc-del').forEach(function (b) {
+  list.querySelectorAll('.tc-del').forEach(function (b) {
     b.addEventListener('click', function () {
       var card = b.closest('.tripcard');
       var name = card.querySelector('.tc-title').textContent;
@@ -132,29 +146,26 @@ function showList() {
 // 그릴 일차를 고른다. 요청한 일차가 없거나(손상된 JSON을 가져온 경우 등)
 // days 자체가 비어 있으면 던지지 않고 대신 오늘 → 첫날/마지막날 순으로 물러난다.
 // 고를 수 있는 일차가 하나도 없으면 null.
-function pickDay(trip, dayN) {
+// todayISO는 테스트에서 주입하기 위한 선택 인자다. 비우면 오늘 날짜를 쓴다.
+function pickDay(trip, dayN, todayISO) {
   var days = (trip && Array.isArray(trip.days)) ? trip.days : [];
   if (!days.length) return null;
   var day = null;
   if (dayN) day = days.filter(function (d) { return d.n === dayN; })[0];
-  var today = todayLocal();
+  var today = todayISO || todayLocal();
   if (!day) day = days.filter(function (d) { return d.date === today; })[0];
   if (!day) day = today < days[0].date ? days[0] : days[days.length - 1];
   return day || null;
 }
 
-function showTrip(id, dayN) {
-  var trip = loadTrip(id);
-  if (!trip) { go('#/'); return; }
-  CUR.id = id; CUR.trip = trip; CUR.st = tripStore(id);
-  showScreen("trip");
-
+// 일차만 바뀔 때 다시 그리는 것: 탭 + 타임라인. 그게 전부다.
+// #fixed(고정 정보·짐·경비)는 건드리지 않는다 — innerHTML을 통째로 갈아엎으면
+// 열어 둔 아코디언이 닫히고 경비 입력창에 치던 값이 사라진다.
+function showDay(trip, dayN) {
   var day = pickDay(trip, dayN);
   CUR.dayN = day ? day.n : null;
-
-  renderSummary(trip, CUR.st);
   if (day) {
-    renderTabs(trip, day.n, function (n) { go('#/t/' + id + '/d/' + n); });
+    renderTabs(trip, day.n, function (n) { go('#/t/' + trip.id + '/d/' + n); });
     if (!Array.isArray(day.items)) day.items = [];
     renderTimeline(trip, day, CUR.st);
   } else {
@@ -162,8 +173,28 @@ function showTrip(id, dayN) {
     document.getElementById("timeline").innerHTML =
       '<p class="empty">표시할 일정이 없습니다.</p>';
   }
-  renderFixed(trip, CUR.st);
-  wxRefresh(CUR.st);
+}
+
+function showTrip(id, dayN) {
+  var trip = loadTrip(id);
+  if (!trip) { go('#/'); return; }
+  // 여행을 "여는" 경우에만 화면 전체를 세운다: 다른 여행으로 바뀌었거나,
+  // 목록·편집 등 다른 화면에서 돌아온 경우. 같은 여행 안에서 일차 탭만 누른
+  // 경우에는 showDay만 돈다.
+  var switched = (CUR.id !== id);
+  var opening = switched || document.getElementById("screen-trip").hidden;
+
+  CUR.id = id; CUR.trip = trip; CUR.st = tripStore(id);
+  if (switched) wxReset();
+  showScreen("trip");
+
+  if (opening) renderSummary(trip, CUR.st);
+  showDay(trip, dayN);
+  if (opening) {
+    renderFixed(trip, CUR.st);
+    // 날씨 요청은 여행을 열 때만, 그것도 최근에 받아온 게 없을 때만 보낸다.
+    wxRefresh(CUR.st);
+  }
 }
 
 function route() {

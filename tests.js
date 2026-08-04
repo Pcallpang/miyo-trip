@@ -224,6 +224,27 @@ eq('D-day 당일', dday('2026-07-28', '2026-07-28', '2026-08-03'), '여행 중 1
 eq('D-day 중간', dday('2026-07-30', '2026-07-28', '2026-08-03'), '여행 중 3일차');
 eq('D-day 이후', dday('2026-08-05', '2026-07-28', '2026-08-03'), '여행 종료');
 
+// ---- app.js pickDay — 오늘 날짜는 세 번째 인자로 주입한다(안 그러면 테스트가 썩는다) ----
+(function () {
+  var trip = { days: [
+    { n: 1, date: '2026-07-28' },
+    { n: 2, date: '2026-07-29' },
+    { n: 3, date: '2026-07-30' }
+  ] };
+  function n(d) { return d ? d.n : null; }
+
+  eq('pickDay: 요청한 일차를 그대로 고름', n(pickDay(trip, 2, '2026-07-28')), 2);
+  // 범위를 벗어난 dayN → 오늘 날짜와 같은 날로 물러난다
+  eq('pickDay: 범위 밖 dayN이면 오늘 일차로 물러남', n(pickDay(trip, 9, '2026-07-29')), 2);
+  // 일치하는 날짜도 없고 여행 시작 전이면 첫날
+  eq('pickDay: 일치 없고 여행 전이면 첫날', n(pickDay(trip, 9, '2026-07-01')), 1);
+  // 일치하는 날짜도 없고 여행이 끝난 뒤면 마지막날
+  eq('pickDay: 일치 없고 여행 후면 마지막날', n(pickDay(trip, null, '2026-08-20')), 3);
+  // days가 비었으면 던지지 않고 null
+  eq('pickDay: days가 비면 null', pickDay({ days: [] }, 1, '2026-07-29'), null);
+  eq('pickDay: days가 없으면 null', pickDay({}, 1, '2026-07-29'), null);
+})();
+
 // ---- 속성 컨텍스트(attribute context) 이스케이프 — 렌더 함수를 실제로 호출해
 // innerHTML을 검사한다. 문자열이어야 할 자리에 악의적인 문자열이 들어와도
 // (imported trip JSON을 검증하지 않으므로 가능) raw 마크업이 살아남지 않아야 한다.
