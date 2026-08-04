@@ -6,13 +6,62 @@
 <body>
 <h1>경비 함수 테스트</h1>
 <div id="out"></div>
-<script src="sample-trip.js"></script>
-<script src="store.js"></script>
-<script src="schema.js"></script>
-<script src="views.js"></script>
-<script src="editor.js"></script>
-<script src="app.js"></script>
 <script>
+// test-node.js와 같은 스텁을 브라우저에도 마련한다 — tests.js는 두 러너에서
+// 있는 그대로(수정 없이) 돌아가야 한다.
+//
+// 실제 localStorage는 절대 만지지 않는다: 로드 시점에 window.localStorage 자체를
+// 순수 메모리 구현으로 치환해 버린다(test-node.js가 global.localStorage를 스텁으로
+// 까는 것과 동일한 전략). 그래서 사용자가 실제로 저장해 둔 여행 데이터는 이 페이지를
+// 열어도 절대 지워지거나 바뀌지 않는다.
+var __mem = {};
+var __failWrites = false;
+var __fakeStorage = {
+  getItem: function (k) { return Object.prototype.hasOwnProperty.call(__mem, k) ? __mem[k] : null; },
+  setItem: function (k, v) { if (__failWrites) return; __mem[k] = String(v); },
+  removeItem: function (k) { delete __mem[k]; },
+  key: function (i) { return Object.keys(__mem)[i]; },
+  get length() { return Object.keys(__mem).length; }
+};
+Object.defineProperty(window, 'localStorage', { value: __fakeStorage, configurable: true });
+var __resetStorage = function () { __mem = {}; __failWrites = false; };
+var __setWritesFail = function (v) { __failWrites = v; };
+
+// tests.js는 Node 러너와 맞추려고 global.__setDomTarget(...) 형태로 호출한다.
+// Node에서는 global === window이므로, 브라우저에서도 같은 관계를 만들어 둔다.
+var global = window;
+
+// renderXxx류는 document.getElementById(id)로 대상을 찾아 innerHTML을 쓴다.
+// Node처럼 흉내만 낸 가짜 객체 대신, 화면에는 보이지 않는 진짜 DOM 엘리먼트를
+// 만들어 붙인다 — querySelectorAll 등도 진짜로 동작해서 렌더 함수 입장에서
+// 실제 페이지와 다를 게 없다. 매번 새로 만들어 갈아 끼우므로(Node와 동일하게)
+// 이전 단언이 같은 id를 썼어도 상태가 새지 않는다.
+var __domHost = document.createElement('div');
+__domHost.style.display = 'none';
+document.body.appendChild(__domHost);
+var __domTargets = {};
+var __setDomTarget = function (id) {
+  if (__domTargets[id] && __domTargets[id].parentNode) {
+    __domTargets[id].parentNode.removeChild(__domTargets[id]);
+  }
+  var el = document.createElement('div');
+  el.id = id;
+  __domHost.appendChild(el);
+  __domTargets[id] = el;
+  return el;
+};
+
+// tests.js 실행 중 어디서든 예외가 나면(예: 스텁 누락, ReferenceError 등) 스크립트
+// 태그는 거기서 조용히 멈추지만 그 다음 <script> 태그(집계 렌더링)는 그대로 실행된다.
+// window.onerror로 그 예외를 잡아 두었다가, 마지막 집계에서 반드시 실패로 표시한다.
+// 이게 없으면 "일부만 돌고 나머지는 건너뛴 채로 초록불"이 될 수 있다 — 바로 이 파일이
+// 예전에 실제로 그랬던 버그다.
+var __runtimeError = null;
+window.onerror = function (msg, src, line, col, err) {
+  __runtimeError = msg + (line ? (' (line ' + line + ')') : '');
+  return false;
+};
+
 var results = [], failed = 0;
 function eq(name, got, want) {
   var ok = JSON.stringify(got) === JSON.stringify(want);
@@ -22,10 +71,27 @@ function eq(name, got, want) {
                '<br>&nbsp;&nbsp;want: ' + JSON.stringify(want)) + '</div>');
 }
 </script>
+<script src="sample-trip.js"></script>
+<script src="store.js"></script>
+<script src="schema.js"></script>
+<script src="views.js"></script>
+<script src="editor.js"></script>
+<script src="app.js"></script>
 <script src="tests.js"></script>
 <script>
-document.getElementById('out').innerHTML =
-  '<h2>' + (failed ? failed + '개 실패' : '전부 통과') + '</h2>' + results.join('');
+var out = document.getElementById('out');
+if (__runtimeError) {
+  // 도중에 죽었다 — 실행된 단언 수와 무관하게 무조건 실패로 표시한다.
+  out.innerHTML =
+    '<h2 class="f">테스트 실행이 예외로 중단됨 (' + results.length + '개만 실행됨)</h2>' +
+    '<div class="f">' + String(__runtimeError).replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</div>' +
+    results.join('');
+} else {
+  out.innerHTML =
+    '<h2 class="' + (failed ? 'f' : 'p') + '">' +
+    (failed ? failed + '개 실패' : results.length + '개 전부 통과') + '</h2>' +
+    results.join('');
+}
 </script>
 </body>
 </html>
