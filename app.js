@@ -226,6 +226,30 @@ function showTrip(id, dayN) {
   }
 }
 
+var TAB_DEFS = [
+  { key: "day",     icon: "🗓", label: "일정" },
+  { key: "hotel",   icon: "🏨", label: "숙소" },
+  { key: "packing", icon: "🎒", label: "준비물" },
+  { key: "money",   icon: "💰", label: "경비" },
+  { key: "info",    icon: "ℹ️", label: "정보" }
+];
+var TAB_KEYS = TAB_DEFS.map(function (t) { return t.key; });
+
+// 여행 화면 해시를 {id, tab, dayN}으로. 여행 화면이 아니면 null.
+// /edit은 일부러 안 잡는다 — 라우터가 별도 분기로 처리한다.
+function parseTripHash(hash) {
+  var m = String(hash || "").match(
+    /^#\/t\/([^/]+)(?:\/(?:d\/(\d+)|(hotel|packing|money|info)))?$/);
+  if (!m) return null;
+  if (m[2]) return { id: m[1], tab: "day", dayN: parseInt(m[2], 10) };
+  return { id: m[1], tab: m[3] || "day", dayN: null };
+}
+
+function tabHash(id, tab, dayN) {
+  if (tab !== "day") return '#/t/' + id + '/' + tab;
+  return dayN ? '#/t/' + id + '/d/' + dayN : '#/t/' + id;
+}
+
 function route() {
   var h = location.hash || "#/";
   var m = h.match(/^#\/t\/([^/]+)(?:\/d\/(\d+))?$/);

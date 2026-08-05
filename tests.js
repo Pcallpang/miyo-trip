@@ -947,3 +947,27 @@ eq('isUndecided: text가 없어도 던지지 않고 미정으로 본다', isUnde
   eq('date 없는 일차가 섞여 있어도 렌더가 던지지 않음', threw, false);
   eq('text 없는 항목도 그려진다(미정 처리)', el.innerHTML.indexOf('slot undecided') !== -1, true);
 })();
+
+// ---- 하단 내비: 해시 파싱 ----
+eq('탭 키 목록', TAB_KEYS, ['day', 'hotel', 'packing', 'money', 'info']);
+eq('탭 정의 개수', TAB_DEFS.length, 5);
+
+eq('여행 루트는 일정 탭', parseTripHash('#/t/t_a'), { id: 't_a', tab: 'day', dayN: null });
+eq('일차 지정', parseTripHash('#/t/t_a/d/3'), { id: 't_a', tab: 'day', dayN: 3 });
+eq('숙소 탭', parseTripHash('#/t/t_a/hotel'), { id: 't_a', tab: 'hotel', dayN: null });
+eq('준비물 탭', parseTripHash('#/t/t_a/packing'), { id: 't_a', tab: 'packing', dayN: null });
+eq('경비 탭', parseTripHash('#/t/t_a/money'), { id: 't_a', tab: 'money', dayN: null });
+eq('정보 탭', parseTripHash('#/t/t_a/info'), { id: 't_a', tab: 'info', dayN: null });
+
+// edit은 탭이 아니다 — 라우터가 따로 처리하므로 여기서 걸리면 안 된다
+eq('편집 화면은 탭으로 안 잡힘', parseTripHash('#/t/t_a/edit'), null);
+eq('목록은 null', parseTripHash('#/'), null);
+eq('빈 해시는 null', parseTripHash(''), null);
+eq('새 여행은 null', parseTripHash('#/new'), null);
+eq('모르는 탭은 null', parseTripHash('#/t/t_a/zzz'), null);
+eq('꼬리가 더 붙으면 null', parseTripHash('#/t/t_a/money/x'), null);
+eq('일차가 숫자 아니면 null', parseTripHash('#/t/t_a/d/abc'), null);
+
+eq('해시 생성 일정', tabHash('t_a', 'day'), '#/t/t_a');
+eq('해시 생성 일차', tabHash('t_a', 'day', 3), '#/t/t_a/d/3');
+eq('해시 생성 경비', tabHash('t_a', 'money'), '#/t/t_a/money');
