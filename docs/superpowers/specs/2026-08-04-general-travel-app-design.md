@@ -71,7 +71,10 @@
 
 // 런타임 상태는 여행별로 분리
 // trip:<id>:spend  → [{ id, date, amount, cur, cat, note }]   (기존 필드 jpy → amount)
-// trip:<id>:packing_checked / packing_add / meal:<n>:<i>
+// trip:<id>:packing_checked / packing_add / meal:<date>:<i>
+//   (번호(<n>)가 아니라 날짜 기준이다 — resyncDays가 여행 시작일이 바뀔 때마다 일차
+//   번호를 다시 매기므로, 번호를 키로 쓰면 그 일차의 메모가 엉뚱한 날로 옮겨간다.
+//   store.js migrateMealKeys가 구 번호 기준 키를 날짜 기준으로 옮긴다.)
 // trip:<id>:wx:<lat>,<lon>  → 좌표별 날씨 캐시 (일차마다 도시가 다를 수 있으므로)
 // fx                        → 환율 캐시. 여행 밖 전역 키 하나로 공유한다
 ```

@@ -750,13 +750,23 @@ eq('normalizeTimeInput: 빈 문자열은 null', normalizeTimeInput(''), null);
   eq('일차 전환은 trip 객체를 갈아치우지 않는다', CUR.trip === a, true);
   eq('일차 전환은 요청한 일차를 그린다', CUR.dayN, 2);
 
-  // 탭 전환 뒤에 저장한 일정이, 그 뒤의 편집(같은 화면의 핸들러들이 쓰는 trip)에서
-  // 사라지지 않아야 한다 — 낡은 스냅샷을 붙들고 있으면 여기서 걸린다.
+  // renderSummary의 편집 토글 핸들러(views.js)는 열 때 넘어온 trip을 클로저로 붙든다 —
+  // showTrip(opening)에서만 renderSummary가 다시 불리므로, 탭 전환에서는 그 클로저가
+  // 갱신되지 않는다. 버그가 있던 시절엔 showTrip이 탭 전환에서도 loadTrip을 다시 불러
+  // CUR.trip을 매번 새 객체로 갈아치웠는데, 그러면 이 클로저가 붙든 "연" 시점의 trip과
+  // 탭 전환 이후의 CUR.trip이 서로 다른 객체가 되어 버렸다. 그 상태에서 클로저 쪽(옛
+  // 객체)으로 저장하면 탭 전환 뒤 CUR.trip 쪽에 저장한 내용을 통째로 덮어써 지운다.
+  // 여기서도 그 클로저를 흉내내 "연" 시점의 trip 참조를 따로 붙든다.
+  var staleRef = a;
+
   addItem(CUR.trip, 2, { time: '10:00', text: '탭 전환 뒤 추가' });
-  eq('탭 전환 뒤 추가한 일정 저장', saveTripBody(CUR.trip), true);
-  addItem(CUR.trip, 2, { time: '11:00', text: '그 다음 추가' });
-  saveTripBody(CUR.trip);
-  eq('탭 전환 뒤 저장한 일정이 그 다음 편집에서 사라지지 않음',
+  eq('탭 전환 뒤 CUR.trip으로 추가한 일정 저장', saveTripBody(CUR.trip), true);
+
+  // 편집 토글 핸들러가 하는 것과 같은 동작: 클로저가 붙든 낡은 참조로 저장.
+  addItem(staleRef, 2, { time: '11:00', text: '클로저(연 시점) 참조로 추가' });
+  saveTripBody(staleRef);
+
+  eq('탭 전환 뒤 CUR.trip으로 저장한 일정이 그 뒤 편집 핸들러 저장에서 사라지지 않음',
     loadTrip(id).days[1].items.filter(function (it) {
       return it.text === '탭 전환 뒤 추가';
     }).length, 1);
@@ -904,6 +914,8 @@ eq('두 입력 경로가 같은 시간 오류 메시지를 쓴다', MSG_BAD_TIME
 eq('normalizeDay: items가 배열이 아니면 빈 배열',
   normalizeDay({ n: 1, date: '2026-07-28' }).items, []);
 eq('normalizeDay: date가 문자열이 아니면 빈 문자열', normalizeDay({ n: 1 }).date, '');
+eq('normalizeDay: meals가 배열이 아니면 빈 배열(렌더가 .map을 부름 — views.js renderTimeline)',
+  normalizeDay({ n: 1, date: '2026-07-28', meals: '저녁' }).meals, []);
 eq('normalizeDay: item.text가 없으면 빈 문자열',
   normalizeDay({ n: 1, date: '', items: [{ id: 'a', time: '09:00' }] }).items[0].text, '');
 eq('normalizeDay: 항목이 아닌 값은 걸러낸다',

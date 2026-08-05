@@ -942,16 +942,33 @@ function blankDay(n, iso) {
 
 // 손상된 저장값(검증 없이 가져온 JSON, 손으로 고친 localStorage)이 렌더에서 예외를
 // 던지지 않게 하는 최소 보정. 지금까지는 day.items만 배열로 맞춰줬는데, 렌더가 실제로
-// 메서드를 부르는 필드는 그것 말고도 둘 더 있다 — day.date(escHtml(d.date.slice(5)),
-// dowOf(day.date))와 item.text(isUndecided(it.text)). 세 필드를 같은 계약으로 한 번에
-// 보정한다. 값을 버리지 않고 문자열로 맞추기만 하므로 정상 데이터에는 아무 영향이 없다.
+// 메서드를 부르는 필드는 그것 말고도 셋 더 있다 — day.date(escHtml(d.date.slice(5)),
+// dowOf(day.date)), day.meals(renderTimeline의 .map — views.js:225-227), item.text
+// (isUndecided(it.text)). 네 필드를 같은 계약으로 한 번에 보정한다. 값을 버리지 않고
+// 배열/문자열로 맞추기만 하므로 정상 데이터에는 아무 영향이 없다.
+// 실제로 뭔가를 고친 경우에만(정상 데이터는 절대 안 걸림) console.warn으로 남긴다 —
+// pickDay가 보정한 값은 이후 saveTripBody가 그대로 되돌려 써버려 손상이 조용히
+// 영구화되므로, 최소한 콘솔에서라도 원인(어느 필드가 어떤 값이었는지)을 추적할 수 있게 한다.
 function normalizeDay(day) {
   if (!day) return null;
-  if (!Array.isArray(day.items)) day.items = [];
-  if (typeof day.date !== 'string') day.date = '';
+  if (!Array.isArray(day.items)) {
+    console.warn('normalizeDay: day.items가 배열이 아니어서 빈 배열로 보정함', day.items);
+    day.items = [];
+  }
+  if (typeof day.date !== 'string') {
+    console.warn('normalizeDay: day.date가 문자열이 아니어서 빈 문자열로 보정함', day.date);
+    day.date = '';
+  }
+  if (!Array.isArray(day.meals)) {
+    console.warn('normalizeDay: day.meals가 배열이 아니어서 빈 배열로 보정함', day.meals);
+    day.meals = [];
+  }
   day.items = day.items.filter(function (it) { return it && typeof it === 'object'; });
   day.items.forEach(function (it) {
-    if (typeof it.text !== 'string') it.text = it.text == null ? '' : String(it.text);
+    if (typeof it.text !== 'string') {
+      console.warn('normalizeDay: item.text가 문자열이 아니어서 빈 문자열로 보정함', it.text);
+      it.text = it.text == null ? '' : String(it.text);
+    }
   });
   return day;
 }
