@@ -150,6 +150,24 @@ function normalizeTimeInput(s) {
   return (h < 10 ? '0' : '') + h + ':' + m[2];
 }
 
+// 일정 입력(추가 폼·prompt 편집)이 공유하는 메시지. 두 경로가 같은 실수에 서로 다른
+// 말을 하지 않도록 한 곳에 둔다.
+var MSG_BAD_TIME = '시간 형식이 올바르지 않습니다. 예: 09:00';
+var MSG_EMPTY_TEXT = '일정 내용을 입력해 주세요.';
+
+// 추가 폼(item-add)의 입력을 저장 가능한 형태로 검증·정규화한다. <input type="time">이
+// 지원되지 않는 환경에서는 이 입력이 그냥 text로 떨어져 '9:00' 같은 값이 그대로 들어오는데,
+// sortItems가 문자열 사전순으로 비교하므로 그대로 저장하면 '14:00'보다 뒤로 밀린다 —
+// prompt 편집 경로가 이미 거치는 검증(normalizeTimeInput + 빈 내용 거부)을 추가 폼도
+// 똑같이 거치게 한다. ok:false면 message를 그대로 사용자에게 보여주면 된다.
+function parseItemInput(rawTime, rawText) {
+  var time = normalizeTimeInput(rawTime);
+  if (!time) return { ok: false, message: MSG_BAD_TIME };
+  var text = String(rawText == null ? '' : rawText).trim();
+  if (!text) return { ok: false, message: MSG_EMPTY_TEXT };
+  return { ok: true, time: time, text: text };
+}
+
 function findDay(trip, dayN) {
   return trip.days.filter(function (d) { return d.n === dayN; })[0] || null;
 }

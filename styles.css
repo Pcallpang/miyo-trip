@@ -35,6 +35,8 @@ body { margin:0; background:var(--bg); color:var(--text);
   border-radius:999px; padding:2px 8px; letter-spacing:.02em; }
 .line.timed .tag { background:#e03131; }
 .line.booked .tag { background:#0ca678; }
+#timeline .empty { color:var(--muted); text-align:center; font-size:.88rem;
+  margin:0; padding:26px 16px; }
 .slot.undecided { background:#fff4e6; }
 .slot.undecided .time { color:var(--accent2); }
 #fixed { margin:12px; }

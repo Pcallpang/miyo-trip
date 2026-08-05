@@ -87,13 +87,12 @@ function wxRefresh(st) {
 // dayN에 해당하는 day를 찾아 타임라인만 다시 그린다. renderTabs(따라서 tab strip의
 // scrollIntoView)는 건드리지 않는다 — 탭 목록이나 선택된 탭이 바뀌지 않은 상황(날씨 갱신,
 // 편집 모드 토글)에서 renderTabs까지 다시 부르면 스크롤이 제자리서 튄다.
-// showDay가 하던 "day.items가 배열이 아니면 빈 배열로 고쳐 넣는" 보정도 여기서 함께
-// 한다 — renderTimeline을 직접 부르는 경로(wxRepaint, 편집 모드 토글, afterItemEdit)가
-// 전부 이 보정을 거치게 해서, 손상된 저장값(items 없는 day)을 만나도 던지지 않는다.
+// 손상된 저장값 보정(normalizeDay)도 여기서 함께 한다 — renderTimeline을 직접 부르는
+// 경로(wxRepaint, 편집 모드 토글, afterItemEdit)가 전부 이 보정을 거치게 해서,
+// items/date/text가 망가진 day를 만나도 던지지 않는다.
 function repaintDay(trip, dayN, st) {
   var day = pickDay(trip, dayN);
   if (!day) return null;
-  if (!Array.isArray(day.items)) day.items = [];
   renderTimeline(trip, day, st);
   return day;
 }
@@ -162,6 +161,10 @@ function showList() {
 // todayISO는 테스트에서 주입하기 위한 선택 인자다. 비우면 오늘 날짜를 쓴다.
 function pickDay(trip, dayN, todayISO) {
   var days = (trip && Array.isArray(trip.days)) ? trip.days : [];
+  // 손상된 저장값 보정은 고르기 전에, 그리고 고른 일차뿐 아니라 모든 일차에 대해 한다 —
+  // 탭 목록(renderTabs)은 선택되지 않은 일차의 date까지 읽으므로(d.date.slice(5)),
+  // 고른 일차만 보정해서는 date가 없는 다른 일차 하나 때문에 화면 전체가 죽는다.
+  days.forEach(normalizeDay);
   if (!days.length) return null;
   var day = null;
   if (dayN) day = days.filter(function (d) { return d.n === dayN; })[0];
@@ -179,7 +182,6 @@ function showDay(trip, dayN) {
   CUR.dayN = day ? day.n : null;
   if (day) {
     renderTabs(trip, day.n, function (n) { go('#/t/' + trip.id + '/d/' + n); });
-    if (!Array.isArray(day.items)) day.items = [];
     renderTimeline(trip, day, CUR.st);
   } else {
     document.getElementById("daytabs").innerHTML = '';
@@ -189,13 +191,23 @@ function showDay(trip, dayN) {
 }
 
 function showTrip(id, dayN) {
-  var trip = loadTrip(id);
-  if (!trip) { go('#/'); return; }
   // 여행을 "여는" 경우에만 화면 전체를 세운다: 다른 여행으로 바뀌었거나,
   // 목록·편집 등 다른 화면에서 돌아온 경우. 같은 여행 안에서 일차 탭만 누른
   // 경우에는 showDay만 돈다.
   var switched = (CUR.id !== id);
   var opening = switched || document.getElementById("screen-trip").hidden;
+
+  // 여는 경우에만 저장소에서 다시 읽는다. 일차 탭 전환에서까지 loadTrip을 부르면
+  // CUR.trip이 매번 새 객체로 갈아치워지는데, #summary와 #fixed는 여는 경로에서만
+  // 다시 그려지므로 그 핸들러들은 "이전에 불러온" trip을 계속 붙들고 있게 된다.
+  // 그 상태에서 편집 토글(renderSummary→repaintDay)을 누르면 타임라인 전체가 낡은
+  // 스냅샷에 다시 묶이고, 그 뒤의 addItem/updateItem/removeItem + saveTripBody(trip)이
+  // 탭 전환 이후 저장된 일정을 통째로 덮어써 지운다(실제로 재현됨).
+  // 여는 경로는 항상 #summary/#fixed를 함께 다시 그리므로, 그때만 다시 읽으면
+  // 화면 위의 모든 핸들러가 언제나 CUR.trip 하나만 붙들게 된다.
+  // 덤으로 탭을 누를 때마다 돌던 JSON.parse 한 번이 사라진다.
+  var trip = opening ? loadTrip(id) : CUR.trip;
+  if (!trip) { go('#/'); return; }
 
   CUR.id = id; CUR.trip = trip; CUR.st = tripStore(id);
   // EDIT_MODE는 세션에 묶인 UI 상태일 뿐 trip 데이터가 아니다(views.js 위 주석 참고) —
@@ -229,11 +241,23 @@ document.addEventListener("DOMContentLoaded", function () {
   // 앱 화면이 없는 페이지(test.html 등)에서는 부팅하지 않는다.
   if (!document.getElementById("screen-list")) return;
   migrateLegacy();
+  // 식사 메모 키를 일차 번호 기준에서 날짜 기준으로 옮긴다(store.js 주석 참고).
+  // migrateLegacy 뒤에 두지만, 어느 쪽이 먼저 돌아도 결과가 같도록 설계돼 있다.
+  migrateMealKeys();
 
   document.getElementById("new-trip")
     .addEventListener("click", function () { go('#/new'); });
   document.getElementById("add-sample")
-    .addEventListener("click", function () { go('#/t/' + installSample()); });
+    .addEventListener("click", function () {
+      // installSample은 저장 실패 시 null을 돌려준다 — 그대로 이동하면 showTrip이
+      // 여행을 찾지 못해 목록으로 조용히 튕겨 나가고, 사용자는 아무 설명도 못 받는다.
+      var id = installSample();
+      if (!id) {
+        alert('샘플 여행을 저장하지 못했습니다. 기기 저장 공간을 확인해 주세요.');
+        return;
+      }
+      go('#/t/' + id);
+    });
 
   // 여행이 하나뿐이면 목록을 건너뛰고 바로 연다.
   var trips = listTrips();

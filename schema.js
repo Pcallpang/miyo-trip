@@ -7,7 +7,12 @@ var DAY_MS = 86400000;
 function dateMs(iso) { return Date.parse(iso + "T00:00:00Z"); }
 function msDate(ms) { return new Date(ms).toISOString().slice(0, 10); }
 
-function dowOf(iso) { return DOW[new Date(dateMs(iso)).getUTCDay()]; }
+// 날짜가 비었거나(손상된 저장값) 파싱 불가능하면 빈 문자열 — 던지지도, 'undefined'를
+// 화면에 흘리지도 않는다(normalizeDay 주석 참고).
+function dowOf(iso) {
+  var ms = dateMs(iso);
+  return isNaN(ms) ? '' : DOW[new Date(ms).getUTCDay()];
+}
 function addDays(iso, n) { return msDate(dateMs(iso) + n * DAY_MS); }
 function daysBetween(a, b) { return Math.round((dateMs(b) - dateMs(a)) / DAY_MS) + 1; }
 
@@ -18,6 +23,22 @@ function newSectionId() { return "s_" + Date.now().toString(36) + (_seq++).toStr
 function blankDay(n, iso) {
   return { n: n, date: iso, theme: "", place: null, curCode: null,
            items: [], meals: [], images: [] };
+}
+
+// 손상된 저장값(검증 없이 가져온 JSON, 손으로 고친 localStorage)이 렌더에서 예외를
+// 던지지 않게 하는 최소 보정. 지금까지는 day.items만 배열로 맞춰줬는데, 렌더가 실제로
+// 메서드를 부르는 필드는 그것 말고도 둘 더 있다 — day.date(escHtml(d.date.slice(5)),
+// dowOf(day.date))와 item.text(isUndecided(it.text)). 세 필드를 같은 계약으로 한 번에
+// 보정한다. 값을 버리지 않고 문자열로 맞추기만 하므로 정상 데이터에는 아무 영향이 없다.
+function normalizeDay(day) {
+  if (!day) return null;
+  if (!Array.isArray(day.items)) day.items = [];
+  if (typeof day.date !== 'string') day.date = '';
+  day.items = day.items.filter(function (it) { return it && typeof it === 'object'; });
+  day.items.forEach(function (it) {
+    if (typeof it.text !== 'string') it.text = it.text == null ? '' : String(it.text);
+  });
+  return day;
 }
 
 function buildDays(start, end) {

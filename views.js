@@ -26,8 +26,11 @@ function itemLinesHtml(text) {
 // 세션에 묶인 UI 상태일 뿐 trip 데이터가 아니므로 저장소에 넣지 않는다.
 var EDIT_MODE = false;
 
+// text가 문자열이 아닌 손상된 항목(검증 없이 가져온 JSON 등)에서도 던지지 않는다 —
+// normalizeDay가 렌더 전에 보정하지만, 이 판정 자체도 같은 계약을 지킨다.
 function isUndecided(text) {
-  return /뭐먹지|\?$/.test(text.trim()) || text.trim() === "";
+  var t = String(text == null ? "" : text).trim();
+  return /뭐먹지|\?$/.test(t) || t === "";
 }
 
 function dday(todayISO, startISO, endISO) {
@@ -82,7 +85,11 @@ function spendByDate(list) {
   });
 }
 
-function mealKey(dayN, i) { return "meal:" + Number(dayN) + ":" + i; }
+// 일차 번호(n)가 아니라 날짜로 키를 잡는다 — resyncDays가 날짜를 기준으로 일차를
+// 보존하면서 n을 1부터 다시 매기기 때문에, n으로 키를 잡으면 시작일을 하루만 앞당겨도
+// 메모가 통째로 밀려 엉뚱한 날에 붙거나 화면에서 사라진다(store.js의 migrateMealKeys 참고).
+// 날짜는 문자열이므로 속성 컨텍스트에 넣을 때 반드시 escHtml을 거쳐야 한다.
+function mealKey(date, i) { return "meal:" + String(date) + ":" + i; }
 
 // ---- 상단 요약 ----
 
@@ -92,8 +99,10 @@ function summarySpend(st, lead) {
   if (!tot) return '';
   const fx = spendFx(st);
   const krw = fx ? ' (약 ' + jpyToKrw(tot, fx).toLocaleString('ko-KR') + '원)' : '';
+  // lead면 줄의 맨 앞이므로 선행 공백도 붙이지 않는다 — 붙이면 .cost가 공백으로 시작한다.
   const dot = lead ? '' : '· ';
-  return ' <span class="spent">' + dot + '💸 현지 ¥' + tot.toLocaleString('ko-KR') + krw + '</span>';
+  const gap = lead ? '' : ' ';
+  return gap + '<span class="spent">' + dot + '💸 현지 ¥' + tot.toLocaleString('ko-KR') + krw + '</span>';
 }
 
 function renderSummary(trip, st) {
@@ -108,7 +117,9 @@ function renderSummary(trip, st) {
     '<h1>' + escHtml(trip.title) + '</h1>' +
     '<div class="period">' + escHtml(trip.start) + ' ~ ' + escHtml(trip.end) +
       ' · ' + nights + '박 ' + (nights + 1) + '일</div>' +
-    (trip.hotel ? '<div class="hotel">🏨 ' + escHtml(trip.hotel) + '</div>' : '') +
+    // 숙소는 여러 줄 textarea다(editor.js) — day.theme과 같은 방식으로 줄바꿈을
+    // 가운뎃점으로 이어 한 줄에 눌러 담는다. 그냥 두면 줄바꿈이 사라져 붙어 보인다.
+    (trip.hotel ? '<div class="hotel">🏨 ' + escHtml(trip.hotel).replace(/\n/g, ' · ') + '</div>' : '') +
     (function () {
       var line = wxLine(wxState.map, todayLocal());
       return line ? '<div class="wx">' + line.replace(" ", " 오늘 ") + wxStamp() + '</div>' : '';
@@ -194,7 +205,7 @@ function afterItemEdit(trip, day, st, ok) {
 
 function renderTimeline(trip, day, st) {
   const main = document.getElementById("timeline");
-  const rows = day.items.map(function (it) {
+  const slots = day.items.map(function (it) {
     const cls = isUndecided(it.text) ? ' undecided' : '';
     const btns = EDIT_MODE
       ? '<div class="slot-btns">' +
@@ -205,12 +216,19 @@ function renderTimeline(trip, day, st) {
       '<div class="time">' + escHtml(it.time) + '</div>' +
       '<div class="what">' + itemLinesHtml(it.text) + btns + '</div></div>';
   }).join('');
+  // 새로 만든 여행의 1일차는 일정이 하나도 없다. 편집 모드가 아니면 추가 폼도 없어서
+  // 예전에는 완전히 빈 카드만 보였다 — 무엇을 해야 하는지 알려 주는 줄을 넣는다.
+  // 편집 모드에서는 바로 아래에 추가 폼이 있으므로 안내가 필요 없다.
+  const rows = slots || (EDIT_MODE
+    ? ''
+    : '<p class="empty">아직 일정이 없습니다. 편집을 눌러 추가해 보세요.</p>');
   const meals = (day.meals && day.meals.length)
     ? '<div class="meals"><div class="meals-h">🍽 뭐먹지</div>' +
       day.meals.map(function (m, i) {
-        const val = escHtml(st.get(mealKey(day.n, i), ""));
+        const key = mealKey(day.date, i);
+        const val = escHtml(st.get(key, ""));
         return '<div class="meal"><div class="meal-note">' + itemLinesHtml(m) + '</div>' +
-          '<input class="memo" data-key="' + mealKey(day.n, i) +
+          '<input class="memo" data-key="' + escHtml(key) +
           '" placeholder="식당/메모 입력" value="' + val + '"></div>';
       }).join('') + '</div>'
     : '';
@@ -255,7 +273,7 @@ function renderTimeline(trip, day, st) {
         // sortItems의 사전순 비교에서 '9:00'이 '14:00'보다 뒤로 밀려버린다(review 지적).
         var normTime = normalizeTimeInput(time);
         if (!normTime) {
-          alert('시간 형식이 올바르지 않습니다. 예: 09:00');
+          alert(MSG_BAD_TIME);
           return;
         }
         var text = prompt('일정 내용', it.text);
@@ -265,7 +283,7 @@ function renderTimeline(trip, day, st) {
         // 빈 문자열을 그대로 받아주면 "시간만 있고 내용은 빈" undecided 행이 생긴다.
         // 두 입력 경로의 보장을 맞춘다.
         if (!text) {
-          alert('일정 내용을 입력해 주세요.');
+          alert(MSG_EMPTY_TEXT);
           return;
         }
         updateItem(trip, day.n, it.id, { time: normTime, text: text });
@@ -275,10 +293,15 @@ function renderTimeline(trip, day, st) {
     var af = main.querySelector('.item-add');
     if (af) af.addEventListener('submit', function (e) {
       e.preventDefault();
-      var t = af.querySelector('.ia-time').value;
-      var x = af.querySelector('.ia-text').value.trim();
-      if (!t || !x) return;
-      addItem(trip, day.n, { time: t, text: x });
+      // required 속성이 막아 주는 "아무것도 안 채운 제출"은 조용히 무시하고, 실제로
+      // 값이 들어왔는데 형식이 틀린 경우만 알린다(parseItemInput — prompt 경로와 동일한
+      // 검증·메시지를 쓴다).
+      var raw = af.querySelector('.ia-time').value;
+      var rawText = af.querySelector('.ia-text').value;
+      if (!raw && !rawText.trim()) return;
+      var p = parseItemInput(raw, rawText);
+      if (!p.ok) { alert(p.message); return; }
+      addItem(trip, day.n, { time: p.time, text: p.text });
       afterItemEdit(trip, day, st, saveTripBody(trip));
     });
   }
@@ -288,7 +311,8 @@ function renderTimeline(trip, day, st) {
 
 function sectionBodyHtml(trip, sec) {
   if (sec.type === "builtin") {
-    if (sec.body === "hotel")    return escHtml(trip.hotel);
+    // 숙소는 여러 줄 입력이므로 type:"text" 섹션과 같은 방식으로 줄 단위로 그린다.
+    if (sec.body === "hotel")    return trip.hotel ? itemLinesHtml(trip.hotel) : '';
     if (sec.body === "packing")  return '<div id="packing-body"></div>';
     if (sec.body === "spend")    return '<div id="spend-body"></div>';
     if (sec.body === "expenses") return expensesTableHtml(trip);

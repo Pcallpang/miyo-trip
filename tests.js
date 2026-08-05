@@ -161,7 +161,10 @@ eq('경비 이관', tripStore(mid).get('spend', []),
 eq('환율 이관', tripStore(mid).get('fx', 0), 920);
 eq('준비물 체크 이관', tripStore(mid).get('packing_checked', {}), { '여권 + 사본': true });
 eq('추가 준비물 이관', tripStore(mid).get('packing_add', []), ['멀미약']);
-eq('식사 메모 이관', tripStore(mid).get('meal:2:0', ''), '구시카츠 다루마');
+// 구 데이터의 meal 키는 일차 번호 기준(meal:2:0)이었다 — 이관하면서 날짜 기준으로
+// 다시 잡는다. 샘플 여행의 2일차는 2026-07-29다.
+eq('식사 메모는 날짜 기준 키로 이관', tripStore(mid).get('meal:2026-07-29:0', ''), '구시카츠 다루마');
+eq('이관 후 구 번호 기준 키는 남지 않음', tripStore(mid).get('meal:2:0', 'none'), 'none');
 eq('날씨 이관', tripStore(mid).get('weather', null), { fetchedAt: '2026-07-27', daily: {} });
 eq('구 키 제거', lsGet('osaka-trip:v1:spend', 'gone'), 'gone');
 eq('구 날씨 키 제거', lsGet('osaka-trip:v1:weather', 'gone'), 'gone');
@@ -264,16 +267,18 @@ eq('D-day 이후', dday('2026-08-05', '2026-07-28', '2026-08-03'), '여행 종�
   // renderTimeline: 악의적인 day.n(숫자여야 하는 필드), 악의적인 item.id,
   // 악의적인 meal memo 저장값(모두 value="..." / data-*="..." 속성 컨텍스트)
   (function () {
+    // day.date도 악의적인 문자열로 둔다 — meal 메모 키가 일차 번호가 아니라 날짜로
+    // 잡히면서(mealKey) 이 필드가 data-key 속성 컨텍스트로 직접 흘러가기 때문이다.
     var day = {
       n: HOSTILE,
-      date: "2026-07-28",
+      date: HOSTILE,
       theme: "",
       items: [{ id: HOSTILE, time: "09:00", text: "테스트 일정" }],
       meals: ["저녁"]
     };
     var trip = { days: [day] };
     var st = makeSt();
-    st.set(mealKey(day.n, 0), HOSTILE);
+    st.set(mealKey(day.date, 0), HOSTILE);
 
     var el = global.__setDomTarget("timeline");
     renderTimeline(trip, day, st);
@@ -284,11 +289,12 @@ eq('D-day 이후', dday('2026-08-05', '2026-07-28', '2026-08-03'), '여행 종�
       html.indexOf('data-item="' + escHostile + '"') !== -1, true);
     eq('renderTimeline: 악의적인 meal memo 저장값은 value 속성에서 이스케이프됨',
       html.indexOf('value="' + escHostile + '"') !== -1, true);
-    // day.n은 숫자 필드 — 문자열이 들어오면 이스케이프 대신 숫자로 강제 변환해
-    // data-key(=storage key로 그대로 흘러감)와 표시 라벨 양쪽 모두 안전해진다.
-    eq('renderTimeline: 숫자 필드 day.n은 NaN으로 강제 변환되어 data-key가 안전함',
-      html.indexOf('data-key="meal:NaN:0"') !== -1, true);
-    eq('renderTimeline: 숫자 필드 day.n은 표시 라벨에서도 NaN으로 강제 변환됨',
+    // meal 키는 이제 날짜(문자열) 기준이다 — 숫자 강제 변환으로는 막을 수 없으므로
+    // data-key 속성에 넣을 때 escHtml을 거쳐야 한다.
+    eq('renderTimeline: 날짜 기준 meal 키는 data-key 속성에서 이스케이프됨',
+      html.indexOf('data-key="meal:' + escHostile + ':0"') !== -1, true);
+    // day.n은 숫자 필드 — 문자열이 들어오면 이스케이프 대신 숫자로 강제 변환한다.
+    eq('renderTimeline: 숫자 필드 day.n은 표시 라벨에서 NaN으로 강제 변환됨',
       html.indexOf('<span class="dnum">NaN일차</span>') !== -1, true);
   })();
 
@@ -354,6 +360,8 @@ eq('D-day 이후', dday('2026-08-05', '2026-07-28', '2026-08-03'), '여행 종�
       eq('renderSummary: 예산 0·경비 있음 → 💸 현지 줄 표시', cost.indexOf('💸 현지') !== -1, true);
       eq('renderSummary: 예산 0·경비 있음 → 💰 총 줄은 없음', cost.indexOf('💰 총') === -1, true);
       eq('renderSummary: 예산 0·경비 있음 → 선행 구분자(·) 없음', cost.indexOf('· 💸') === -1, true);
+      // 줄의 맨 앞이므로 선행 공백도 없어야 한다(summarySpend의 lead 인자).
+      eq('renderSummary: 예산 0·경비 있음 → 선행 공백 없음', cost.charAt(0) === ' ', false);
     })();
 
     // budgetKRW>0, 경비 있음 → 두 줄 다, 구분자(·)로 이어짐.
@@ -709,4 +717,221 @@ eq('normalizeTimeInput: 빈 문자열은 null', normalizeTimeInput(''), null);
     afterItemEdit(trip, day, tripStore(trip.id), false);
   } catch (e) { threw = true; }
   eq('저장소에 items 없는 day가 있어도 afterItemEdit이 던지지 않음', threw, false);
+})();
+
+// ===================================================================
+// 전체 브랜치 리뷰 지적 사항 회귀 테스트
+// ===================================================================
+
+// ---- Critical(F1): showTrip이 일차 탭 전환에서까지 loadTrip을 부르면 CUR.trip이 매번
+// 새 객체로 갈아치워진다. 그런데 #summary/#fixed는 "여는" 경로에서만 다시 그려지므로
+// 그 핸들러들은 이전 trip 객체를 계속 붙들고, 편집 토글을 누르는 순간 타임라인 전체가
+// 그 낡은 스냅샷에 다시 묶여 탭 전환 이후 저장된 일정을 통째로 덮어써 지웠다.
+(function () {
+  __resetStorage();
+  ['screen-list', 'screen-trip', 'screen-edit', 'summary', 'daytabs', 'timeline', 'fixed']
+    .forEach(function (id) { global.__setDomTarget(id); });
+  document.getElementById('screen-trip').hidden = true;
+  // 여행을 열면 wxRefresh가 돈다 — 러너가 실제 네트워크를 타지 않게 fetch를 막는다.
+  var prevFetch = global.fetch;
+  global.fetch = function () {
+    var p = { then: function () { return p; }, catch: function () { return p; } };
+    return p;
+  };
+
+  var id = installSample();
+  CUR.id = null; CUR.trip = null; CUR.st = null; CUR.dayN = null;
+
+  showTrip(id, null);
+  var a = CUR.trip;
+  eq('여행을 열면 CUR.trip이 세워진다', !!a && a.id === id, true);
+
+  showTrip(id, 2);
+  eq('일차 전환은 trip 객체를 갈아치우지 않는다', CUR.trip === a, true);
+  eq('일차 전환은 요청한 일차를 그린다', CUR.dayN, 2);
+
+  // 탭 전환 뒤에 저장한 일정이, 그 뒤의 편집(같은 화면의 핸들러들이 쓰는 trip)에서
+  // 사라지지 않아야 한다 — 낡은 스냅샷을 붙들고 있으면 여기서 걸린다.
+  addItem(CUR.trip, 2, { time: '10:00', text: '탭 전환 뒤 추가' });
+  eq('탭 전환 뒤 추가한 일정 저장', saveTripBody(CUR.trip), true);
+  addItem(CUR.trip, 2, { time: '11:00', text: '그 다음 추가' });
+  saveTripBody(CUR.trip);
+  eq('탭 전환 뒤 저장한 일정이 그 다음 편집에서 사라지지 않음',
+    loadTrip(id).days[1].items.filter(function (it) {
+      return it.text === '탭 전환 뒤 추가';
+    }).length, 1);
+
+  // 반대로 "여는" 경로(목록·편집 화면에서 되돌아옴)에서는 저장소에서 다시 읽어야 한다.
+  document.getElementById('screen-trip').hidden = true;
+  showTrip(id, null);
+  eq('다시 열 때는 저장소에서 새로 읽는다', CUR.trip === a, false);
+
+  global.fetch = prevFetch;
+  CUR.id = null; CUR.trip = null; CUR.st = null; CUR.dayN = null;
+})();
+
+// ---- Important(F2): 식사 메모 키를 일차 번호가 아니라 날짜로 잡는다.
+eq('mealKey: 날짜 기준', mealKey('2026-07-29', 0), 'meal:2026-07-29:0');
+eq('mealMigrateKey: 번호 키를 날짜 키로 옮긴다',
+  mealMigrateKey('meal:2:0', { '2': '2026-07-29' }), 'meal:2026-07-29:0');
+eq('mealMigrateKey: 이미 날짜 기준이면 null(멱등의 근거)',
+  mealMigrateKey('meal:2026-07-29:0', { '2': '2026-07-29' }), null);
+eq('mealMigrateKey: 해당 번호의 일차가 없으면 null(고아 메모는 건드리지 않음)',
+  mealMigrateKey('meal:9:0', { '2': '2026-07-29' }), null);
+eq('mealMigrateKey: meal 키가 아니면 null', mealMigrateKey('spend', { '2': '2026-07-29' }), null);
+eq('dayDateByN: 번호→날짜 표', dayDateByN({ days: [
+  { n: 1, date: '2026-07-28' }, { n: 2, date: '2026-07-29' }
+] }), { '1': '2026-07-28', '2': '2026-07-29' });
+
+(function () {
+  __resetStorage();
+  var t = applyTripForm(null,
+    { title: '교토', start: '2026-07-28', end: '2026-07-30', party: 2, hotel: '' });
+  eq('사전 준비: 여행 저장', saveTrip(t), true);
+  var st = tripStore(t.id);
+  st.set('meal:2:0', '기온 우동');
+
+  eq('migrateMealKeys: 옮긴 키 개수', migrateMealKeys(), 1);
+  eq('migrateMealKeys: 날짜 기준 키로 옮겨짐', st.get('meal:2026-07-29:0', ''), '기온 우동');
+  eq('migrateMealKeys: 구 번호 기준 키는 제거됨', st.get('meal:2:0', 'none'), 'none');
+  // 멱등: 두 번째 실행은 아무 것도 옮기지 않고 값도 그대로다.
+  eq('migrateMealKeys: 두 번째 실행은 옮길 게 없음', migrateMealKeys(), 0);
+  eq('migrateMealKeys: 두 번 돌려도 값 보존', st.get('meal:2026-07-29:0', ''), '기온 우동');
+
+  // 원래 결함: 시작일을 하루 앞당기면 resyncDays가 n을 다시 매겨 07-29가 2일차에서
+  // 3일차가 된다 — 번호 기준 키였다면 메모가 통째로 어긋났다.
+  var moved = applyTripForm(loadTrip(t.id),
+    { title: '교토', start: '2026-07-27', end: '2026-07-30', party: 2, hotel: '' });
+  eq('사전 준비: 기간 변경 저장', saveTrip(moved), true);
+  var d29 = moved.days.filter(function (d) { return d.date === '2026-07-29'; })[0];
+  eq('시작일을 앞당기면 07-29의 일차 번호가 바뀐다', d29.n, 3);
+  eq('그래도 메모는 같은 날짜에 그대로 붙어 있다',
+    st.get(mealKey(d29.date, 0), ''), '기온 우동');
+})();
+
+// migrateLegacy와 migrateMealKeys는 실행 순서와 무관하게 같은 결과를 낸다.
+(function () {
+  __resetStorage();
+  lsSet('osaka-trip:v1:meal:2:0', '구시카츠 다루마');
+  eq('구 데이터만 있을 때 migrateMealKeys를 먼저 돌려도 무해', migrateMealKeys(), 0);
+  var mid2 = migrateLegacy();
+  eq('순서를 바꿔도 날짜 기준으로 이관됨',
+    tripStore(mid2).get('meal:2026-07-29:0', ''), '구시카츠 다루마');
+  eq('그 뒤 migrateMealKeys를 또 돌려도 옮길 게 없음', migrateMealKeys(), 0);
+  eq('이관 후 다시 돌려도 값 보존',
+    tripStore(mid2).get('meal:2026-07-29:0', ''), '구시카츠 다루마');
+})();
+
+// ---- Important(F3): 추가 폼도 prompt 경로와 같은 시간 정규화·검증을 거친다.
+eq('parseItemInput: 정상 입력', parseItemInput('09:00', ' 점심 '),
+  { ok: true, time: '09:00', text: '점심' });
+eq('parseItemInput: 한 자리 시는 정규화된다(type=time이 text로 떨어지는 환경)',
+  parseItemInput('9:00', '점심').time, '09:00');
+eq('parseItemInput: 잘못된 시간은 거부', parseItemInput('9시', '점심'),
+  { ok: false, message: MSG_BAD_TIME });
+eq('parseItemInput: 빈 시간은 거부', parseItemInput('', '점심').ok, false);
+eq('parseItemInput: 빈 내용은 거부', parseItemInput('09:00', '   '),
+  { ok: false, message: MSG_EMPTY_TEXT });
+eq('두 입력 경로가 같은 시간 오류 메시지를 쓴다', MSG_BAD_TIME,
+  '시간 형식이 올바르지 않습니다. 예: 09:00');
+
+// ---- Important(F4): 일정이 하나도 없는 일차(새 여행의 1일차)에 안내 문구를 보여준다.
+(function () {
+  var EMPTY_MSG = '아직 일정이 없습니다. 편집을 눌러 추가해 보세요.';
+  var trip = { days: [{ n: 1, date: '2026-07-28', theme: '', items: [], meals: [] }] };
+  var st = { get: function (k, fb) { return fb; }, set: function () {} };
+  var prev = EDIT_MODE;
+
+  var el = global.__setDomTarget('timeline');
+  EDIT_MODE = false;
+  renderTimeline(trip, trip.days[0], st);
+  eq('빈 일차에는 안내 문구가 보인다', el.innerHTML.indexOf(EMPTY_MSG) !== -1, true);
+
+  // 편집 모드에서는 바로 아래에 추가 폼이 있으므로 안내가 필요 없다.
+  var el2 = global.__setDomTarget('timeline');
+  EDIT_MODE = true;
+  renderTimeline(trip, trip.days[0], st);
+  eq('편집 모드의 빈 일차에는 안내 대신 추가 폼', el2.innerHTML.indexOf(EMPTY_MSG) === -1, true);
+  eq('편집 모드의 빈 일차에는 추가 폼이 있다',
+    el2.innerHTML.indexOf('class="item-add"') !== -1, true);
+
+  // 일정이 있으면 안내 문구는 나오지 않는다.
+  var el3 = global.__setDomTarget('timeline');
+  EDIT_MODE = false;
+  var day2 = { n: 1, date: '2026-07-28', theme: '', meals: [],
+               items: [{ id: 'a', time: '09:00', text: '출발' }] };
+  renderTimeline({ days: [day2] }, day2, st);
+  eq('일정이 있으면 안내 문구는 없다', el3.innerHTML.indexOf(EMPTY_MSG) === -1, true);
+
+  EDIT_MODE = prev;
+})();
+
+// ---- Minor(F5): 숙소는 여러 줄 textarea다 — 줄바꿈이 사라지면 안 된다.
+(function () {
+  var HOTEL = '호텔 그란비아\n체크인 15:00 / 체크아웃 11:00';
+  var trip = { title: '테스트', start: '2026-07-28', end: '2026-08-03',
+               hotel: HOTEL, party: 2, budgetKRW: 0 };
+  var st = { get: function (k, fb) { return fb; }, set: function () {} };
+  var el = global.__setDomTarget('summary');
+  renderSummary(trip, st);
+  eq('요약 헤더의 숙소 줄바꿈은 가운뎃점으로 이어진다(day.theme과 동일)',
+    el.innerHTML.indexOf('🏨 호텔 그란비아 · 체크인 15:00 / 체크아웃 11:00') !== -1, true);
+
+  var body = sectionBodyHtml(trip, { type: 'builtin', body: 'hotel' });
+  eq('숙소 섹션 본문은 줄 단위로 그린다',
+    body, '<div class="line">호텔 그란비아</div>' +
+          '<div class="line">체크인 15:00 / 체크아웃 11:00</div>');
+  eq('숙소가 비면 섹션 본문도 빈 문자열',
+    sectionBodyHtml({ hotel: '' }, { type: 'builtin', body: 'hotel' }), '');
+})();
+
+// ---- Minor(F7): installSample은 저장 성공 여부를 삼키지 않는다.
+(function () {
+  __resetStorage();
+  var okId = installSample();
+  eq('샘플 설치 성공 시 id 반환', typeof okId, 'string');
+  eq('샘플 설치 성공 시 실제로 저장됨', loadTrip(okId).title, '오사카 여행');
+
+  __resetStorage();
+  __setWritesFail(true);
+  var failId = installSample();
+  __setWritesFail(false);
+  eq('샘플 저장 실패 시 null 반환', failId, null);
+  eq('샘플 저장 실패 시 목록에 고아 항목 없음', listTrips(), []);
+})();
+
+// ---- Minor(F8): 손상된 일차(items/date/item.text 누락)도 렌더가 던지지 않는다.
+eq('normalizeDay: items가 배열이 아니면 빈 배열',
+  normalizeDay({ n: 1, date: '2026-07-28' }).items, []);
+eq('normalizeDay: date가 문자열이 아니면 빈 문자열', normalizeDay({ n: 1 }).date, '');
+eq('normalizeDay: item.text가 없으면 빈 문자열',
+  normalizeDay({ n: 1, date: '', items: [{ id: 'a', time: '09:00' }] }).items[0].text, '');
+eq('normalizeDay: 항목이 아닌 값은 걸러낸다',
+  normalizeDay({ n: 1, items: [null, { id: 'a' }, 3] }).items.length, 1);
+eq('normalizeDay: 정상 일차는 그대로', normalizeDay(
+  { n: 1, date: '2026-07-28', items: [{ id: 'a', time: '09:00', text: '출발' }] }).items,
+  [{ id: 'a', time: '09:00', text: '출발' }]);
+eq('normalizeDay: null은 null', normalizeDay(null), null);
+eq('dowOf: 파싱 불가능한 날짜는 빈 문자열', dowOf(''), '');
+eq('isUndecided: text가 없어도 던지지 않고 미정으로 본다', isUndecided(undefined), true);
+
+(function () {
+  // 선택되지 않은 일차의 date까지 renderTabs가 읽는다 — 그 일차가 손상돼 있어도
+  // 화면 전체가 죽으면 안 된다.
+  var trip = { id: 't_broken', days: [
+    { n: 1, date: '2026-07-28', theme: '', meals: [],
+      items: [{ id: 'a', time: '09:00' }] },
+    { n: 2 }
+  ] };
+  var st = { get: function (k, fb) { return fb; }, set: function () {} };
+  global.__setDomTarget('daytabs');
+  var el = global.__setDomTarget('timeline');
+  var threw = false;
+  try {
+    var day = pickDay(trip, 1, '2026-07-28');
+    renderTabs(trip, 1, function () {});
+    renderTimeline(trip, day, st);
+  } catch (e) { threw = true; }
+  eq('date 없는 일차가 섞여 있어도 렌더가 던지지 않음', threw, false);
+  eq('text 없는 항목도 그려진다(미정 처리)', el.innerHTML.indexOf('slot undecided') !== -1, true);
 })();

@@ -44,6 +44,8 @@ body { margin:0; background:var(--bg); color:var(--text);
   border-radius:999px; padding:2px 8px; letter-spacing:.02em; }
 .line.timed .tag { background:#e03131; }
 .line.booked .tag { background:#0ca678; }
+#timeline .empty { color:var(--muted); text-align:center; font-size:.88rem;
+  margin:0; padding:26px 16px; }
 .slot.undecided { background:#fff4e6; }
 .slot.undecided .time { color:var(--accent2); }
 #fixed { margin:12px; }
@@ -803,11 +805,71 @@ function cloneSample() {
   return JSON.parse(JSON.stringify(window.SAMPLE_TRIP));
 }
 
+// 저장에 성공하면 새 여행 id, 실패하면 null. 다른 쓰기 경로(submitTripForm,
+// afterItemEdit)와 동일하게 성공 여부를 호출부에 넘긴다 — 여기서 삼키면 저장이
+// 실패해도 화면은 존재하지 않는 여행으로 이동했다가 목록으로 되튕길 뿐이라
+// 사용자에게 실패가 전혀 드러나지 않는다.
 function installSample() {
   var t = cloneSample();
   t.id = newTripId();
-  saveTrip(t);
-  return t.id;
+  return saveTrip(t) ? t.id : null;
+}
+
+// ---- 식사 메모 키: 일차 번호 → 날짜 ----
+// meal 메모는 원래 meal:<n>:<i>로 저장됐는데, resyncDays는 날짜를 기준으로 일차를
+// 보존하면서 n을 1부터 다시 매긴다. 그래서 시작일을 하루 앞당기기만 해도 모든 n이
+// 밀려 메모가 엉뚱한 날에 붙거나(meals가 없는 날로 밀리면) 아예 화면에서 사라진다.
+// 날짜는 그 일차의 안정된 식별자이므로 meal:<date>:<i>로 다시 키를 잡는다.
+
+// trip.days에서 { 일차번호: 날짜 } 표를 만든다.
+function dayDateByN(trip) {
+  var m = {};
+  var days = (trip && Array.isArray(trip.days)) ? trip.days : [];
+  days.forEach(function (d) {
+    if (d && typeof d.date === 'string' && d.date) m[String(d.n)] = d.date;
+  });
+  return m;
+}
+
+// 구 키(meal:<숫자>:<i>)를 새 키(meal:<날짜>:<i>)로 옮긴다. 옮길 필요가 없거나
+// 옮길 수 없으면 null:
+//  - meal: 로 시작하지 않는 키
+//  - 가운데 조각이 숫자가 아닌 키 = 이미 날짜 기준이다(YYYY-MM-DD에는 '-'가 있다).
+//    이 판정 덕분에 마이그레이션을 몇 번을 돌려도 두 번째부터는 아무 것도 하지 않는다.
+//  - 그 번호에 해당하는 일차가 없는 여행(고아 메모는 건드리지 않고 남겨 둔다)
+function mealMigrateKey(sub, byN) {
+  var m = /^meal:([0-9]+):(.+)$/.exec(String(sub));
+  if (!m) return null;
+  var date = byN[m[1]];
+  return date ? ("meal:" + date + ":" + m[2]) : null;
+}
+
+// 저장된 모든 여행의 구 식사 메모 키를 한 번 옮긴다. 여러 번 불러도 안전하다
+// (위 mealMigrateKey가 이미 날짜 기준인 키를 걸러낸다). 새 키 쓰기가 실패하면
+// 구 키를 지우지 않으므로 다음 부팅에 그대로 재시도된다. 옮긴 키 개수를 돌려준다.
+function migrateMealKeys() {
+  var moved = 0;
+  listTrips().forEach(function (row) {
+    var trip = loadTrip(row.id);
+    if (!trip) return;
+    var byN = dayDateByN(trip);
+    var prefix = tripKey(row.id, "meal:");
+    var found = [];
+    for (var i = 0; i < localStorage.length; i++) {
+      var k = localStorage.key(i);
+      if (k && k.indexOf(prefix) === 0) found.push(k);
+    }
+    found.forEach(function (k) {
+      var sub = k.slice(tripKey(row.id, "").length);
+      var nk = mealMigrateKey(sub, byN);
+      if (!nk || nk === sub) return;
+      var target = tripKey(row.id, nk);
+      // 이미 날짜 기준 값이 있으면 그쪽이 최신이다 — 구 키만 치운다.
+      if (localStorage.getItem(target) !== null) { lsDel(k); moved++; return; }
+      if (lsSet(target, lsGet(k, null))) { lsDel(k); moved++; }
+    });
+  });
+  return moved;
 }
 
 // 구 osaka-trip:v1:* 를 새 여행 하나로 옮긴다. 옮길 게 없으면 null.
@@ -826,12 +888,17 @@ function migrateLegacy() {
   t.id = newTripId();
   var ok = saveTrip(t);
   var st = tripStore(t.id);
+  var byN = dayDateByN(t);
   found.forEach(function (k) {
     var sub = k.slice(LEGACY_PREFIX.length);
     // 알려진 키와 meal:<n>:<i> 형태만 옮긴다
     if (LEGACY_KEYS.indexOf(sub) >= 0 || sub.indexOf("meal:") === 0) {
+      // 구 데이터의 meal 키는 일차 번호 기준이다 — 옮기는 김에 날짜 기준으로 바꿔
+      // 넣는다. 그래야 migrateMealKeys와 이 함수의 실행 순서가 어느 쪽이든 결과가
+      // 같다(이 함수가 먼저면 애초에 옮길 게 없고, migrateMealKeys가 먼저였다면
+      // 그때는 이 여행이 아직 없었으므로 여기서 처리된다).
       // st.set을 먼저 평가해야 ok가 이미 false여도 나머지 키 복사를 계속 시도한다
-      ok = st.set(sub, lsGet(k, null)) && ok;
+      ok = st.set(mealMigrateKey(sub, byN) || sub, lsGet(k, null)) && ok;
     }
   });
 
@@ -855,7 +922,12 @@ var DAY_MS = 86400000;
 function dateMs(iso) { return Date.parse(iso + "T00:00:00Z"); }
 function msDate(ms) { return new Date(ms).toISOString().slice(0, 10); }
 
-function dowOf(iso) { return DOW[new Date(dateMs(iso)).getUTCDay()]; }
+// 날짜가 비었거나(손상된 저장값) 파싱 불가능하면 빈 문자열 — 던지지도, 'undefined'를
+// 화면에 흘리지도 않는다(normalizeDay 주석 참고).
+function dowOf(iso) {
+  var ms = dateMs(iso);
+  return isNaN(ms) ? '' : DOW[new Date(ms).getUTCDay()];
+}
 function addDays(iso, n) { return msDate(dateMs(iso) + n * DAY_MS); }
 function daysBetween(a, b) { return Math.round((dateMs(b) - dateMs(a)) / DAY_MS) + 1; }
 
@@ -866,6 +938,22 @@ function newSectionId() { return "s_" + Date.now().toString(36) + (_seq++).toStr
 function blankDay(n, iso) {
   return { n: n, date: iso, theme: "", place: null, curCode: null,
            items: [], meals: [], images: [] };
+}
+
+// 손상된 저장값(검증 없이 가져온 JSON, 손으로 고친 localStorage)이 렌더에서 예외를
+// 던지지 않게 하는 최소 보정. 지금까지는 day.items만 배열로 맞춰줬는데, 렌더가 실제로
+// 메서드를 부르는 필드는 그것 말고도 둘 더 있다 — day.date(escHtml(d.date.slice(5)),
+// dowOf(day.date))와 item.text(isUndecided(it.text)). 세 필드를 같은 계약으로 한 번에
+// 보정한다. 값을 버리지 않고 문자열로 맞추기만 하므로 정상 데이터에는 아무 영향이 없다.
+function normalizeDay(day) {
+  if (!day) return null;
+  if (!Array.isArray(day.items)) day.items = [];
+  if (typeof day.date !== 'string') day.date = '';
+  day.items = day.items.filter(function (it) { return it && typeof it === 'object'; });
+  day.items.forEach(function (it) {
+    if (typeof it.text !== 'string') it.text = it.text == null ? '' : String(it.text);
+  });
+  return day;
 }
 
 function buildDays(start, end) {
@@ -954,8 +1042,11 @@ function itemLinesHtml(text) {
 // 세션에 묶인 UI 상태일 뿐 trip 데이터가 아니므로 저장소에 넣지 않는다.
 var EDIT_MODE = false;
 
+// text가 문자열이 아닌 손상된 항목(검증 없이 가져온 JSON 등)에서도 던지지 않는다 —
+// normalizeDay가 렌더 전에 보정하지만, 이 판정 자체도 같은 계약을 지킨다.
 function isUndecided(text) {
-  return /뭐먹지|\?$/.test(text.trim()) || text.trim() === "";
+  var t = String(text == null ? "" : text).trim();
+  return /뭐먹지|\?$/.test(t) || t === "";
 }
 
 function dday(todayISO, startISO, endISO) {
@@ -1010,7 +1101,11 @@ function spendByDate(list) {
   });
 }
 
-function mealKey(dayN, i) { return "meal:" + Number(dayN) + ":" + i; }
+// 일차 번호(n)가 아니라 날짜로 키를 잡는다 — resyncDays가 날짜를 기준으로 일차를
+// 보존하면서 n을 1부터 다시 매기기 때문에, n으로 키를 잡으면 시작일을 하루만 앞당겨도
+// 메모가 통째로 밀려 엉뚱한 날에 붙거나 화면에서 사라진다(store.js의 migrateMealKeys 참고).
+// 날짜는 문자열이므로 속성 컨텍스트에 넣을 때 반드시 escHtml을 거쳐야 한다.
+function mealKey(date, i) { return "meal:" + String(date) + ":" + i; }
 
 // ---- 상단 요약 ----
 
@@ -1020,8 +1115,10 @@ function summarySpend(st, lead) {
   if (!tot) return '';
   const fx = spendFx(st);
   const krw = fx ? ' (약 ' + jpyToKrw(tot, fx).toLocaleString('ko-KR') + '원)' : '';
+  // lead면 줄의 맨 앞이므로 선행 공백도 붙이지 않는다 — 붙이면 .cost가 공백으로 시작한다.
   const dot = lead ? '' : '· ';
-  return ' <span class="spent">' + dot + '💸 현지 ¥' + tot.toLocaleString('ko-KR') + krw + '</span>';
+  const gap = lead ? '' : ' ';
+  return gap + '<span class="spent">' + dot + '💸 현지 ¥' + tot.toLocaleString('ko-KR') + krw + '</span>';
 }
 
 function renderSummary(trip, st) {
@@ -1036,7 +1133,9 @@ function renderSummary(trip, st) {
     '<h1>' + escHtml(trip.title) + '</h1>' +
     '<div class="period">' + escHtml(trip.start) + ' ~ ' + escHtml(trip.end) +
       ' · ' + nights + '박 ' + (nights + 1) + '일</div>' +
-    (trip.hotel ? '<div class="hotel">🏨 ' + escHtml(trip.hotel) + '</div>' : '') +
+    // 숙소는 여러 줄 textarea다(editor.js) — day.theme과 같은 방식으로 줄바꿈을
+    // 가운뎃점으로 이어 한 줄에 눌러 담는다. 그냥 두면 줄바꿈이 사라져 붙어 보인다.
+    (trip.hotel ? '<div class="hotel">🏨 ' + escHtml(trip.hotel).replace(/\n/g, ' · ') + '</div>' : '') +
     (function () {
       var line = wxLine(wxState.map, todayLocal());
       return line ? '<div class="wx">' + line.replace(" ", " 오늘 ") + wxStamp() + '</div>' : '';
@@ -1122,7 +1221,7 @@ function afterItemEdit(trip, day, st, ok) {
 
 function renderTimeline(trip, day, st) {
   const main = document.getElementById("timeline");
-  const rows = day.items.map(function (it) {
+  const slots = day.items.map(function (it) {
     const cls = isUndecided(it.text) ? ' undecided' : '';
     const btns = EDIT_MODE
       ? '<div class="slot-btns">' +
@@ -1133,12 +1232,19 @@ function renderTimeline(trip, day, st) {
       '<div class="time">' + escHtml(it.time) + '</div>' +
       '<div class="what">' + itemLinesHtml(it.text) + btns + '</div></div>';
   }).join('');
+  // 새로 만든 여행의 1일차는 일정이 하나도 없다. 편집 모드가 아니면 추가 폼도 없어서
+  // 예전에는 완전히 빈 카드만 보였다 — 무엇을 해야 하는지 알려 주는 줄을 넣는다.
+  // 편집 모드에서는 바로 아래에 추가 폼이 있으므로 안내가 필요 없다.
+  const rows = slots || (EDIT_MODE
+    ? ''
+    : '<p class="empty">아직 일정이 없습니다. 편집을 눌러 추가해 보세요.</p>');
   const meals = (day.meals && day.meals.length)
     ? '<div class="meals"><div class="meals-h">🍽 뭐먹지</div>' +
       day.meals.map(function (m, i) {
-        const val = escHtml(st.get(mealKey(day.n, i), ""));
+        const key = mealKey(day.date, i);
+        const val = escHtml(st.get(key, ""));
         return '<div class="meal"><div class="meal-note">' + itemLinesHtml(m) + '</div>' +
-          '<input class="memo" data-key="' + mealKey(day.n, i) +
+          '<input class="memo" data-key="' + escHtml(key) +
           '" placeholder="식당/메모 입력" value="' + val + '"></div>';
       }).join('') + '</div>'
     : '';
@@ -1183,7 +1289,7 @@ function renderTimeline(trip, day, st) {
         // sortItems의 사전순 비교에서 '9:00'이 '14:00'보다 뒤로 밀려버린다(review 지적).
         var normTime = normalizeTimeInput(time);
         if (!normTime) {
-          alert('시간 형식이 올바르지 않습니다. 예: 09:00');
+          alert(MSG_BAD_TIME);
           return;
         }
         var text = prompt('일정 내용', it.text);
@@ -1193,7 +1299,7 @@ function renderTimeline(trip, day, st) {
         // 빈 문자열을 그대로 받아주면 "시간만 있고 내용은 빈" undecided 행이 생긴다.
         // 두 입력 경로의 보장을 맞춘다.
         if (!text) {
-          alert('일정 내용을 입력해 주세요.');
+          alert(MSG_EMPTY_TEXT);
           return;
         }
         updateItem(trip, day.n, it.id, { time: normTime, text: text });
@@ -1203,10 +1309,15 @@ function renderTimeline(trip, day, st) {
     var af = main.querySelector('.item-add');
     if (af) af.addEventListener('submit', function (e) {
       e.preventDefault();
-      var t = af.querySelector('.ia-time').value;
-      var x = af.querySelector('.ia-text').value.trim();
-      if (!t || !x) return;
-      addItem(trip, day.n, { time: t, text: x });
+      // required 속성이 막아 주는 "아무것도 안 채운 제출"은 조용히 무시하고, 실제로
+      // 값이 들어왔는데 형식이 틀린 경우만 알린다(parseItemInput — prompt 경로와 동일한
+      // 검증·메시지를 쓴다).
+      var raw = af.querySelector('.ia-time').value;
+      var rawText = af.querySelector('.ia-text').value;
+      if (!raw && !rawText.trim()) return;
+      var p = parseItemInput(raw, rawText);
+      if (!p.ok) { alert(p.message); return; }
+      addItem(trip, day.n, { time: p.time, text: p.text });
       afterItemEdit(trip, day, st, saveTripBody(trip));
     });
   }
@@ -1216,7 +1327,8 @@ function renderTimeline(trip, day, st) {
 
 function sectionBodyHtml(trip, sec) {
   if (sec.type === "builtin") {
-    if (sec.body === "hotel")    return escHtml(trip.hotel);
+    // 숙소는 여러 줄 입력이므로 type:"text" 섹션과 같은 방식으로 줄 단위로 그린다.
+    if (sec.body === "hotel")    return trip.hotel ? itemLinesHtml(trip.hotel) : '';
     if (sec.body === "packing")  return '<div id="packing-body"></div>';
     if (sec.body === "spend")    return '<div id="spend-body"></div>';
     if (sec.body === "expenses") return expensesTableHtml(trip);
@@ -1555,6 +1667,24 @@ function normalizeTimeInput(s) {
   return (h < 10 ? '0' : '') + h + ':' + m[2];
 }
 
+// 일정 입력(추가 폼·prompt 편집)이 공유하는 메시지. 두 경로가 같은 실수에 서로 다른
+// 말을 하지 않도록 한 곳에 둔다.
+var MSG_BAD_TIME = '시간 형식이 올바르지 않습니다. 예: 09:00';
+var MSG_EMPTY_TEXT = '일정 내용을 입력해 주세요.';
+
+// 추가 폼(item-add)의 입력을 저장 가능한 형태로 검증·정규화한다. <input type="time">이
+// 지원되지 않는 환경에서는 이 입력이 그냥 text로 떨어져 '9:00' 같은 값이 그대로 들어오는데,
+// sortItems가 문자열 사전순으로 비교하므로 그대로 저장하면 '14:00'보다 뒤로 밀린다 —
+// prompt 편집 경로가 이미 거치는 검증(normalizeTimeInput + 빈 내용 거부)을 추가 폼도
+// 똑같이 거치게 한다. ok:false면 message를 그대로 사용자에게 보여주면 된다.
+function parseItemInput(rawTime, rawText) {
+  var time = normalizeTimeInput(rawTime);
+  if (!time) return { ok: false, message: MSG_BAD_TIME };
+  var text = String(rawText == null ? '' : rawText).trim();
+  if (!text) return { ok: false, message: MSG_EMPTY_TEXT };
+  return { ok: true, time: time, text: text };
+}
+
 function findDay(trip, dayN) {
   return trip.days.filter(function (d) { return d.n === dayN; })[0] || null;
 }
@@ -1677,13 +1807,12 @@ function wxRefresh(st) {
 // dayN에 해당하는 day를 찾아 타임라인만 다시 그린다. renderTabs(따라서 tab strip의
 // scrollIntoView)는 건드리지 않는다 — 탭 목록이나 선택된 탭이 바뀌지 않은 상황(날씨 갱신,
 // 편집 모드 토글)에서 renderTabs까지 다시 부르면 스크롤이 제자리서 튄다.
-// showDay가 하던 "day.items가 배열이 아니면 빈 배열로 고쳐 넣는" 보정도 여기서 함께
-// 한다 — renderTimeline을 직접 부르는 경로(wxRepaint, 편집 모드 토글, afterItemEdit)가
-// 전부 이 보정을 거치게 해서, 손상된 저장값(items 없는 day)을 만나도 던지지 않는다.
+// 손상된 저장값 보정(normalizeDay)도 여기서 함께 한다 — renderTimeline을 직접 부르는
+// 경로(wxRepaint, 편집 모드 토글, afterItemEdit)가 전부 이 보정을 거치게 해서,
+// items/date/text가 망가진 day를 만나도 던지지 않는다.
 function repaintDay(trip, dayN, st) {
   var day = pickDay(trip, dayN);
   if (!day) return null;
-  if (!Array.isArray(day.items)) day.items = [];
   renderTimeline(trip, day, st);
   return day;
 }
@@ -1752,6 +1881,10 @@ function showList() {
 // todayISO는 테스트에서 주입하기 위한 선택 인자다. 비우면 오늘 날짜를 쓴다.
 function pickDay(trip, dayN, todayISO) {
   var days = (trip && Array.isArray(trip.days)) ? trip.days : [];
+  // 손상된 저장값 보정은 고르기 전에, 그리고 고른 일차뿐 아니라 모든 일차에 대해 한다 —
+  // 탭 목록(renderTabs)은 선택되지 않은 일차의 date까지 읽으므로(d.date.slice(5)),
+  // 고른 일차만 보정해서는 date가 없는 다른 일차 하나 때문에 화면 전체가 죽는다.
+  days.forEach(normalizeDay);
   if (!days.length) return null;
   var day = null;
   if (dayN) day = days.filter(function (d) { return d.n === dayN; })[0];
@@ -1769,7 +1902,6 @@ function showDay(trip, dayN) {
   CUR.dayN = day ? day.n : null;
   if (day) {
     renderTabs(trip, day.n, function (n) { go('#/t/' + trip.id + '/d/' + n); });
-    if (!Array.isArray(day.items)) day.items = [];
     renderTimeline(trip, day, CUR.st);
   } else {
     document.getElementById("daytabs").innerHTML = '';
@@ -1779,13 +1911,23 @@ function showDay(trip, dayN) {
 }
 
 function showTrip(id, dayN) {
-  var trip = loadTrip(id);
-  if (!trip) { go('#/'); return; }
   // 여행을 "여는" 경우에만 화면 전체를 세운다: 다른 여행으로 바뀌었거나,
   // 목록·편집 등 다른 화면에서 돌아온 경우. 같은 여행 안에서 일차 탭만 누른
   // 경우에는 showDay만 돈다.
   var switched = (CUR.id !== id);
   var opening = switched || document.getElementById("screen-trip").hidden;
+
+  // 여는 경우에만 저장소에서 다시 읽는다. 일차 탭 전환에서까지 loadTrip을 부르면
+  // CUR.trip이 매번 새 객체로 갈아치워지는데, #summary와 #fixed는 여는 경로에서만
+  // 다시 그려지므로 그 핸들러들은 "이전에 불러온" trip을 계속 붙들고 있게 된다.
+  // 그 상태에서 편집 토글(renderSummary→repaintDay)을 누르면 타임라인 전체가 낡은
+  // 스냅샷에 다시 묶이고, 그 뒤의 addItem/updateItem/removeItem + saveTripBody(trip)이
+  // 탭 전환 이후 저장된 일정을 통째로 덮어써 지운다(실제로 재현됨).
+  // 여는 경로는 항상 #summary/#fixed를 함께 다시 그리므로, 그때만 다시 읽으면
+  // 화면 위의 모든 핸들러가 언제나 CUR.trip 하나만 붙들게 된다.
+  // 덤으로 탭을 누를 때마다 돌던 JSON.parse 한 번이 사라진다.
+  var trip = opening ? loadTrip(id) : CUR.trip;
+  if (!trip) { go('#/'); return; }
 
   CUR.id = id; CUR.trip = trip; CUR.st = tripStore(id);
   // EDIT_MODE는 세션에 묶인 UI 상태일 뿐 trip 데이터가 아니다(views.js 위 주석 참고) —
@@ -1819,11 +1961,23 @@ document.addEventListener("DOMContentLoaded", function () {
   // 앱 화면이 없는 페이지(test.html 등)에서는 부팅하지 않는다.
   if (!document.getElementById("screen-list")) return;
   migrateLegacy();
+  // 식사 메모 키를 일차 번호 기준에서 날짜 기준으로 옮긴다(store.js 주석 참고).
+  // migrateLegacy 뒤에 두지만, 어느 쪽이 먼저 돌아도 결과가 같도록 설계돼 있다.
+  migrateMealKeys();
 
   document.getElementById("new-trip")
     .addEventListener("click", function () { go('#/new'); });
   document.getElementById("add-sample")
-    .addEventListener("click", function () { go('#/t/' + installSample()); });
+    .addEventListener("click", function () {
+      // installSample은 저장 실패 시 null을 돌려준다 — 그대로 이동하면 showTrip이
+      // 여행을 찾지 못해 목록으로 조용히 튕겨 나가고, 사용자는 아무 설명도 못 받는다.
+      var id = installSample();
+      if (!id) {
+        alert('샘플 여행을 저장하지 못했습니다. 기기 저장 공간을 확인해 주세요.');
+        return;
+      }
+      go('#/t/' + id);
+    });
 
   // 여행이 하나뿐이면 목록을 건너뛰고 바로 연다.
   var trips = listTrips();

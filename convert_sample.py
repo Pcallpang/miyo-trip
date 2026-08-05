@@ -1,6 +1,14 @@
 # -*- coding: utf-8 -*-
 """data.js(구 스키마) -> sample-trip.js(새 스키마) 1회 변환.
-아코디언 순서를 원본 그대로 재현하려고 sections에 내장 섹션까지 함께 넣는다."""
+아코디언 순서를 원본 그대로 재현하려고 sections에 내장 섹션까지 함께 넣는다.
+
+주의: 이 스크립트는 이미 한 번 실행돼 sample-trip.js를 만들어 낸 뒤로는 다시 돌지
+않는다. 입력인 data.js가 0eb7d6f 커밋("해시 라우터와 여행 목록 화면, data.js 하드코딩 제거")
+에서 삭제됐기 때문이다. 따라서 sample-trip.js는 더 이상 재생성할 수
+없고, 손볼 일이 있으면 sample-trip.js를 직접 고치면 된다. 파일을 지우지 않고 남겨 두는
+이유는 샘플 데이터가 어떤 구 스키마에서 어떤 규칙으로 나왔는지(특히 sections 순서와
+i_<n>_<i> 형태의 항목 id) 기록해 두는 유일한 문서이기 때문이다. 다시 돌리려면
+`git show 0eb7d6f^:data.js`로 원본을 꺼내 와야 한다."""
 import json, os, re
 
 BASE = os.path.dirname(os.path.abspath(__file__))
