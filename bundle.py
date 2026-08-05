@@ -33,9 +33,12 @@ html = """<!doctype html>
 </section>
 <section id="screen-trip" hidden>
 <header id="summary"></header>
+<div id="tab-day">
 <nav id="daytabs"></nav>
 <main id="timeline"></main>
-<section id="fixed"></section>
+</div>
+<div id="tab-panel"></div>
+<nav id="tabbar"></nav>
 </section>
 <section id="screen-edit" hidden></section>
 """ + "".join("<script>\n" + read(s) + "\n</script>\n" for s in SCRIPTS) + """</body>

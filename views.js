@@ -408,9 +408,16 @@ function renderTabbar(trip, tab, onSelect) {
 }
 
 
+// renderSpend는 #spend-body를 통째로 다시 그린다 — 목록·합계·환율이 한 덩어리라
+// 부분 갱신이 오히려 복잡하다. 대신 추가 폼에 치던 값은 보존한다: 항목을 하나
+// 삭제하거나 환율을 고치는 것만으로 입력 중이던 금액·내용이 사라지면 안 된다.
+// 제출 경로는 값을 비우는 게 맞으므로 그쪽에서 명시적으로 지운다.
 function renderSpend(trip, st) {
   const body = document.getElementById("spend-body");
   if (!body) return;
+  const keepAmt = (body.querySelector('.sjpy-in') || {}).value || '';
+  const keepNote = (body.querySelector('.snote-in') || {}).value || '';
+  const keepCat = (body.querySelector('.scat-in') || {}).value || '';
   const list = spendList(st);
   const fx = spendFx(st);
   const tot = spendTotalJpy(list);
@@ -449,6 +456,9 @@ function renderSpend(trip, st) {
       fx + '"> 원</div>';
 
   const form = body.querySelector('.spend-add');
+  if (keepAmt) form.querySelector('.sjpy-in').value = keepAmt;
+  if (keepNote) form.querySelector('.snote-in').value = keepNote;
+  if (keepCat) form.querySelector('.scat-in').value = keepCat;
   form.addEventListener('submit', function (e) {
     e.preventDefault();
     const jin = form.querySelector('.sjpy-in');
@@ -465,6 +475,9 @@ function renderSpend(trip, st) {
       note: form.querySelector('.snote-in').value.trim()
     });
     st.set("spend", cur);
+    // 방금 기록한 값이 폼에 되살아나지 않도록 명시적으로 비운다.
+    jin.value = '';
+    form.querySelector('.snote-in').value = '';
     renderSpend(trip, st);
     renderSummary(trip, st);
     const next = body.querySelector('.sjpy-in');
