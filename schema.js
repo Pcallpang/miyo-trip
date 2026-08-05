@@ -77,14 +77,11 @@ function resyncDays(days, start, end) {
   return out;
 }
 
+// 내장 항목(숙소·준비물·경비)은 하단 탭이 됐다. sections는 사용자가 만든 것만 담는다.
 function defaultSections() {
-  return [
-    { id: newSectionId(), icon: "🏨", title: "숙소",      type: "builtin", body: "hotel" },
-    { id: newSectionId(), icon: "🎒", title: "준비물",    type: "builtin", body: "packing" },
-    { id: newSectionId(), icon: "💸", title: "현지 경비", type: "builtin", body: "spend" },
-    { id: newSectionId(), icon: "💰", title: "경비 내역", type: "builtin", body: "expenses" }
-  ];
+  return [];
 }
+
 
 function emptyTrip(o) {
   return {

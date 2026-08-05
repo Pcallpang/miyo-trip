@@ -99,7 +99,7 @@ function repaintDay(trip, dayN, st) {
 
 // 날씨가 바뀌면 날씨를 쓰는 화면(요약·타임라인)만 다시 그린다.
 // showTrip 전체를 다시 부르면 renderTabs의 scrollIntoView로 스크롤이 튀고
-// renderFixed가 열려 있던 아코디언(details)과 입력 중이던 값을 날린다.
+// 패널(#tab-panel)이 열려 있던 아코디언과 입력 중이던 값을 날린다.
 function wxRepaint() {
   if (!CUR.trip) return;
   if (document.getElementById("screen-trip").hidden) return;
@@ -283,6 +283,8 @@ document.addEventListener("DOMContentLoaded", function () {
   // 식사 메모 키를 일차 번호 기준에서 날짜 기준으로 옮긴다(store.js 주석 참고).
   // migrateLegacy 뒤에 두지만, 어느 쪽이 먼저 돌아도 결과가 같도록 설계돼 있다.
   migrateMealKeys();
+  // 내장 섹션은 하단 탭이 됐다 — 데이터에 남아 있던 항목을 걷어낸다.
+  migrateSections();
 
   document.getElementById("new-trip")
     .addEventListener("click", function () { go('#/new'); });

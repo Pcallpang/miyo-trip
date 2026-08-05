@@ -315,14 +315,6 @@ function renderTimeline(trip, day, st) {
 // ---- 하단 고정 섹션 ----
 
 function sectionBodyHtml(trip, sec) {
-  if (sec.type === "builtin") {
-    // 숙소는 여러 줄 입력이므로 type:"text" 섹션과 같은 방식으로 줄 단위로 그린다.
-    if (sec.body === "hotel")    return trip.hotel ? itemLinesHtml(trip.hotel) : '';
-    if (sec.body === "packing")  return '<div id="packing-body"></div>';
-    if (sec.body === "spend")    return '<div id="spend-body"></div>';
-    if (sec.body === "expenses") return expensesTableHtml(trip);
-    return '';
-  }
   if (sec.type === "text") return itemLinesHtml(sec.body);
   if (sec.type === "list") {
     return '<ul>' + sec.body.map(function (t) {
@@ -415,15 +407,6 @@ function renderTabbar(trip, tab, onSelect) {
   });
 }
 
-function renderFixed(trip, st) {
-  document.getElementById("fixed").innerHTML = trip.sections.map(function (sec, i) {
-    return '<details' + (i === 0 ? ' open' : '') + '>' +
-      '<summary>' + escHtml(sec.icon) + ' ' + escHtml(sec.title) + '</summary>' +
-      '<div class="acc">' + sectionBodyHtml(trip, sec) + '</div></details>';
-  }).join('');
-  renderPacking(trip, st);
-  renderSpend(trip, st);
-}
 
 function renderSpend(trip, st) {
   const body = document.getElementById("spend-body");

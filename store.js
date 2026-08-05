@@ -130,6 +130,26 @@ function mealMigrateKey(sub, byN) {
 // 저장된 모든 여행의 구 식사 메모 키를 한 번 옮긴다. 여러 번 불러도 안전하다
 // (위 mealMigrateKey가 이미 날짜 기준인 키를 걸러낸다). 새 키 쓰기가 실패하면
 // 구 키를 지우지 않으므로 다음 부팅에 그대로 재시도된다. 옮긴 키 개수를 돌려준다.
+function stripBuiltinSections(sections) {
+  if (!Array.isArray(sections)) return [];
+  return sections.filter(function (s) { return !s || s.type !== "builtin"; });
+}
+
+// 내장 섹션은 하단 탭이 됐으므로 데이터에서 걷어낸다. 재실행해도 안전하다
+// (걸러낼 게 없으면 길이가 같아 쓰기를 건너뛴다).
+function migrateSections() {
+  var changed = 0;
+  listTrips().forEach(function (row) {
+    var trip = loadTrip(row.id);
+    if (!trip) return;
+    var next = stripBuiltinSections(trip.sections);
+    if (next.length === (trip.sections || []).length) return;
+    trip.sections = next;
+    if (saveTripBody(trip)) changed++;
+  });
+  return changed;
+}
+
 function migrateMealKeys() {
   var moved = 0;
   listTrips().forEach(function (row) {

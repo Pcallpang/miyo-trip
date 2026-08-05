@@ -121,9 +121,8 @@ eq('남은 날짜의 일정 보존', R[0].items, [{ id: 'i_x', time: '09:00', te
 eq('남은 날짜의 테마 보존', R[0].theme, '테마파크');
 eq('새로 생긴 날짜는 비어 있음', R[2].items, []);
 
-eq('내장 섹션 4개', defaultSections().map(function (s) { return s.body; }),
-  ['hotel', 'packing', 'spend', 'expenses']);
-eq('내장 섹션 타입', defaultSections()[0].type, 'builtin');
+// 내장 섹션(숙소·준비물·경비)은 하단 탭이 됐다 — sections에는 사용자가 만든 것만 남는다.
+eq('새 여행의 기본 섹션은 없음', defaultSections(), []);
 
 var NT = emptyTrip({ title: '방콕', start: '2026-09-01', end: '2026-09-04' });
 eq('새 여행 스키마 버전', NT.schema, 1);
@@ -887,12 +886,14 @@ eq('두 입력 경로가 같은 시간 오류 메시지를 쓴다', MSG_BAD_TIME
   eq('요약 헤더의 숙소 줄바꿈은 가운뎃점으로 이어진다(day.theme과 동일)',
     el.innerHTML.indexOf('🏨 호텔 그란비아 · 체크인 15:00 / 체크아웃 11:00') !== -1, true);
 
-  var body = sectionBodyHtml(trip, { type: 'builtin', body: 'hotel' });
-  eq('숙소 섹션 본문은 줄 단위로 그린다',
-    body, '<div class="line">호텔 그란비아</div>' +
-          '<div class="line">체크인 15:00 / 체크아웃 11:00</div>');
-  eq('숙소가 비면 섹션 본문도 빈 문자열',
-    sectionBodyHtml({ hotel: '' }, { type: 'builtin', body: 'hotel' }), '');
+  // 숙소는 builtin 섹션에서 숙소 탭으로 옮겨갔다 — 줄 단위 렌더 계약은 그대로다.
+  var body = panelHtml(trip, 'hotel');
+  eq('숙소 탭 본문은 줄 단위로 그린다',
+    body, '<div class="panel-card">' +
+          '<div class="line">호텔 그란비아</div>' +
+          '<div class="line">체크인 15:00 / 체크아웃 11:00</div></div>');
+  eq('숙소가 비면 빈 상태를 보여준다',
+    panelHtml({ hotel: '' }, 'hotel').indexOf('class="empty"') >= 0, true);
 })();
 
 // ---- Minor(F7): installSample은 저장 성공 여부를 삼키지 않는다.
@@ -1007,3 +1008,33 @@ eq('정보 패널 섹션 제목 XSS',
     'info').indexOf('<img src=x>') === -1, true);
 
 eq('일정 탭은 패널을 안 쓴다', panelHtml(PT, 'day'), '');
+
+// ---- 내장 섹션 제거 ----
+eq('builtin만 걸러낸다', stripBuiltinSections([
+  { id: 'a', type: 'table' }, { id: 'b', type: 'builtin', body: 'hotel' },
+  { id: 'c', type: 'list' },  { id: 'd', type: 'builtin', body: 'spend' }
+]).map(function (s) { return s.id; }), ['a', 'c']);
+eq('builtin이 없으면 그대로', stripBuiltinSections([{ id: 'a', type: 'list' }]).length, 1);
+eq('빈 배열도 안전', stripBuiltinSections([]), []);
+eq('배열이 아니면 빈 배열', stripBuiltinSections(null), []);
+
+eq('새 여행은 섹션이 비어 있다', defaultSections(), []);
+
+(function () {
+  __resetStorage();
+  var t = emptyTrip({ title: '테스트', start: '2026-09-01', end: '2026-09-02' });
+  t.sections = [
+    { id: 'u1', icon: '🚄', title: '기차', type: 'list', body: ['a'] },
+    { id: 'b1', icon: '🏨', title: '숙소', type: 'builtin', body: 'hotel' }
+  ];
+  saveTrip(t);
+  eq('마이그레이션이 한 여행을 고침', migrateSections(), 1);
+  eq('builtin이 사라짐', loadTrip(t.id).sections.map(function (s) { return s.id; }), ['u1']);
+  eq('두 번째 실행은 0건', migrateSections(), 0);
+})();
+
+eq('샘플 여행에 builtin 섹션 없음',
+  window.SAMPLE_TRIP.sections.filter(function (s) { return s.type === 'builtin'; }).length, 0);
+eq('샘플 여행의 사용자 섹션은 둘',
+  window.SAMPLE_TRIP.sections.map(function (s) { return s.title; }),
+  ['라피트 시간표', '팁']);
