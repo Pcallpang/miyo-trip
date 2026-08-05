@@ -324,6 +324,65 @@ eq('D-day 이후', dday('2026-08-05', '2026-07-28', '2026-08-03'), '여행 종�
     eq('renderSummary: budgetKRW/party 문자열은 숫자로 강제 변환되어 안전함',
       html.indexOf('NaN원 (NaN인)') !== -1, true);
   })();
+
+  // renderSummary: 💰 예산 줄과 💸 현지 경비 합계 줄은 서로 독립이어야 한다.
+  // budgetKRW는 생성/설정 폼에 입력란이 없어 기본값 0으로 남는 여행이 대부분이므로,
+  // 예산이 없어도 기록된 경비 합계는 반드시 보여야 한다(원래 결함).
+  (function () {
+    function makeTrip(budgetKRW) {
+      return {
+        title: "테스트 여행", start: "2026-07-28", end: "2026-08-03",
+        hotel: "", party: 2, budgetKRW: budgetKRW
+      };
+    }
+    function costDiv(html) {
+      var m = html.match(/<div class="cost">([\s\S]*?)<\/div>/);
+      return m ? m[1] : null;
+    }
+
+    // budgetKRW=0, 경비 있음 → 현지 경비 줄만, 선행 구분자(·) 없이.
+    (function () {
+      var trip = makeTrip(0);
+      var st = makeSt();
+      st.set("spend", [{ id: 1, date: "2026-07-29", jpy: 1000, cat: "식비", note: "" }]);
+      var el = global.__setDomTarget("summary");
+      renderSummary(trip, st);
+      var html = el.innerHTML;
+      var cost = costDiv(html);
+
+      eq('renderSummary: 예산 0·경비 있음 → .cost 존재', cost !== null, true);
+      eq('renderSummary: 예산 0·경비 있음 → 💸 현지 줄 표시', cost.indexOf('💸 현지') !== -1, true);
+      eq('renderSummary: 예산 0·경비 있음 → 💰 총 줄은 없음', cost.indexOf('💰 총') === -1, true);
+      eq('renderSummary: 예산 0·경비 있음 → 선행 구분자(·) 없음', cost.indexOf('· 💸') === -1, true);
+    })();
+
+    // budgetKRW>0, 경비 있음 → 두 줄 다, 구분자(·)로 이어짐.
+    (function () {
+      var trip = makeTrip(500000);
+      var st = makeSt();
+      st.set("spend", [{ id: 1, date: "2026-07-29", jpy: 1000, cat: "식비", note: "" }]);
+      var el = global.__setDomTarget("summary");
+      renderSummary(trip, st);
+      var html = el.innerHTML;
+      var cost = costDiv(html);
+
+      eq('renderSummary: 예산·경비 모두 있음 → 💰 총 줄 표시', cost.indexOf('💰 총') !== -1, true);
+      eq('renderSummary: 예산·경비 모두 있음 → 💸 현지 줄 표시', cost.indexOf('💸 현지') !== -1, true);
+      eq('renderSummary: 예산·경비 모두 있음 → 구분자(· 💸)로 연결됨',
+        cost.indexOf('· 💸') !== -1, true);
+    })();
+
+    // budgetKRW=0, 경비 없음 → .cost 자체가 없어야 함(빈 div/떠 있는 구분자 금지).
+    (function () {
+      var trip = makeTrip(0);
+      var st = makeSt();
+      var el = global.__setDomTarget("summary");
+      renderSummary(trip, st);
+      var html = el.innerHTML;
+
+      eq('renderSummary: 예산·경비 모두 없음 → .cost 없음', html.indexOf('class="cost"') === -1, true);
+    })();
+  })();
 })();
 
 // ---- editor.js 순수 로직 ----

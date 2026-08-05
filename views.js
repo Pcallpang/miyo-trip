@@ -86,12 +86,14 @@ function mealKey(dayN, i) { return "meal:" + Number(dayN) + ":" + i; }
 
 // ---- 상단 요약 ----
 
-function summarySpend(st) {
+// lead가 true면(다른 요약 텍스트 뒤가 아니라 줄의 맨 앞이면) "· " 구분자를 붙이지 않는다.
+function summarySpend(st, lead) {
   const tot = spendTotalJpy(spendList(st));
   if (!tot) return '';
   const fx = spendFx(st);
   const krw = fx ? ' (약 ' + jpyToKrw(tot, fx).toLocaleString('ko-KR') + '원)' : '';
-  return ' <span class="spent">· 💸 현지 ¥' + tot.toLocaleString('ko-KR') + krw + '</span>';
+  const dot = lead ? '' : '· ';
+  return ' <span class="spent">' + dot + '💸 현지 ¥' + tot.toLocaleString('ko-KR') + krw + '</span>';
 }
 
 function renderSummary(trip, st) {
@@ -111,10 +113,18 @@ function renderSummary(trip, st) {
       var line = wxLine(wxState.map, todayLocal());
       return line ? '<div class="wx">' + line.replace(" ", " 오늘 ") + wxStamp() + '</div>' : '';
     })() +
-    (trip.budgetKRW
-      ? '<div class="cost">💰 총 ' + Number(trip.budgetKRW).toLocaleString('ko-KR') + '원 (' +
-        Number(trip.party) + '인)' + summarySpend(st) + '</div>'
-      : '');
+    (function () {
+      // 사전 예산(budgetKRW)과 현지 경비 합계(summarySpend)는 서로 독립된 정보다.
+      // 예산을 입력하지 않은 여행(생성/설정 화면에 그 입력란이 없어 기본값 0으로
+      // 남는 게 보통이다)이라도 경비를 기록했다면 그 합계는 보여야 한다.
+      var budgetLine = trip.budgetKRW
+        ? '💰 총 ' + Number(trip.budgetKRW).toLocaleString('ko-KR') + '원 (' +
+          Number(trip.party) + '인)'
+        : '';
+      var spendLine = summarySpend(st, !budgetLine);
+      if (!budgetLine && !spendLine) return '';
+      return '<div class="cost">' + budgetLine + spendLine + '</div>';
+    })();
   var eb = el.querySelector('.edit-trip');
   if (eb) eb.addEventListener('click', function () { go('#/t/' + trip.id + '/edit'); });
   var mb = el.querySelector('.edit-mode');
