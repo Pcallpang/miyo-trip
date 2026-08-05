@@ -111,8 +111,13 @@ function renderSummary(trip, st) {
   const nights = daysBetween(trip.start, trip.end) - 1;
   el.innerHTML =
     '<button class="edit-trip" type="button" aria-label="여행 설정">⚙</button>' +
-    '<button class="edit-mode" type="button" aria-pressed="' + (EDIT_MODE ? 'true' : 'false') +
-      '">' + (EDIT_MODE ? '완료' : '편집') + '</button>' +
+    // 편집 토글은 일정 탭에서만 의미가 있다. CUR은 app.js에 있고 런타임에만
+    // 참조되므로 로드 순서 문제는 없다. 앱 화면이 없는 test.html에서는 CUR이
+    // 없을 수 있으므로 typeof로 막는다.
+    ((typeof CUR !== 'undefined' && CUR.tab !== 'day')
+      ? ''
+      : '<button class="edit-mode" type="button" aria-pressed="' + (EDIT_MODE ? 'true' : 'false') +
+        '">' + (EDIT_MODE ? '완료' : '편집') + '</button>') +
     '<div class="dday">' + dday(today, trip.start, trip.end) + '</div>' +
     '<h1>' + escHtml(trip.title) + '</h1>' +
     '<div class="period">' + escHtml(trip.start) + ' ~ ' + escHtml(trip.end) +

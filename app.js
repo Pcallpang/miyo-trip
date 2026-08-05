@@ -109,7 +109,7 @@ function wxRepaint() {
 
 // ---- 라우터 ----
 
-var CUR = { id: null, trip: null, st: null, dayN: null };
+var CUR = { id: null, trip: null, st: null, dayN: null, tab: "day" };
 
 function currentTrip() { return CUR.trip; }
 
@@ -190,20 +190,20 @@ function showDay(trip, dayN) {
   }
 }
 
-function showTrip(id, dayN) {
+function showTrip(id, tab, dayN) {
   // 여행을 "여는" 경우에만 화면 전체를 세운다: 다른 여행으로 바뀌었거나,
-  // 목록·편집 등 다른 화면에서 돌아온 경우. 같은 여행 안에서 일차 탭만 누른
-  // 경우에는 showDay만 돈다.
+  // 목록·편집 등 다른 화면에서 돌아온 경우. 같은 여행 안에서 탭이나 일차만
+  // 누른 경우에는 showPanelTab만 돈다.
   var switched = (CUR.id !== id);
   var opening = switched || document.getElementById("screen-trip").hidden;
 
-  // 여는 경우에만 저장소에서 다시 읽는다. 일차 탭 전환에서까지 loadTrip을 부르면
-  // CUR.trip이 매번 새 객체로 갈아치워지는데, #summary와 #fixed는 여는 경로에서만
+  // 여는 경우에만 저장소에서 다시 읽는다. 일차·탭 전환에서까지 loadTrip을 부르면
+  // CUR.trip이 매번 새 객체로 갈아치워지는데, #summary는 여는 경로에서만
   // 다시 그려지므로 그 핸들러들은 "이전에 불러온" trip을 계속 붙들고 있게 된다.
   // 그 상태에서 편집 토글(renderSummary→repaintDay)을 누르면 타임라인 전체가 낡은
   // 스냅샷에 다시 묶이고, 그 뒤의 addItem/updateItem/removeItem + saveTripBody(trip)이
   // 탭 전환 이후 저장된 일정을 통째로 덮어써 지운다(실제로 재현됨).
-  // 여는 경로는 항상 #summary/#fixed를 함께 다시 그리므로, 그때만 다시 읽으면
+  // 여는 경로는 항상 #summary를 함께 다시 그리므로, 그때만 다시 읽으면
   // 화면 위의 모든 핸들러가 언제나 CUR.trip 하나만 붙들게 된다.
   // 덤으로 탭을 누를 때마다 돌던 JSON.parse 한 번이 사라진다.
   var trip = opening ? loadTrip(id) : CUR.trip;
@@ -218,12 +218,27 @@ function showTrip(id, dayN) {
   showScreen("trip");
 
   if (opening) renderSummary(trip, CUR.st);
-  showDay(trip, dayN);
-  if (opening) {
-    renderFixed(trip, CUR.st);
-    // 날씨 요청은 여행을 열 때만, 그것도 최근에 받아온 게 없을 때만 보낸다.
-    wxRefresh(CUR.st);
-  }
+  showPanelTab(trip, tab || "day", dayN);
+  // 날씨 요청은 여행을 열 때만, 그것도 최근에 받아온 게 없을 때만 보낸다.
+  if (opening) wxRefresh(CUR.st);
+}
+
+// 탭 전환: 본문과 내비만 다시 그린다. 요약 헤더는 탭이 실제로 바뀔 때만 —
+// 편집 토글이 일정 탭에서만 보여야 하기 때문이다. 화면 전체를 다시 그리면
+// 열어둔 것이 닫히고 입력 중이던 값이 날아간다.
+function showPanelTab(trip, tab, dayN) {
+  var prev = CUR.tab;
+  CUR.tab = tab;
+  // renderPanel/renderTabbar와 같은 계약 — 컨테이너가 없는 페이지(test.html 등)에서도
+  // 던지지 않는다.
+  var dayEl = document.getElementById("tab-day");
+  var panelEl = document.getElementById("tab-panel");
+  if (dayEl) dayEl.hidden = (tab !== "day");
+  if (panelEl) panelEl.hidden = (tab === "day");
+  if (tab === "day") showDay(trip, dayN);
+  else renderPanel(trip, CUR.st, tab);
+  renderTabbar(trip, tab, function (t) { go(tabHash(trip.id, t, CUR.dayN)); });
+  if (prev !== tab) renderSummary(trip, CUR.st);
 }
 
 var TAB_DEFS = [
@@ -252,8 +267,8 @@ function tabHash(id, tab, dayN) {
 
 function route() {
   var h = location.hash || "#/";
-  var m = h.match(/^#\/t\/([^/]+)(?:\/d\/(\d+))?$/);
-  if (m) { showTrip(m[1], m[2] ? parseInt(m[2], 10) : null); return; }
+  var t = parseTripHash(h);
+  if (t) { showTrip(t.id, t.tab, t.dayN); return; }
   if (/^#\/t\/[^/]+\/edit$/.test(h)) { showEdit(h.split('/')[2]); return; }
   if (h === "#/new") { showEdit(null); return; }
   showList();

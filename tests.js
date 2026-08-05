@@ -742,11 +742,11 @@ eq('normalizeTimeInput: 빈 문자열은 null', normalizeTimeInput(''), null);
   var id = installSample();
   CUR.id = null; CUR.trip = null; CUR.st = null; CUR.dayN = null;
 
-  showTrip(id, null);
+  showTrip(id, 'day', null);
   var a = CUR.trip;
   eq('여행을 열면 CUR.trip이 세워진다', !!a && a.id === id, true);
 
-  showTrip(id, 2);
+  showTrip(id, 'day', 2);
   eq('일차 전환은 trip 객체를 갈아치우지 않는다', CUR.trip === a, true);
   eq('일차 전환은 요청한 일차를 그린다', CUR.dayN, 2);
 
@@ -773,7 +773,7 @@ eq('normalizeTimeInput: 빈 문자열은 null', normalizeTimeInput(''), null);
 
   // 반대로 "여는" 경로(목록·편집 화면에서 되돌아옴)에서는 저장소에서 다시 읽어야 한다.
   document.getElementById('screen-trip').hidden = true;
-  showTrip(id, null);
+  showTrip(id, 'day', null);
   eq('다시 열 때는 저장소에서 새로 읽는다', CUR.trip === a, false);
 
   global.fetch = prevFetch;
