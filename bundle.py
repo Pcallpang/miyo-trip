@@ -1,8 +1,6 @@
 # -*- coding: utf-8 -*-
-"""styles.css + data.js + app.js 를 index.html 구조에 인라인해
-단일 자체완결형 osaka-trip.html 을 생성한다 (모바일 file:// 대응)."""
-import base64
-import json
+"""styles.css + 스크립트들을 index.html 구조에 인라인해
+단일 자체완결형 trip.html 을 생성한다 (모바일 file:// 대응)."""
 import os
 
 BASE = os.path.dirname(os.path.abspath(__file__))
@@ -10,14 +8,7 @@ def read(name):
     with open(os.path.join(BASE, name), encoding="utf-8") as f:
         return f.read()
 
-def data_uri(name, mime):
-    with open(os.path.join(BASE, name), "rb") as f:
-        return "data:" + mime + ";base64," + base64.b64encode(f.read()).decode("ascii")
-
-css = read("styles.css")
-data = read("data.js")
-app = read("app.js")
-usj_map = json.dumps(data_uri("usj-map-ko.webp", "image/webp"))
+SCRIPTS = ["sample-trip.js", "store.js", "schema.js", "views.js", "editor.js", "app.js"]
 
 html = """<!doctype html>
 <html lang="ko">
@@ -26,28 +17,32 @@ html = """<!doctype html>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0b7285">
 <meta name="color-scheme" content="light">
-<title>오사카 여행</title>
+<title>여행 플래너</title>
 <style>
-""" + css + """
+""" + read("styles.css") + """
 </style>
 </head>
 <body>
+<section id="screen-list" hidden>
+<header class="lhead"><h1>내 여행</h1></header>
+<div id="triplist"></div>
+<div class="lactions">
+<button id="new-trip" type="button">+ 새 여행 만들기</button>
+<button id="add-sample" type="button">샘플 여행 보기</button>
+</div>
+</section>
+<section id="screen-trip" hidden>
 <header id="summary"></header>
 <nav id="daytabs"></nav>
 <main id="timeline"></main>
 <section id="fixed"></section>
-<script>
-window.USJ_MAP_SRC = """ + usj_map + """;
-""" + data + """
-</script>
-<script>
-""" + app + """
-</script>
-</body>
+</section>
+<section id="screen-edit" hidden></section>
+""" + "".join("<script>\n" + read(s) + "\n</script>\n" for s in SCRIPTS) + """</body>
 </html>
 """
 
-out = os.path.join(BASE, "osaka-trip.html")
+out = os.path.join(BASE, "trip.html")
 with open(out, "w", encoding="utf-8") as f:
     f.write(html)
 print("wrote", out, "(", len(html), "chars )")

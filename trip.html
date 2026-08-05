@@ -1,0 +1,1826 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b7285">
+<meta name="color-scheme" content="light">
+<title>여행 플래너</title>
+<style>
+:root { color-scheme:light; --bg:#f5f7f9; --card:#fff; --accent:#0b7285; --accent2:#e8590c; --text:#1a2226; --muted:#6b7780; }
+* { box-sizing:border-box; }
+html { background:var(--bg); }
+body { margin:0; background:var(--bg); color:var(--text);
+  font-family:-apple-system,"Segoe UI",Roboto,"Noto Sans KR",sans-serif; line-height:1.5; }
+#summary { background:var(--accent); color:#fff; padding:20px 16px; }
+/* 56px는 ⚙ 버튼(right:14px) 하나만 셈한 값이었다. 편집 버튼(.edit-mode, right:52px)까지
+   더하면 왼쪽 끝이 오른쪽에서 대략 98px 지점에서 시작하므로, 긴 D-day 문자열이 그
+   버튼 밑으로 파고들지 않게 두 버튼을 함께 감안한 여백을 준다. */
+#summary h1 { margin:4px 0; font-size:1.5rem; padding-right:100px; }
+#summary .dday { font-weight:700; opacity:.9; padding-right:100px; }
+#summary .period,#summary .hotel,#summary .cost { font-size:.9rem; opacity:.95; margin-top:2px; }
+#daytabs { display:flex; gap:6px; overflow-x:auto; padding:10px 12px;
+  position:sticky; top:0; background:var(--bg); z-index:5; -webkit-overflow-scrolling:touch; }
+.tab { flex:0 0 auto; border:1px solid #d5dde1; background:var(--card); border-radius:12px;
+  padding:6px 12px; display:flex; flex-direction:column; align-items:center; font:inherit; color:var(--muted); }
+.tab[data-selected] { background:var(--accent); color:#fff; border-color:var(--accent); }
+.tab .tn { font-weight:700; font-size:.85rem; }
+.tab .td { font-size:.7rem; }
+.daycard { background:var(--card); margin:12px; border-radius:14px; overflow:hidden;
+  box-shadow:0 1px 4px rgba(0,0,0,.06); }
+.dayhead { padding:14px 16px; border-bottom:1px solid #eef2f4; }
+.dayhead .dnum { font-weight:700; color:var(--accent); }
+.dayhead .dtheme { color:var(--muted); font-size:.85rem; margin-top:3px; }
+.slot { display:flex; gap:10px; padding:12px 16px; border-bottom:1px solid #f0f3f5; }
+.slot:last-child { border-bottom:0; }
+.slot .time { flex:0 0 46px; font-weight:700; color:var(--accent); font-size:.85rem; }
+.slot .what .line { font-size:.9rem; }
+.slot .what .line + .line { margin-top:2px; }
+.line.timed, .line.booked { display:flex; flex-wrap:wrap; align-items:center; gap:6px;
+  font-weight:700; border-radius:8px; padding:7px 10px; margin:4px 0; }
+.line.timed { background:#fff0f0; color:#c92a2a; border-left:4px solid #e03131; }
+.line.booked { background:#e9fbf3; color:#0b7043; border-left:4px solid #0ca678; }
+.line .tag { flex:none; font-size:.72rem; font-weight:800; color:#fff;
+  border-radius:999px; padding:2px 8px; letter-spacing:.02em; }
+.line.timed .tag { background:#e03131; }
+.line.booked .tag { background:#0ca678; }
+.slot.undecided { background:#fff4e6; }
+.slot.undecided .time { color:var(--accent2); }
+#fixed { margin:12px; }
+#fixed details { background:var(--card); border-radius:12px; margin-bottom:10px; overflow:hidden; }
+#fixed summary { padding:14px 16px; font-weight:600; cursor:pointer; list-style:none; }
+#fixed summary::-webkit-details-marker { display:none; }
+#fixed summary::after { content:"▾"; float:right; color:var(--muted); }
+#fixed details[open] summary::after { content:"▴"; }
+.acc { padding:0 16px 14px; font-size:.9rem; }
+.tblwrap { overflow-x:auto; margin-top:8px; }
+.acc table { border-collapse:collapse; width:100%; font-size:.85rem; }
+.acc caption { text-align:left; font-weight:600; color:var(--muted); padding:4px 0; }
+.acc th,.acc td { border-bottom:1px solid #eef2f4; padding:6px 8px; text-align:left; }
+.acc td.num,.acc th.num { text-align:right; white-space:nowrap; }
+.acc tfoot td { font-weight:700; }
+.acc ul { margin:8px 0 0; padding-left:18px; }
+.packlist { list-style:none; padding:0; margin:8px 0 0; }
+.packlist li { padding:6px 0; display:flex; align-items:center; gap:6px; }
+.packlist li label { flex:1; display:flex; align-items:center; }
+.packlist li.done label { text-decoration:line-through; color:var(--muted); }
+.packlist input[type=checkbox] { transform:scale(1.2); margin-right:8px; }
+.pack-del { flex:0 0 auto; border:none; background:#f1f3f5; color:var(--muted);
+  width:26px; height:26px; border-radius:50%; font-size:1.1rem; line-height:1; cursor:pointer; }
+.pack-add { display:flex; gap:6px; margin-top:10px; }
+.pack-add input { flex:1; padding:8px 10px; border:1px solid #d5dde1; border-radius:8px; font:inherit; }
+.pack-add button { flex:0 0 auto; padding:8px 14px; border:none; border-radius:8px;
+  background:var(--accent); color:#fff; font:inherit; font-weight:600; cursor:pointer; }
+.meals { padding:12px 16px; border-top:1px solid #eef2f4; background:#fff9f2; }
+.meals-h { font-weight:700; color:var(--accent2); margin-bottom:8px; }
+.meal { margin-bottom:12px; }
+.meal:last-child { margin-bottom:0; }
+.meal-note .line { font-size:.9rem; }
+.memo { display:block; width:100%; margin-top:6px; padding:8px 10px;
+  border:1px solid #ffd8a8; border-radius:8px; font:inherit; background:#fff; }
+#summary .cost .spent { display:inline-block; opacity:.95; }
+.stotal { font-size:1.35rem; font-weight:800; color:var(--accent); margin-top:8px; }
+.stotal .skrw { font-size:.85rem; font-weight:600; color:var(--muted); }
+.scats { list-style:none; padding:0; margin:10px 0 0; display:flex; flex-wrap:wrap; gap:6px; }
+.scats li { font-size:.78rem; background:#f1f5f7; border-radius:999px; padding:4px 10px; color:var(--muted); }
+.scats li b { color:var(--text); }
+.spend-add { display:flex; flex-wrap:wrap; gap:6px; margin:12px 0; }
+.spend-add input,.spend-add select { padding:8px 10px; border:1px solid #d5dde1;
+  border-radius:8px; font:inherit; min-width:0; }
+.spend-add .sjpy-in { flex:0 0 90px; }
+.spend-add .snote-in { flex:1 1 110px; }
+.spend-add .scat-in { flex:0 0 auto; background:#fff; }
+.spend-add button { flex:0 0 auto; padding:8px 14px; border:none; border-radius:8px;
+  background:var(--accent); color:#fff; font:inherit; font-weight:600; cursor:pointer; }
+.sgroup { margin-top:12px; }
+.sdate { font-size:.78rem; font-weight:700; color:var(--muted); padding-bottom:4px;
+  border-bottom:1px solid #eef2f4; }
+.slist { list-style:none; padding:0; margin:0; }
+.slist li { display:flex; align-items:center; gap:8px; padding:8px 0;
+  border-bottom:1px solid #f4f7f8; }
+.slist .scat { flex:0 0 auto; font-size:.72rem; font-weight:700; color:#fff;
+  background:var(--accent); border-radius:999px; padding:2px 8px; }
+.slist .snote { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.slist .sjpy { flex:0 0 auto; font-weight:700; white-space:nowrap; }
+.spend-del { flex:0 0 auto; border:none; background:#f1f3f5; color:var(--muted);
+  width:26px; height:26px; border-radius:50%; font-size:1.1rem; line-height:1; cursor:pointer; }
+.sempty { color:var(--muted); padding:10px 0; }
+.sfx { margin-top:14px; font-size:.82rem; color:var(--muted); }
+.sfx input { width:70px; padding:5px 8px; border:1px solid #d5dde1; border-radius:6px;
+  font:inherit; text-align:right; }
+#summary .wx { font-size:.9rem; opacity:.95; margin-top:2px; }
+.dayhead .dwx { font-size:.85rem; color:var(--muted); margin-top:2px; }
+.wxstamp { font-size:.75rem; opacity:.75; }
+
+/* ---- 여행 목록 화면 ---- */
+.lhead { background:var(--accent); color:#fff; padding:20px 16px; }
+.lhead h1 { margin:0; font-size:1.4rem; }
+#triplist { padding:12px; }
+.tripcard { position:relative; background:var(--card); border-radius:14px; padding:14px 16px;
+  margin-bottom:10px; box-shadow:0 1px 4px rgba(0,0,0,.06); cursor:pointer; }
+.tripcard .tc-title { font-weight:700; font-size:1.05rem; }
+.tripcard .tc-period { color:var(--muted); font-size:.85rem; margin-top:2px; }
+.tripcard .tc-dday { color:var(--accent); font-weight:700; font-size:.8rem; margin-top:4px; }
+.tripcard .tc-del { position:absolute; top:10px; right:10px; border:0; background:none;
+  color:var(--muted); font-size:1.2rem; line-height:1; padding:4px 8px; cursor:pointer; }
+#triplist .empty { color:var(--muted); text-align:center; padding:32px 16px; }
+.lactions { display:flex; flex-direction:column; gap:8px; padding:0 12px 24px; }
+.lactions button { font:inherit; padding:12px; border-radius:12px; border:1px solid #d5dde1;
+  background:var(--card); color:var(--text); cursor:pointer; }
+.lactions #new-trip { background:var(--accent); color:#fff; border-color:var(--accent);
+  font-weight:700; }
+
+#summary { position:relative; }
+.edit-trip { position:absolute; top:16px; right:14px; border:0; background:rgba(255,255,255,.18);
+  color:#fff; font-size:1.05rem; line-height:1; padding:7px 10px; border-radius:10px; cursor:pointer; }
+.ehead { background:var(--accent); color:#fff; padding:16px; display:flex; align-items:center; gap:10px; }
+.ehead h1 { margin:0; font-size:1.2rem; }
+.ehead button { border:0; background:none; color:#fff; font-size:1.3rem; cursor:pointer; padding:0 4px; }
+.eform { display:flex; flex-direction:column; gap:14px; padding:16px; }
+.eform label { display:flex; flex-direction:column; gap:5px; font-size:.85rem; color:var(--muted); }
+.eform input, .eform textarea, .eform select { font:inherit; color:var(--text);
+  padding:10px; border:1px solid #d5dde1; border-radius:10px; background:var(--card); }
+.eform button[type=submit] { font:inherit; font-weight:700; padding:13px; border:0;
+  border-radius:12px; background:var(--accent); color:#fff; cursor:pointer; }
+.eerr { background:#fff0f0; color:#c92a2a; border-left:4px solid #e03131;
+  padding:9px 12px; border-radius:8px; font-size:.85rem; }
+
+.edit-mode { position:absolute; top:16px; right:52px; border:0; background:rgba(255,255,255,.18);
+  color:#fff; font-size:.8rem; font-weight:700; line-height:1; padding:8px 10px;
+  border-radius:10px; cursor:pointer; }
+.edit-mode[aria-pressed=true] { background:#fff; color:var(--accent); }
+.slot-btns { display:flex; gap:6px; margin-top:6px; }
+.slot-btns button { font:inherit; font-size:.75rem; padding:4px 10px; border-radius:8px;
+  border:1px solid #d5dde1; background:var(--card); color:var(--muted); cursor:pointer; }
+.slot-btns .it-del { color:#c92a2a; border-color:#ffc9c9; }
+.item-add { display:flex; flex-wrap:wrap; gap:8px; padding:12px 16px; border-top:1px dashed #dde4e8; }
+.item-add .ia-time { flex:0 0 110px; }
+.item-add .ia-text { flex:1 1 100%; }
+.item-add input, .item-add textarea { font:inherit; padding:9px; border:1px solid #d5dde1;
+  border-radius:10px; background:var(--card); color:var(--text); }
+.item-add button { font:inherit; font-weight:700; padding:9px 16px; border:0; border-radius:10px;
+  background:var(--accent); color:#fff; cursor:pointer; }
+
+</style>
+</head>
+<body>
+<section id="screen-list" hidden>
+<header class="lhead"><h1>내 여행</h1></header>
+<div id="triplist"></div>
+<div class="lactions">
+<button id="new-trip" type="button">+ 새 여행 만들기</button>
+<button id="add-sample" type="button">샘플 여행 보기</button>
+</div>
+</section>
+<section id="screen-trip" hidden>
+<header id="summary"></header>
+<nav id="daytabs"></nav>
+<main id="timeline"></main>
+<section id="fixed"></section>
+</section>
+<section id="screen-edit" hidden></section>
+<script>
+window.SAMPLE_TRIP = {
+  "schema": 1,
+  "title": "오사카 여행",
+  "start": "2026-07-28",
+  "end": "2026-08-03",
+  "party": 2,
+  "place": {
+    "name": "오사카",
+    "country": "일본",
+    "lat": 34.69,
+    "lon": 135.5,
+    "tz": "Asia/Tokyo"
+  },
+  "currency": {
+    "code": "JPY",
+    "symbol": "¥",
+    "decimals": 0,
+    "unit": 100
+  },
+  "hotel": "포포인츠 플렉스 바이 쉐라톤 오사카 신사이바시 (체크인 15시 · 체크아웃 11시)",
+  "budgetKRW": 2612367,
+  "days": [
+    {
+      "n": 1,
+      "date": "2026-07-28",
+      "theme": "청주 → 오사카",
+      "place": null,
+      "curCode": null,
+      "items": [
+        {
+          "id": "i_1_0",
+          "time": "08:00",
+          "text": "렛츠 고 일본! 얏호"
+        },
+        {
+          "id": "i_1_1",
+          "time": "10:00",
+          "text": "10:55 청주 공항 출발\n12:40 간사이 공항 도착\n숙소 이동"
+        },
+        {
+          "id": "i_1_2",
+          "time": "14:00",
+          "text": "숙세 짐 or 체크인 & 이치란 라멘 신사이바시점"
+        },
+        {
+          "id": "i_1_3",
+          "time": "16:00",
+          "text": "다이마루 백화점(9층 포켓몬 센터)\n인기간식(백하우스 이리에,키야스 총본점, 아자리모치 혼포 만게츠)\n파르코(1층 드러그 스토어, 6층 치이카와)"
+        },
+        {
+          "id": "i_1_4",
+          "time": "19:00",
+          "text": "스키야끼 후지모토(샤브샤브)\n2인 7~15만원대\n19:30 예약 완료"
+        },
+        {
+          "id": "i_1_5",
+          "time": "20:00",
+          "text": "도톤보리 구경 & 편의점 털기"
+        }
+      ],
+      "meals": [],
+      "images": []
+    },
+    {
+      "n": 2,
+      "date": "2026-07-29",
+      "theme": "유니버셜 스튜디오\n입장권+패스권 어플 등록",
+      "place": null,
+      "curCode": null,
+      "items": [
+        {
+          "id": "i_2_0",
+          "time": "08:00",
+          "text": "08:00 유니버셜 입장\n08:00 할리우드존\n- 할리우드 더 드림 라이드(기본)"
+        },
+        {
+          "id": "i_2_1",
+          "time": "11:00",
+          "text": "10:30 미니언즈존\n- 미니언즈 메이햄"
+        },
+        {
+          "id": "i_2_2",
+          "time": "12:00",
+          "text": "12:00-12:30 미니언 메이헴 미션 ~대악당이 되는길~(패스권-시간)\n12:30-13:30 점심식사(미니언즈 테마 레스토랑)"
+        },
+        {
+          "id": "i_2_3",
+          "time": "13:00",
+          "text": "13:30 쥬라기공원존\n- 쥬라기 공원 더 라이드\n-더 플라잉 다이노소어(패스권)\n- 죠스"
+        },
+        {
+          "id": "i_2_4",
+          "time": "15:00",
+          "text": "15:30-16:30 슈퍼 닌텐도 월드 입장 시간(시간)\n15:30-16:00 마리오 카트:쿠파의 도전(패스권-시간)"
+        },
+        {
+          "id": "i_2_5",
+          "time": "16:00",
+          "text": "16:00-16:30 동키콩의 크레이지 트램카(패스권-시간)"
+        },
+        {
+          "id": "i_2_6",
+          "time": "17:00",
+          "text": "17:30 워터월드 공연\n18:30 해리포터존\n- 해리포터 포비든 저니(패스권)"
+        },
+        {
+          "id": "i_2_7",
+          "time": "19:00",
+          "text": "해리포터 구역 야간 구경"
+        },
+        {
+          "id": "i_2_8",
+          "time": "20:00",
+          "text": "저녁 유니버셜 시티워크"
+        },
+        {
+          "id": "i_2_9",
+          "time": "21:00",
+          "text": "귀가"
+        }
+      ],
+      "meals": [
+        "유니버셜 시티워크 저녁 뭐먹지"
+      ],
+      "images": []
+    },
+    {
+      "n": 3,
+      "date": "2026-07-30",
+      "theme": "고베/나라 버스 투어\n(와쿠와쿠투어 예약완료)",
+      "place": null,
+      "curCode": null,
+      "items": [
+        {
+          "id": "i_3_0",
+          "time": "08:00",
+          "text": "08:00 미팅 \n08:10 출발 (닛폰바시 츠루동탄 소에몬쵸점 앞)"
+        },
+        {
+          "id": "i_3_1",
+          "time": "09:00",
+          "text": "나라 사슴공원 & 동대사 관광 (1시간 40분)"
+        },
+        {
+          "id": "i_3_2",
+          "time": "12:00",
+          "text": "아리마 온천마을 관광 및 식사 (2시간 50분 소요)"
+        },
+        {
+          "id": "i_3_3",
+          "time": "16:00",
+          "text": "고베 하버랜드 모자이크 쇼핑 및 야경 관광 (1시간 30분 소요)"
+        },
+        {
+          "id": "i_3_4",
+          "time": "18:00",
+          "text": "18:50 닛폰바시 도착 후 해산"
+        }
+      ],
+      "meals": [
+        "아리마 온천 점심 뭐먹지",
+        "도톤보리 저녁 뭐먹지"
+      ],
+      "images": []
+    },
+    {
+      "n": 4,
+      "date": "2026-07-31",
+      "theme": "교토 버스 투어 \n(하루하루투어 예약 완료)",
+      "place": null,
+      "curCode": null,
+      "items": [
+        {
+          "id": "i_4_0",
+          "time": "08:00",
+          "text": "07:30 미팅\n(닛폰바시역 2번출구에서 200m 츠루동탄 소에몬초점앞 길가)\n08:40 후시미 이나리신사(여우신사) 50분"
+        },
+        {
+          "id": "i_4_1",
+          "time": "10:00",
+          "text": "10:00 란덴열차(35분)\n10:30 아라시야마(자유중식)\n(140분)"
+        },
+        {
+          "id": "i_4_2",
+          "time": "13:00",
+          "text": "13:30 금각사(40분)"
+        },
+        {
+          "id": "i_4_3",
+          "time": "14:00",
+          "text": "14:40 청수사(80분)"
+        },
+        {
+          "id": "i_4_4",
+          "time": "18:00",
+          "text": "18:00-18:30 오사카 도착"
+        },
+        {
+          "id": "i_4_5",
+          "time": "19:00",
+          "text": "19:00 저녁식사 규카츠 모토무라 도톤보리점 예약 완료"
+        }
+      ],
+      "meals": [
+        "아라시야마 점심 뭐먹지",
+        "도톤보리 저녁 뭐먹지"
+      ],
+      "images": []
+    },
+    {
+      "n": 5,
+      "date": "2026-08-01",
+      "theme": "주유패스 2일권(1일차)",
+      "place": null,
+      "curCode": null,
+      "items": [
+        {
+          "id": "i_5_0",
+          "time": "09:00",
+          "text": "09:20 비즈니스파크역 2번 출구\n오사카성\n- 고자부네 놀잇배 1800엔 (패스)\n09:30부터 티켓 판매 / 도착하자마자 예약\n후 오사카성 구경\n- 천수각 1200엔(패스)\n- 카이요도 피규어 뮤지엄 1000엔(패스)\n- 오사카 역사박물관 600엔(패스)"
+        },
+        {
+          "id": "i_5_1",
+          "time": "12:00",
+          "text": "다마니마치욘초메역 출발\n난바역 도착\n도톤보리 리버크루즈 저녁 운항편 예약 및 점심 식사\n(리버크루즈 안탈 시 바로 우메다역 가서 놀아도 됨)"
+        },
+        {
+          "id": "i_5_2",
+          "time": "14:00",
+          "text": "14:00 난바역 출발\n14:20 우메다역 도착\n- 우메다 스카이 빌딩(공중정원) 2000엔(15시 이전 패스)\n- 헵 파이브 관람차 800엔(패스)\n우메다 쇼핑 & 커피"
+        },
+        {
+          "id": "i_5_3",
+          "time": "17:00",
+          "text": "우메다 저녁\n신사이바시스지 상점가 저녁\n도톤보리 저녁"
+        },
+        {
+          "id": "i_5_4",
+          "time": "19:00",
+          "text": "도톤보리 리버 크루즈 탑승 2000엔(패스) & 비어타임"
+        }
+      ],
+      "meals": [
+        "도톤보리?\n오사카성?\n우메다?",
+        "우메다 저녁 뭐먹지"
+      ],
+      "images": []
+    },
+    {
+      "n": 6,
+      "date": "2026-08-02",
+      "theme": "주유패스 2일권(2일차)",
+      "place": null,
+      "curCode": null,
+      "items": [
+        {
+          "id": "i_6_0",
+          "time": "09:00",
+          "text": "09:30 덴진바시로쿠초메역 도착\n- 오사카 주택박물관 600엔 (패스)\n기모노 체험 시 오픈런\n- 점심 식사"
+        },
+        {
+          "id": "i_6_1",
+          "time": "12:00",
+          "text": "12:00 오사카코역 도착\n- 가이유칸 수족관 2시간 정도(예약 필수)\n- 덴포잔 대관람차 900엔 (패스)"
+        },
+        {
+          "id": "i_6_2",
+          "time": "15:00",
+          "text": "15:00 오사카코역 출발\n15:30 덴노지역 도착\n- 덴노지 동물원 500엔(패스)\n- 신세카이\n- 쓰텐카쿠 전망대 1200엔(패스)\n- 타워 슬라이드 1000엔(패스)"
+        },
+        {
+          "id": "i_6_3",
+          "time": "17:00",
+          "text": "-쿠시카츠 거리 저녁 식사"
+        }
+      ],
+      "meals": [
+        "덴포자 점심 뭐먹지",
+        "신세카이 쿠시카츠 거리 뭐먹지"
+      ],
+      "images": []
+    },
+    {
+      "n": 7,
+      "date": "2026-08-03",
+      "theme": "오사카 → 청주",
+      "place": null,
+      "curCode": null,
+      "items": [
+        {
+          "id": "i_7_0",
+          "time": "08:00",
+          "text": "귀국 준비"
+        },
+        {
+          "id": "i_7_1",
+          "time": "10:00",
+          "text": "라스트 식사"
+        },
+        {
+          "id": "i_7_2",
+          "time": "11:00",
+          "text": "ㅠㅠㅠ"
+        },
+        {
+          "id": "i_7_3",
+          "time": "13:00",
+          "text": "13:40 간사이 공항 출발\n15:30 청주 공항 도착"
+        }
+      ],
+      "meals": [
+        "점심 뭐먹지"
+      ],
+      "images": []
+    }
+  ],
+  "sections": [
+    {
+      "id": "s_rapit",
+      "icon": "🚄",
+      "title": "라피트 시간표",
+      "type": "table",
+      "body": [
+        {
+          "caption": "간사이 → 난바",
+          "head": [
+            "편",
+            "출발",
+            "도착"
+          ],
+          "rows": [
+            [
+              "특급 라피트 α",
+              "13:05",
+              "13:43"
+            ],
+            [
+              "특급 라피트 β",
+              "13:35",
+              "14:14"
+            ],
+            [
+              "특급 라피트 α",
+              "14:05",
+              "14:43"
+            ]
+          ]
+        },
+        {
+          "caption": "난바 → 간사이",
+          "head": [
+            "편",
+            "출발",
+            "도착"
+          ],
+          "rows": [
+            [
+              "특급 라피트 α",
+              "10:05",
+              "10:41"
+            ],
+            [
+              "특급 라피트 β",
+              "10:35",
+              "11:15"
+            ],
+            [
+              "특급 라피트 α",
+              "11:05",
+              "11:41"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "s_hotel",
+      "icon": "🏨",
+      "title": "숙소",
+      "type": "builtin",
+      "body": "hotel"
+    },
+    {
+      "id": "s_packing",
+      "icon": "🎒",
+      "title": "준비물",
+      "type": "builtin",
+      "body": "packing"
+    },
+    {
+      "id": "s_spend",
+      "icon": "💸",
+      "title": "현지 경비",
+      "type": "builtin",
+      "body": "spend"
+    },
+    {
+      "id": "s_expenses",
+      "icon": "💰",
+      "title": "경비 내역",
+      "type": "builtin",
+      "body": "expenses"
+    },
+    {
+      "id": "s_tips",
+      "icon": "💡",
+      "title": "팁",
+      "type": "list",
+      "body": [
+        "5500엔 이상 구매 시 면세: 제품·영수증·여권 들고 입구 근처 면세 카운터에서 현금 반환 (14:00~폐장 1시간 전)",
+        "준비물: 우양산, 모자, 선글라스, 손선풍기, 편한 신발/샌들, 동전"
+      ]
+    }
+  ],
+  "packing": [
+    "여권 + 사본",
+    "엔화",
+    "스마트폰 충전기",
+    "보조배터리 (위탁 불가, 기내만)",
+    "110V 변환 플러그",
+    "양산 겸 우산",
+    "모자",
+    "선글라스",
+    "자외선 차단제",
+    "손선풍기",
+    "편한 운동화",
+    "슬리퍼 또는 샌들",
+    "지퍼백 (라이드 탈 때 폰 방수)",
+    "개인 상비약 (두통·소화·지사제)",
+    "장바구니/에코백 (봉투 유료)"
+  ],
+  "expenses": [
+    {
+      "date": "",
+      "cat": "항공권",
+      "detail": "왕복",
+      "pay": "신한카드",
+      "krw": 766640,
+      "note": ""
+    },
+    {
+      "date": "",
+      "cat": "숙소",
+      "detail": "6박",
+      "pay": "신한카드",
+      "krw": 751232,
+      "note": ""
+    },
+    {
+      "date": "2026-06-21",
+      "cat": "유니버셜 스튜디오 티켓",
+      "detail": "입장권(2인)",
+      "pay": "네이버페이",
+      "krw": 186000,
+      "note": ""
+    },
+    {
+      "date": "",
+      "cat": "유니버셜 스튜디오 티켓",
+      "detail": "패스권(2인)",
+      "pay": "",
+      "krw": 540689,
+      "note": ""
+    },
+    {
+      "date": "2026-06-22",
+      "cat": "버스투어",
+      "detail": "교토버스투어(2인)",
+      "pay": "신한카드",
+      "krw": 61239,
+      "note": ""
+    },
+    {
+      "date": "2026-06-24",
+      "cat": "버스투어",
+      "detail": "나라/고베버스투어(2인)",
+      "pay": "신한카드",
+      "krw": 77900,
+      "note": ""
+    },
+    {
+      "date": "2026-07-05",
+      "cat": "가이유칸 수족관",
+      "detail": "입장권(2인)",
+      "pay": "신한카드",
+      "krw": 60678,
+      "note": ""
+    },
+    {
+      "date": "2026-07-26",
+      "cat": "오사카 주유패스",
+      "detail": "2일권 2인",
+      "pay": "신한카드",
+      "krw": 89772,
+      "note": ""
+    },
+    {
+      "date": "2026-07-26",
+      "cat": "e-sim",
+      "detail": "7일 2기가 1인",
+      "pay": "신한카드",
+      "krw": 12011,
+      "note": "승유니 이심"
+    },
+    {
+      "date": "2026-07-26",
+      "cat": "여행자보험",
+      "detail": "2인",
+      "pay": "카카오페이",
+      "krw": 13230,
+      "note": ""
+    },
+    {
+      "date": "2026-07-26",
+      "cat": "라피트",
+      "detail": "편도(간사이→난바)",
+      "pay": "신한카드",
+      "krw": 26488,
+      "note": ""
+    },
+    {
+      "date": "2026-07-27",
+      "cat": "라피트",
+      "detail": "편도(난바→간사이)",
+      "pay": "신한카드",
+      "krw": 26488,
+      "note": ""
+    }
+  ]
+};
+
+</script>
+<script>
+// 저장소 계층: 여행 목록·본체·여행별 런타임 키(trip:<id>:*)를 다룬다.
+// app.js의 기존 osaka-trip:v1: store와는 무관한 새 코드다.
+
+var SCHEMA = 1;
+
+function lsGet(key, fb) {
+  try {
+    var v = localStorage.getItem(key);
+    return v === null ? fb : JSON.parse(v);
+  } catch (e) { return fb; }
+}
+// 쓰기 성공 여부를 boolean으로 돌려준다. 예외가 안 났다는 것만으론 부족하다 —
+// 일부 환경(프라이빗 모드 등)은 setItem이 조용히 no-op일 수 있으므로 읽어서 확인한다.
+function lsSet(key, v) {
+  try {
+    var s = JSON.stringify(v);
+    localStorage.setItem(key, s);
+    return localStorage.getItem(key) === s;
+  } catch (e) { return false; }
+}
+function lsDel(key) {
+  try { localStorage.removeItem(key); } catch (e) {}
+}
+
+function newTripId() {
+  return "t_" + Date.now().toString(36) + Math.floor(Math.random() * 1296).toString(36);
+}
+
+function tripKey(id, k) { return "trip:" + id + ":" + k; }
+
+function tripStore(id) {
+  return {
+    get: function (k, fb) { return lsGet(tripKey(id, k), fb); },
+    set: function (k, v) { return lsSet(tripKey(id, k), v); }
+  };
+}
+
+function listTrips() {
+  var v = lsGet("trip:index", []);
+  return Array.isArray(v) ? v : [];
+}
+
+// 본체(큰 쓰기)와 인덱스(작은 쓰기)를 나눠 쓴다. 용량 초과 등으로 본체 쓰기만 실패하고
+// 인덱스 쓰기는 성공하는 경우(실제로 재현됨), 인덱스만 갱신되고 본체는 예전 값 그대로
+// 남으면 목록과 본체가 서로 다른 얘기를 하게 된다(새 여행이면 목록에 loadTrip이 null인
+// 고아 항목이 생기고, 수정이면 목록엔 새 제목/날짜가 보이는데 본체는 예전 값). 그래서
+// 본체 쓰기가 실패하면 인덱스는 아예 건드리지 않는다.
+function saveTrip(trip) {
+  var okBody = lsSet("trip:" + trip.id, trip);
+  if (!okBody) return false;
+  var idx = listTrips();
+  var row = { id: trip.id, title: trip.title, start: trip.start, end: trip.end };
+  var at = -1;
+  idx.forEach(function (r, i) { if (r.id === trip.id) at = i; });
+  if (at >= 0) idx[at] = row; else idx.push(row);
+  return lsSet("trip:index", idx);
+}
+
+function loadTrip(id) {
+  return lsGet("trip:" + id, null);
+}
+
+// 일정 항목(추가·수정·삭제) 전용 저장. 인덱스 행(id/title/start/end)은 항목 편집으로
+// 바뀌지 않으므로 본체만 쓴다 — saveTrip처럼 인덱스까지 같이 쓰면, 실제로는 본체 저장이
+// 성공했는데 인덱스 쓰기만(용량 초과 등으로) 실패한 경우에도 saveTrip이 false를 돌려줘
+// 정상 반영된 편집을 실패로 취급해버린다. 본체만 쓰면 그 모호함 자체가 없어진다.
+function saveTripBody(trip) {
+  return lsSet("trip:" + trip.id, trip);
+}
+
+// 여행 본체 + 그 여행의 런타임 키(trip:<id>:*) + 인덱스 항목을 모두 지운다.
+function deleteTrip(id) {
+  lsDel("trip:" + id);
+  var prefix = tripKey(id, "");
+  var doomed = [];
+  for (var i = 0; i < localStorage.length; i++) {
+    var k = localStorage.key(i);
+    if (k && k.indexOf(prefix) === 0) doomed.push(k);
+  }
+  doomed.forEach(lsDel);
+  lsSet("trip:index", listTrips().filter(function (r) { return r.id !== id; }));
+}
+
+var LEGACY_PREFIX = "osaka-trip:v1:";
+var LEGACY_KEYS = ["spend", "fx", "packing_checked", "packing_add", "weather"];
+
+function cloneSample() {
+  return JSON.parse(JSON.stringify(window.SAMPLE_TRIP));
+}
+
+function installSample() {
+  var t = cloneSample();
+  t.id = newTripId();
+  saveTrip(t);
+  return t.id;
+}
+
+// 구 osaka-trip:v1:* 를 새 여행 하나로 옮긴다. 옮길 게 없으면 null.
+// 복사가 하나라도 실제로 저장되지 않았으면(예: 용량 초과) 구 키를 절대 지우지 않고,
+// 이번에 만든 반쪽짜리 새 여행은 되돌린 뒤 null을 돌려준다 — 다음 부팅 때
+// 구 키가 그대로 남아 있으므로 깨끗하게 재시도된다(고아 여행이 쌓이지 않는다).
+function migrateLegacy() {
+  var found = [];
+  for (var i = 0; i < localStorage.length; i++) {
+    var k = localStorage.key(i);
+    if (k && k.indexOf(LEGACY_PREFIX) === 0) found.push(k);
+  }
+  if (!found.length) return null;
+
+  var t = cloneSample();
+  t.id = newTripId();
+  var ok = saveTrip(t);
+  var st = tripStore(t.id);
+  found.forEach(function (k) {
+    var sub = k.slice(LEGACY_PREFIX.length);
+    // 알려진 키와 meal:<n>:<i> 형태만 옮긴다
+    if (LEGACY_KEYS.indexOf(sub) >= 0 || sub.indexOf("meal:") === 0) {
+      // st.set을 먼저 평가해야 ok가 이미 false여도 나머지 키 복사를 계속 시도한다
+      ok = st.set(sub, lsGet(k, null)) && ok;
+    }
+  });
+
+  if (!ok) {
+    deleteTrip(t.id);
+    return null;
+  }
+
+  found.forEach(lsDel);
+  return t.id;
+}
+
+</script>
+<script>
+// Trip 스키마 헬퍼: 일차 생성, 재동기화, 기본값.
+// store.js 다음에 로드된다 (SCHEMA, newTripId 사용).
+
+var DOW = ["일", "월", "화", "수", "목", "금", "토"];
+var DAY_MS = 86400000;
+
+function dateMs(iso) { return Date.parse(iso + "T00:00:00Z"); }
+function msDate(ms) { return new Date(ms).toISOString().slice(0, 10); }
+
+function dowOf(iso) { return DOW[new Date(dateMs(iso)).getUTCDay()]; }
+function addDays(iso, n) { return msDate(dateMs(iso) + n * DAY_MS); }
+function daysBetween(a, b) { return Math.round((dateMs(b) - dateMs(a)) / DAY_MS) + 1; }
+
+var _seq = 0;
+function newItemId() { return "i_" + Date.now().toString(36) + (_seq++).toString(36); }
+function newSectionId() { return "s_" + Date.now().toString(36) + (_seq++).toString(36); }
+
+function blankDay(n, iso) {
+  return { n: n, date: iso, theme: "", place: null, curCode: null,
+           items: [], meals: [], images: [] };
+}
+
+function buildDays(start, end) {
+  var out = [], total = daysBetween(start, end);
+  for (var i = 0; i < total; i++) out.push(blankDay(i + 1, addDays(start, i)));
+  return out;
+}
+
+// 기간이 바뀌어도 날짜가 그대로 남는 일차의 내용은 보존한다.
+function resyncDays(days, start, end) {
+  var byDate = {};
+  (days || []).forEach(function (d) { byDate[d.date] = d; });
+  var out = [], total = daysBetween(start, end);
+  for (var i = 0; i < total; i++) {
+    var iso = addDays(start, i), old = byDate[iso];
+    if (old) { old.n = i + 1; out.push(old); }
+    else out.push(blankDay(i + 1, iso));
+  }
+  return out;
+}
+
+function defaultSections() {
+  return [
+    { id: newSectionId(), icon: "🏨", title: "숙소",      type: "builtin", body: "hotel" },
+    { id: newSectionId(), icon: "🎒", title: "준비물",    type: "builtin", body: "packing" },
+    { id: newSectionId(), icon: "💸", title: "현지 경비", type: "builtin", body: "spend" },
+    { id: newSectionId(), icon: "💰", title: "경비 내역", type: "builtin", body: "expenses" }
+  ];
+}
+
+function emptyTrip(o) {
+  return {
+    schema: SCHEMA,
+    id: newTripId(),
+    title: o.title,
+    start: o.start,
+    end: o.end,
+    party: o.party || 2,
+    place: null,
+    currency: { code: "KRW", symbol: "₩", decimals: 0, unit: 1 },
+    hotel: o.hotel || "",
+    budgetKRW: 0,
+    days: buildDays(o.start, o.end),
+    sections: defaultSections(),
+    packing: [],
+    expenses: []
+  };
+}
+
+// 일차별 오버라이드 상속. 2단계(다국가·다통화)에서 렌더가 이 두 함수만 쓴다.
+function dayPlace(trip, day) {
+  return (day && day.place) || trip.place;
+}
+function dayCurrency(trip, day) {
+  if (day && day.curCode) return { code: day.curCode };
+  return trip.currency;
+}
+
+</script>
+<script>
+// 렌더 계층: DOM에 그리는 함수만 모은다.
+// trip(여행 본체)과 st(tripStore)를 인자로 받는다 — 전역 여행/저장소를 읽지 않는다.
+// schema.js 다음, app.js 앞에 로드된다 (dowOf/daysBetween 사용, wxLine/wxState/wxStamp는 app.js).
+
+// 사용자가 입력한 문자열이 HTML로 해석되지 않게 막는다.
+function escHtml(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+// escape를 먼저 하고, 배지 판정은 원본 텍스트로 한다.
+function itemLinesHtml(text) {
+  return String(text).split('\n').map(function (l) {
+    var e = escHtml(l);
+    if (/\(패스권-시간\)|\(시간\)/.test(l)) {
+      return '<div class="line timed"><span class="tag">⏰ 시간지정</span>' + e + '</div>';
+    }
+    if (/예약 완료/.test(l)) {
+      return '<div class="line booked"><span class="tag">✅ 예약완료</span>' + e + '</div>';
+    }
+    return '<div class="line">' + e + '</div>';
+  }).join('');
+}
+
+// 여행 화면의 편집 토글 상태. 여행을 넘나들거나 새로고침하면 꺼진 상태로 돌아간다 —
+// 세션에 묶인 UI 상태일 뿐 trip 데이터가 아니므로 저장소에 넣지 않는다.
+var EDIT_MODE = false;
+
+function isUndecided(text) {
+  return /뭐먹지|\?$/.test(text.trim()) || text.trim() === "";
+}
+
+function dday(todayISO, startISO, endISO) {
+  const day = 86400000;
+  const t = Date.parse(todayISO + "T00:00:00");
+  const s = Date.parse(startISO + "T00:00:00");
+  const e = Date.parse(endISO + "T00:00:00");
+  if (t < s) return "D-" + Math.round((s - t) / day);
+  if (t > e) return "여행 종료";
+  return "여행 중 " + (Math.round((t - s) / day) + 1) + "일차";
+}
+
+// ---- 현지 경비 ----
+
+var SPEND_CATS = ["식비", "교통", "쇼핑", "관광", "기타"];
+
+function spendList(st) {
+  var v = st.get("spend", []);
+  return Array.isArray(v) ? v : [];
+}
+function spendFx(st) {
+  var n = Number(st.get("fx", 900));
+  return isFinite(n) && n > 0 ? n : 0;
+}
+function spendTotalJpy(list) {
+  return list.reduce(function (s, e) {
+    var n = Number(e.jpy);
+    return s + (isFinite(n) ? n : 0);
+  }, 0);
+}
+function jpyToKrw(jpy, fx) {
+  return Math.round(jpy * fx / 100);
+}
+function spendByCat(list) {
+  var m = {};
+  list.forEach(function (e) {
+    var n = Number(e.jpy);
+    m[e.cat] = (m[e.cat] || 0) + (isFinite(n) ? n : 0);
+  });
+  return SPEND_CATS.filter(function (c) { return m[c]; })
+    .map(function (c) { return { cat: c, jpy: m[c] }; });
+}
+function spendByDate(list) {
+  var m = {}, dates = [];
+  list.forEach(function (e) {
+    if (!m[e.date]) { m[e.date] = []; dates.push(e.date); }
+    m[e.date].push(e);
+  });
+  dates.sort().reverse();
+  return dates.map(function (d) {
+    return { date: d, items: m[d].slice().reverse() };
+  });
+}
+
+function mealKey(dayN, i) { return "meal:" + Number(dayN) + ":" + i; }
+
+// ---- 상단 요약 ----
+
+function summarySpend(st) {
+  const tot = spendTotalJpy(spendList(st));
+  if (!tot) return '';
+  const fx = spendFx(st);
+  const krw = fx ? ' (약 ' + jpyToKrw(tot, fx).toLocaleString('ko-KR') + '원)' : '';
+  return ' <span class="spent">· 💸 현지 ¥' + tot.toLocaleString('ko-KR') + krw + '</span>';
+}
+
+function renderSummary(trip, st) {
+  const today = todayLocal();
+  const el = document.getElementById("summary");
+  const nights = daysBetween(trip.start, trip.end) - 1;
+  el.innerHTML =
+    '<button class="edit-trip" type="button" aria-label="여행 설정">⚙</button>' +
+    '<button class="edit-mode" type="button" aria-pressed="' + (EDIT_MODE ? 'true' : 'false') +
+      '">' + (EDIT_MODE ? '완료' : '편집') + '</button>' +
+    '<div class="dday">' + dday(today, trip.start, trip.end) + '</div>' +
+    '<h1>' + escHtml(trip.title) + '</h1>' +
+    '<div class="period">' + escHtml(trip.start) + ' ~ ' + escHtml(trip.end) +
+      ' · ' + nights + '박 ' + (nights + 1) + '일</div>' +
+    (trip.hotel ? '<div class="hotel">🏨 ' + escHtml(trip.hotel) + '</div>' : '') +
+    (function () {
+      var line = wxLine(wxState.map, todayLocal());
+      return line ? '<div class="wx">' + line.replace(" ", " 오늘 ") + wxStamp() + '</div>' : '';
+    })() +
+    (trip.budgetKRW
+      ? '<div class="cost">💰 총 ' + Number(trip.budgetKRW).toLocaleString('ko-KR') + '원 (' +
+        Number(trip.party) + '인)' + summarySpend(st) + '</div>'
+      : '');
+  var eb = el.querySelector('.edit-trip');
+  if (eb) eb.addEventListener('click', function () { go('#/t/' + trip.id + '/edit'); });
+  var mb = el.querySelector('.edit-mode');
+  if (mb) mb.addEventListener('click', function () {
+    // showTrip(trip.id, ...)로는 안 된다 — 같은 여행을 다시 "열게" 되면 opening 경로를
+    // 타서 #fixed 전체가 다시 그려지며 열어 둔 아코디언이 닫힌다(showDay 위 주석 참고).
+    // showDay(trip, CUR.dayN)도 안 된다 — 그건 renderTabs를 다시 불러 탭 목록의
+    // scrollIntoView가 실행되는데, 여기서 바뀐 건 EDIT_MODE뿐이라 탭은 그대로다(wxRepaint가
+    // 같은 이유로 renderTimeline을 직접 부르는 것과 동일한 사정 — app.js의 repaintDay 참고).
+    // 여기서는 요약(토글 버튼 자체)과 타임라인(수정/삭제 버튼)만 다시 그리면 된다.
+    EDIT_MODE = !EDIT_MODE;
+    renderSummary(trip, CUR.st);
+    repaintDay(trip, CUR.dayN, CUR.st);
+  });
+}
+
+// ---- 일차 탭 / 타임라인 ----
+
+function renderTabs(trip, selectedN, onSelect) {
+  const nav = document.getElementById("daytabs");
+  nav.innerHTML = trip.days.map(function (d) {
+    const on = d.n === selectedN ? ' data-selected="1"' : '';
+    return '<button class="tab"' + on + ' data-n="' + Number(d.n) + '">' +
+      '<span class="tn">' + Number(d.n) + '일차</span>' +
+      '<span class="td">' + escHtml(d.date.slice(5)) + '(' + dowOf(d.date) + ')</span></button>';
+  }).join('');
+  nav.querySelectorAll('.tab').forEach(function (b) {
+    b.addEventListener('click', function () { onSelect(parseInt(b.dataset.n, 10)); });
+  });
+  // 탭이 많은 여행(30일)에서 현재 일차가 화면 밖에 있는 것을 막는다.
+  const sel = nav.querySelector('.tab[data-selected]');
+  if (sel && sel.scrollIntoView) sel.scrollIntoView({ inline: "center", block: "nearest" });
+}
+
+// saveTripBody가 실패했을 때 trip.days를 저장소 값으로 되돌릴지 판단하는 순수 로직.
+// DOM에도 alert에도 손대지 않으므로 테스트에서 바로 호출할 수 있다(afterItemEdit을
+// 통째로 테스트하려면 alert 스텁이 필요한데, 그 스텁 없이도 이 판단 로직 자체는
+// 검증할 수 있게 분리했다). ok가 true면 아무 것도 하지 않는다.
+// 저장소에서 이 여행 자체를 못 찾으면(예: 다른 탭에서 삭제됨) 되돌릴 원본이 없다는
+// 뜻이라 lost:true를 돌려준다 — 이 경우 메모리 위 trip.days는 여전히 실패한 시도로
+// 오염된 phantom 상태이므로, 호출부는 그 화면을 그대로 다시 그리지 말고 안전한 곳으로
+// 옮겨야 한다.
+function reconcileAfterSaveFail(trip, ok) {
+  if (ok) return { reverted: false, lost: false };
+  var fresh = loadTrip(trip.id);
+  if (fresh) { trip.days = fresh.days; return { reverted: true, lost: false }; }
+  return { reverted: false, lost: true };
+}
+
+// EDIT_MODE에서 일정 추가·수정·삭제 후 공통으로 거치는 경로.
+// saveTripBody의 성공 여부를 반드시 확인한다 — 확인 없이 넘기면 저장이 조용히 실패해도
+// 화면은 성공한 것처럼 보인다. 실패하면 사용자에게 알리고, 이미 메모리 위에서 고쳐놓은
+// trip.days를 저장소의 실제 값으로 되돌려 다음 조작이 이번에 실패한 시도 위에 쌓이지
+// 않게 한다(reconcileAfterSaveFail). 다시 그리는 범위는 타임라인뿐이다(요구사항: 일차
+// 전환/편집 토글과 마찬가지로 #fixed는 건드리지 않는다) — repaintDay가 day.items가
+// 배열이 아닌 경우의 보정도 함께 해 준다(showDay가 여는 경로에서 하는 것과 동일).
+function afterItemEdit(trip, day, st, ok) {
+  var res = reconcileAfterSaveFail(trip, ok);
+  if (res.lost) {
+    alert('일정 저장에 실패했습니다. 기기 저장 공간을 확인해 주세요.');
+    go('#/');
+    return;
+  }
+  if (res.reverted) alert('일정 저장에 실패했습니다. 기기 저장 공간을 확인해 주세요.');
+  repaintDay(trip, day.n, st);
+}
+
+function renderTimeline(trip, day, st) {
+  const main = document.getElementById("timeline");
+  const rows = day.items.map(function (it) {
+    const cls = isUndecided(it.text) ? ' undecided' : '';
+    const btns = EDIT_MODE
+      ? '<div class="slot-btns">' +
+        '<button class="it-edit" type="button" data-id="' + escHtml(it.id) + '">수정</button>' +
+        '<button class="it-del" type="button" data-id="' + escHtml(it.id) + '">삭제</button></div>'
+      : '';
+    return '<div class="slot' + cls + '" data-item="' + escHtml(it.id) + '">' +
+      '<div class="time">' + escHtml(it.time) + '</div>' +
+      '<div class="what">' + itemLinesHtml(it.text) + btns + '</div></div>';
+  }).join('');
+  const meals = (day.meals && day.meals.length)
+    ? '<div class="meals"><div class="meals-h">🍽 뭐먹지</div>' +
+      day.meals.map(function (m, i) {
+        const val = escHtml(st.get(mealKey(day.n, i), ""));
+        return '<div class="meal"><div class="meal-note">' + itemLinesHtml(m) + '</div>' +
+          '<input class="memo" data-key="' + mealKey(day.n, i) +
+          '" placeholder="식당/메모 입력" value="' + val + '"></div>';
+      }).join('') + '</div>'
+    : '';
+  main.innerHTML =
+    '<div class="daycard"><div class="dayhead">' +
+      '<span class="dnum">' + Number(day.n) + '일차</span> ' +
+      '<span class="ddate">' + escHtml(day.date) + '(' + dowOf(day.date) + ')</span>' +
+      '<div class="dtheme">' + escHtml(day.theme).replace(/\n/g, ' · ') + '</div>' +
+      (function () {
+        var line = wxLine(wxState.map, day.date);
+        return line ? '<div class="dwx">' + line + wxStamp() + '</div>' : '';
+      })() + '</div>' +
+      '<div class="slots">' + rows + '</div>' +
+      (EDIT_MODE
+        ? '<form class="item-add">' +
+          '<input class="ia-time" type="time" step="300" required aria-label="시간">' +
+          '<textarea class="ia-text" rows="2" placeholder="일정 내용" required ' +
+            'aria-label="일정 내용"></textarea>' +
+          '<button type="submit">일정 추가</button></form>'
+        : '') +
+      meals + '</div>';
+  main.querySelectorAll('.memo').forEach(function (inp) {
+    inp.addEventListener('input', function () { st.set(inp.dataset.key, inp.value); });
+  });
+  if (EDIT_MODE) {
+    main.querySelectorAll('.it-del').forEach(function (b) {
+      b.addEventListener('click', function () {
+        if (!confirm('이 일정을 삭제할까요?')) return;
+        removeItem(trip, day.n, b.dataset.id);
+        afterItemEdit(trip, day, st, saveTripBody(trip));
+      });
+    });
+    main.querySelectorAll('.it-edit').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var it = day.items.filter(function (x) { return x.id === b.dataset.id; })[0];
+        if (!it) return;
+        var time = prompt('시간 (HH:MM)', it.time);
+        if (time === null) return;
+        // 추가 폼은 <input type=time>이 형식을 강제하지만 prompt()는 아무 문자열이나
+        // 받는다 — '9:00'처럼 자릿수만 틀린 흔한 실수는 정규화해서 받아주고, 그 밖의
+        // ('9시', 'abc' 등) 잘못된 값은 저장하지 않고 알린다. 정규화 없이 그대로 저장하면
+        // sortItems의 사전순 비교에서 '9:00'이 '14:00'보다 뒤로 밀려버린다(review 지적).
+        var normTime = normalizeTimeInput(time);
+        if (!normTime) {
+          alert('시간 형식이 올바르지 않습니다. 예: 09:00');
+          return;
+        }
+        var text = prompt('일정 내용', it.text);
+        if (text === null) return;
+        text = text.trim();
+        // 추가 폼(item-add)은 빈 내용을 거부한다(required + trim 확인) — prompt 경로만
+        // 빈 문자열을 그대로 받아주면 "시간만 있고 내용은 빈" undecided 행이 생긴다.
+        // 두 입력 경로의 보장을 맞춘다.
+        if (!text) {
+          alert('일정 내용을 입력해 주세요.');
+          return;
+        }
+        updateItem(trip, day.n, it.id, { time: normTime, text: text });
+        afterItemEdit(trip, day, st, saveTripBody(trip));
+      });
+    });
+    var af = main.querySelector('.item-add');
+    if (af) af.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var t = af.querySelector('.ia-time').value;
+      var x = af.querySelector('.ia-text').value.trim();
+      if (!t || !x) return;
+      addItem(trip, day.n, { time: t, text: x });
+      afterItemEdit(trip, day, st, saveTripBody(trip));
+    });
+  }
+}
+
+// ---- 하단 고정 섹션 ----
+
+function sectionBodyHtml(trip, sec) {
+  if (sec.type === "builtin") {
+    if (sec.body === "hotel")    return escHtml(trip.hotel);
+    if (sec.body === "packing")  return '<div id="packing-body"></div>';
+    if (sec.body === "spend")    return '<div id="spend-body"></div>';
+    if (sec.body === "expenses") return expensesTableHtml(trip);
+    return '';
+  }
+  if (sec.type === "text") return itemLinesHtml(sec.body);
+  if (sec.type === "list") {
+    return '<ul>' + sec.body.map(function (t) {
+      return '<li>' + escHtml(t) + '</li>';
+    }).join('') + '</ul>';
+  }
+  if (sec.type === "table") {
+    return sec.body.map(function (tb) {
+      return '<div class="tblwrap"><table>' +
+        (tb.caption ? '<caption>' + escHtml(tb.caption) + '</caption>' : '') +
+        '<thead><tr>' + tb.head.map(function (h) {
+          return '<th>' + escHtml(h) + '</th>';
+        }).join('') + '</tr></thead><tbody>' +
+        tb.rows.map(function (r) {
+          return '<tr>' + r.map(function (c) {
+            return '<td>' + escHtml(c) + '</td>';
+          }).join('') + '</tr>';
+        }).join('') + '</tbody></table></div>';
+    }).join('');
+  }
+  return '';
+}
+
+// 합계는 trip.expenses에서 직접 계산한다 — 사용자가 항목을 추가해도 어긋나지 않게.
+function expensesTableHtml(trip) {
+  const rows = trip.expenses.map(function (e) {
+    return '<tr><td>' + escHtml(e.cat) + '</td><td>' + escHtml(e.detail) + '</td>' +
+      '<td class="num">' + Number(e.krw).toLocaleString('ko-KR') + '</td></tr>';
+  }).join('');
+  const total = trip.expenses.reduce(function (s, e) { return s + Number(e.krw || 0); }, 0);
+  return '<div class="tblwrap"><table>' +
+    '<thead><tr><th>항목</th><th>상세</th><th class="num">금액(원)</th></tr></thead>' +
+    '<tbody>' + rows + '</tbody>' +
+    '<tfoot><tr><td colspan="2">합계</td><td class="num">' +
+      total.toLocaleString('ko-KR') + '</td></tr></tfoot></table></div>';
+}
+
+function renderFixed(trip, st) {
+  document.getElementById("fixed").innerHTML = trip.sections.map(function (sec, i) {
+    return '<details' + (i === 0 ? ' open' : '') + '>' +
+      '<summary>' + escHtml(sec.icon) + ' ' + escHtml(sec.title) + '</summary>' +
+      '<div class="acc">' + sectionBodyHtml(trip, sec) + '</div></details>';
+  }).join('');
+  renderPacking(trip, st);
+  renderSpend(trip, st);
+}
+
+function renderSpend(trip, st) {
+  const body = document.getElementById("spend-body");
+  if (!body) return;
+  const list = spendList(st);
+  const fx = spendFx(st);
+  const tot = spendTotalJpy(list);
+  const krw = fx
+    ? ' <span class="skrw">(약 ' + jpyToKrw(tot, fx).toLocaleString('ko-KR') + '원)</span>'
+    : '';
+  const chips = spendByCat(list).map(function (c) {
+    return '<li>' + escHtml(c.cat) + ' <b>¥' + c.jpy.toLocaleString('ko-KR') + '</b></li>';
+  }).join('');
+  const groups = spendByDate(list).map(function (g) {
+    const rows = g.items.map(function (e) {
+      const n = Number(e.jpy);
+      return '<li><span class="scat">' + escHtml(e.cat) + '</span>' +
+        '<span class="snote">' + escHtml(e.note || e.cat) + '</span>' +
+        '<span class="sjpy">¥' + (isFinite(n) ? n : 0).toLocaleString('ko-KR') + '</span>' +
+        '<button class="spend-del" type="button" data-id="' + escHtml(e.id) +
+        '" aria-label="삭제">×</button></li>';
+    }).join('');
+    return '<div class="sgroup"><div class="sdate">' + escHtml(g.date) + '</div>' +
+      '<ul class="slist">' + rows + '</ul></div>';
+  }).join('');
+  body.innerHTML =
+    '<div class="stotal">¥' + tot.toLocaleString('ko-KR') + krw + '</div>' +
+    (chips ? '<ul class="scats">' + chips + '</ul>' : '') +
+    '<form class="spend-add">' +
+      '<input class="sjpy-in" type="number" inputmode="numeric" min="1" step="1" ' +
+        'placeholder="금액 ¥" aria-label="금액(엔)">' +
+      '<input class="snote-in" type="text" placeholder="내용" aria-label="내용">' +
+      '<select class="scat-in" aria-label="분류">' +
+        SPEND_CATS.map(function (c) { return '<option>' + escHtml(c) + '</option>'; }).join('') +
+      '</select>' +
+      '<button type="submit">추가</button>' +
+    '</form>' +
+    (groups || '<div class="sempty">아직 기록이 없습니다.</div>') +
+    '<div class="sfx">100엔 = <input class="sfx-in" type="number" min="0" step="1" value="' +
+      fx + '"> 원</div>';
+
+  const form = body.querySelector('.spend-add');
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    const jin = form.querySelector('.sjpy-in');
+    const jpy = Math.round(Number(jin.value));
+    if (!isFinite(jpy) || jpy <= 0) { jin.focus(); return; }
+    const cur = spendList(st);
+    let id = Date.now();
+    while (cur.some(function (x) { return x.id === id; })) id++;
+    cur.push({
+      id: id,
+      date: todayLocal(),
+      jpy: jpy,
+      cat: form.querySelector('.scat-in').value,
+      note: form.querySelector('.snote-in').value.trim()
+    });
+    st.set("spend", cur);
+    renderSpend(trip, st);
+    renderSummary(trip, st);
+    const next = body.querySelector('.sjpy-in');
+    if (next) next.focus();
+  });
+
+  body.querySelectorAll('.spend-del').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      const id = Number(btn.dataset.id);
+      st.set("spend", spendList(st).filter(function (x) { return x.id !== id; }));
+      renderSpend(trip, st);
+      renderSummary(trip, st);
+    });
+  });
+
+  const fxin = body.querySelector('.sfx-in');
+  fxin.addEventListener('change', function () {
+    st.set("fx", Number(fxin.value) || 0);
+    renderSpend(trip, st);
+    renderSummary(trip, st);
+  });
+}
+
+function renderPacking(trip, st) {
+  const body = document.getElementById("packing-body");
+  if (!body) return;
+  const customs = st.get("packing_add", []);
+  const checked = st.get("packing_checked", {});
+  const items = trip.packing.map(function (t) { return { text: t, custom: false }; })
+    .concat(customs.map(function (t) { return { text: t, custom: true }; }));
+  body.innerHTML =
+    '<ul class="packlist">' + items.map(function (it) {
+      const on = checked[it.text] ? ' checked' : '';
+      const doneCls = checked[it.text] ? ' class="done"' : '';
+      const del = it.custom
+        ? '<button class="pack-del" type="button" data-text="' + escHtml(it.text) + '" aria-label="삭제">×</button>'
+        : '';
+      return '<li' + doneCls + '><label><input type="checkbox" data-text="' + escHtml(it.text) + '"' +
+        on + '> ' + escHtml(it.text) + '</label>' + del + '</li>';
+    }).join('') + '</ul>' +
+    '<form class="pack-add"><input type="text" placeholder="준비물 추가" aria-label="준비물 추가">' +
+    '<button type="submit">추가</button></form>';
+
+  body.querySelectorAll('input[type=checkbox]').forEach(function (cb) {
+    cb.addEventListener('change', function () {
+      const c = st.get("packing_checked", {});
+      c[cb.dataset.text] = cb.checked;
+      st.set("packing_checked", c);
+      cb.closest('li').classList.toggle('done', cb.checked);
+    });
+  });
+  body.querySelectorAll('.pack-del').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      const list = st.get("packing_add", []).filter(function (t) { return t !== btn.dataset.text; });
+      st.set("packing_add", list);
+      renderPacking(trip, st);
+    });
+  });
+  const form = body.querySelector('.pack-add');
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    const inp = form.querySelector('input');
+    const v = inp.value.trim();
+    if (!v) return;
+    const list = st.get("packing_add", []);
+    if (list.indexOf(v) === -1 && trip.packing.indexOf(v) === -1) {
+      list.push(v);
+      st.set("packing_add", list);
+    }
+    renderPacking(trip, st);
+    const nextInput = body.querySelector('.pack-add input');
+    if (nextInput) nextInput.focus();
+  });
+}
+
+</script>
+<script>
+// 여행 만들기·설정, 일정 편집 (Task 7-8)
+
+var MAX_TRIP_DAYS = 90;
+
+function validateTripForm(f) {
+  if (!f.title || !f.title.trim()) return '여행 제목을 입력하세요.';
+  if (!f.start || !f.end) return '시작일과 종료일을 입력하세요.';
+  if (f.end < f.start) return '종료일이 시작일보다 빠릅니다.';
+  // <input type=date>는 연도 자릿수를 제한하지 않아(예: 275760년) Date.parse가 NaN을
+  // 돌려줄 수 있다. NaN > 90은 false라서 그대로 두면 "통과"해버리고 resyncDays가
+  // 일차 0개짜리 여행을 만든다 — 기간이 긴 게 아니라 날짜 자체가 무효인 것이므로
+  // "최대 90일" 메시지 대신 별도 메시지로 구분한다.
+  var days = daysBetween(f.start, f.end);
+  if (!(days >= 1)) return '날짜가 올바르지 않습니다.';
+  if (days > MAX_TRIP_DAYS) return '여행 기간은 최대 90일입니다.';
+  if (!(Number(f.party) >= 1)) return '인원은 1명 이상이어야 합니다.';
+  return null;
+}
+
+// trip이 null이면 새로 만들고, 있으면 필드를 갱신한 새 객체를 돌려준다. days는 항상
+// 재동기화한다.
+// 참고(편집 경로): 인자로 받은 trip은 건드리지 않는다(non-mutating) — 갱신된 필드를
+// 얹은 새 객체를 돌려준다. showEdit는 폼 제출마다 이 함수에 같은 trip 참조를 넘기는데,
+// 만약 그 자리에서 고쳤다면 실패한 시도의 값(예: 일차가 줄어들며 사라진 일정)이 메모리
+// 위 trip에 그대로 남아, 그다음 재시도가 성공할 때 저장소의 온전한 값이 아니라 실패한
+// 시도로 오염된 값을 써버린다. trip을 그대로 두면 재시도할 때마다 항상 저장소와 일치하는
+// 원본에서 다시 시작하므로 이 문제가 애초에 생기지 않는다. saveTrip이 실패해도 caller가
+// 들고 있는 trip은 여전히 저장소와 일치한다 — 그래도 submitTripForm은 실패 시 절대
+// navigate하지 않고 에러를 보여준다(아래 참고).
+function applyTripForm(trip, f) {
+  if (!trip) {
+    return emptyTrip({ title: f.title.trim(), start: f.start, end: f.end,
+                       party: Number(f.party), hotel: (f.hotel || '').trim() });
+  }
+  var next = {};
+  for (var k in trip) { if (Object.prototype.hasOwnProperty.call(trip, k)) next[k] = trip[k]; }
+  next.title = f.title.trim();
+  next.start = f.start;
+  next.end = f.end;
+  next.party = Number(f.party);
+  next.hotel = (f.hotel || '').trim();
+  next.days = resyncDays(trip.days, f.start, f.end);
+  return next;
+}
+
+// 검증 → 적용 → 저장까지의 순수 로직. DOM에 손대지 않아 테스트에서 직접 호출할 수 있다.
+// saveTrip은 localStorage 쓰기가 실제로 반영됐는지 읽어서 확인한 boolean을 돌려주므로
+// (용량 초과·프라이빗 모드 등에서 조용히 no-op일 수 있음) 그 값을 무시하면 실패가
+// 사용자에게 전혀 드러나지 않는다 — 새 여행이면 존재하지 않는 화면으로 이동해버리고,
+// 수정이면 저장 안 된 새 값이 화면에 남아 성공한 것처럼 보인다.
+function submitTripForm(trip, f) {
+  var err = validateTripForm(f);
+  if (err) return { ok: false, message: err };
+  var saved = applyTripForm(trip, f);
+  if (!saveTrip(saved)) {
+    return { ok: false, message: '저장에 실패했습니다. 기기 저장 공간을 확인해 주세요.', trip: saved };
+  }
+  return { ok: true, trip: saved };
+}
+
+function showEdit(id) {
+  var trip = id ? loadTrip(id) : null;
+  if (id && !trip) { go('#/'); return; }
+  var el = document.getElementById("screen-edit");
+  showScreen("edit");
+
+  el.innerHTML =
+    '<header class="ehead"><button id="e-back" type="button">←</button>' +
+    '<h1>' + (trip ? '여행 설정' : '새 여행') + '</h1></header>' +
+    '<form id="trip-form" class="eform">' +
+      '<label>제목<input name="title" type="text" required placeholder="예: 오사카 여행" ' +
+        'value="' + escHtml(trip ? trip.title : '') + '"></label>' +
+      '<label>시작일<input name="start" type="date" required ' +
+        'value="' + escHtml(trip ? trip.start : '') + '"></label>' +
+      '<label>종료일<input name="end" type="date" required ' +
+        'value="' + escHtml(trip ? trip.end : '') + '"></label>' +
+      '<label>인원<input name="party" type="number" min="1" step="1" ' +
+        'value="' + (trip ? Number(trip.party) : 2) + '"></label>' +
+      '<label>숙소<textarea name="hotel" rows="2" ' +
+        'placeholder="숙소명 · 체크인/아웃">' + escHtml(trip ? trip.hotel : '') + '</textarea></label>' +
+      '<div class="eerr" id="e-err" hidden></div>' +
+      '<button type="submit">' + (trip ? '저장' : '만들기') + '</button>' +
+    '</form>';
+
+  document.getElementById("e-back").addEventListener("click", function () {
+    go(trip ? '#/t/' + trip.id : '#/');
+  });
+
+  // go()는 location.hash만 바꾸고 hashchange는 비동기로 뜨므로, 제출 직후에도 폼이
+  // 한 틱 동안 살아있다 — 그 사이 빠르게 두 번 누르면 applyTripForm(null, f)가 두 번
+  // 실행되어 서로 다른 id로 여행이 두 개 저장된다. submitting 플래그로 막는다.
+  var submitting = false;
+  document.getElementById("trip-form").addEventListener("submit", function (e) {
+    e.preventDefault();
+    if (submitting) return;
+    var fd = new FormData(e.target);
+    var f = { title: fd.get('title'), start: fd.get('start'), end: fd.get('end'),
+              party: fd.get('party'), hotel: fd.get('hotel') };
+    var box = document.getElementById("e-err");
+    submitting = true;
+    var res = submitTripForm(trip, f);
+    if (!res.ok) {
+      submitting = false;
+      box.textContent = res.message;
+      box.hidden = false;
+      return;
+    }
+    box.hidden = true;
+    go('#/t/' + res.trip.id);
+  });
+}
+
+// ---- 일정 카드 편집 (Task 8) ----
+// applyTripForm과 달리 여기 있는 addItem/updateItem/removeItem은 순수 함수가 아니다 —
+// 인자로 받은 trip(과 그 trip.days 안의 day 객체)을 그 자리에서 고쳐 같은 참조를
+// 돌려준다. 호출부(views.js)가 이 mutation을 전제로 저장 여부를 직접 챙긴다.
+
+// 안정 정렬 — 같은 시간이면 원래 순서를 유지한다.
+// time이 없거나 문자열이 아닌 항목(가져온 데이터가 손상됐거나 손으로 편집된 경우 등)은
+// 정렬 키가 없는 셈이므로 목록 맨 뒤로 보낸다 — "시간 미정" 항목이 화면 아래쪽에 몰리는
+// 게 자연스럽고, 무엇보다 a<b와 b<a가 둘 다 false가 되어 비교자가 모순(양방향 모두 1을
+// 반환)에 빠지는 걸 피할 수 있다. 그 모순 때문에 정상 시간을 가진 항목들끼리도 상대
+// 순서가 깨지는 게 원래 버그였다 — malformed 항목이 하나만 섞여도 Array.sort 구현에 따라
+// 결과가 정의되지 않는다.
+function sortItems(items) {
+  function timeKey(it) {
+    return typeof it.time === 'string' ? it.time : null;
+  }
+  return items.map(function (it, i) { return { it: it, i: i }; })
+    .sort(function (a, b) {
+      var ta = timeKey(a.it), tb = timeKey(b.it);
+      if (ta === tb) return a.i - b.i;
+      if (ta === null) return 1;
+      if (tb === null) return -1;
+      return ta < tb ? -1 : 1;
+    })
+    .map(function (w) { return w.it; });
+}
+
+// prompt()로 받은 시간 문자열을 "HH:MM"(24시간, 0-padded)으로 정규화한다. <input type=time>은
+// 브라우저가 이미 이 형식을 강제하지만, prompt 경로는 아무 검증도 거치지 않으므로 여기서
+// 막아야 한다. '9:00'처럼 시가 한 자리인 흔한 실수는 정규화해서 받아준다(sortItems가 문자열
+// 사전순으로 비교하므로 '9:00'을 그대로 저장하면 '14:00'보다 뒤로 밀려버린다) — 그 밖의
+// 잘못된 입력('9시', '', 'abc')은 null을 돌려줘 호출부가 거부하게 한다.
+function normalizeTimeInput(s) {
+  var m = /^([0-9]{1,2}):([0-9]{2})$/.exec(String(s).trim());
+  if (!m) return null;
+  var h = Number(m[1]), mi = Number(m[2]);
+  if (h < 0 || h > 23 || mi < 0 || mi > 59) return null;
+  return (h < 10 ? '0' : '') + h + ':' + m[2];
+}
+
+function findDay(trip, dayN) {
+  return trip.days.filter(function (d) { return d.n === dayN; })[0] || null;
+}
+
+function addItem(trip, dayN, o) {
+  var day = findDay(trip, dayN);
+  if (!day) return trip;
+  day.items.push({ id: newItemId(), time: o.time, text: o.text });
+  day.items = sortItems(day.items);
+  return trip;
+}
+
+function updateItem(trip, dayN, itemId, o) {
+  var day = findDay(trip, dayN);
+  if (!day) return trip;
+  day.items.forEach(function (it) {
+    if (it.id !== itemId) return;
+    it.time = o.time;
+    it.text = o.text;
+  });
+  day.items = sortItems(day.items);
+  return trip;
+}
+
+function removeItem(trip, dayN, itemId) {
+  var day = findDay(trip, dayN);
+  if (!day) return trip;
+  day.items = day.items.filter(function (it) { return it.id !== itemId; });
+  return trip;
+}
+
+</script>
+<script>
+// 날씨 조회 + 해시 라우터. 렌더는 views.js에 있다.
+
+function todayLocal() {
+  var d = new Date();
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+}
+
+var WX_URL = "https://api.open-meteo.com/v1/forecast?latitude=34.69&longitude=135.5" +
+  "&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max" +
+  "&timezone=Asia%2FTokyo&forecast_days=7";
+
+function wxIcon(code) {
+  if (code === 0) return { e: "☀️", t: "맑음" };
+  if (code === 1 || code === 2) return { e: "🌤️", t: "구름 조금" };
+  if (code === 3) return { e: "☁️", t: "흐림" };
+  if (code === 45 || code === 48) return { e: "🌫️", t: "안개" };
+  if (code >= 51 && code <= 57) return { e: "🌦️", t: "이슬비" };
+  if (code >= 61 && code <= 67) return { e: "🌧️", t: "비" };
+  if ((code >= 71 && code <= 77) || code === 85 || code === 86) return { e: "🌨️", t: "눈" };
+  if (code >= 80 && code <= 82) return { e: "🌧️", t: "소나기" };
+  if (code >= 95) return { e: "⛈️", t: "뇌우" };
+  return { e: "🌡️", t: "" };
+}
+function wxDailyMap(api) {
+  var m = {};
+  if (!api || !api.daily || !api.daily.time) return m;
+  api.daily.time.forEach(function (d, i) {
+    var rain = api.daily.precipitation_probability_max[i];
+    m[d] = {
+      code: api.daily.weather_code[i],
+      tmax: Math.round(api.daily.temperature_2m_max[i]),
+      tmin: Math.round(api.daily.temperature_2m_min[i]),
+      rain: (rain === null || rain === undefined) ? null : rain
+    };
+  });
+  return m;
+}
+function wxLine(map, date) {
+  var w = map[date];
+  if (!w) return "";
+  var rain = w.rain === null ? "" : " · 비 " + w.rain + "%";
+  return wxIcon(w.code).e + " " + w.tmax + "° / " + w.tmin + "°" + rain;
+}
+
+var wxState = { map: {}, at: null, live: false, fetchedAt: 0 };
+// 여행이 바뀌면 이전 여행의 날씨가 남아 첫 페인트에 엉뚱한 도시가 보인다(지금은
+// WX_URL이 좌표를 고정하고 있어 안 보이지만, 좌표가 여행별이 되는 순간 버그가 된다).
+function wxReset() {
+  wxState = { map: {}, at: null, live: false, fetchedAt: 0 };
+}
+// 같은 세션에서 방금 받아온 예보는 다시 받지 않는다(일 단위 예보라 30분이면 충분).
+var WX_TTL_MS = 30 * 60 * 1000;
+function wxIsFresh() {
+  return wxState.live && (Date.now() - wxState.fetchedAt) < WX_TTL_MS;
+}
+
+function wxStamp() {
+  if (wxState.live || !wxState.at) return "";
+  var d = new Date(wxState.at);
+  var hh = ("0" + d.getHours()).slice(-2);
+  var mm = ("0" + d.getMinutes()).slice(-2);
+  return ' <span class="wxstamp">(' + (d.getMonth() + 1) + "/" + d.getDate() +
+    " " + hh + ":" + mm + " 기준)</span>";
+}
+function wxRefresh(st) {
+  if (wxIsFresh()) return;
+  var cached = st.get("weather", null);
+  if (cached && cached.api) {
+    wxState.map = wxDailyMap(cached.api);
+    wxState.at = cached.at;
+  }
+  fetch(WX_URL).then(function (r) {
+    if (!r.ok) throw new Error("wx " + r.status);
+    return r.json();
+  }).then(function (api) {
+    var map = wxDailyMap(api);
+    st.set("weather", { at: new Date().toISOString(), api: api });
+    wxState.map = map;
+    wxState.at = null;
+    wxState.live = true;
+    wxState.fetchedAt = Date.now();
+    wxRepaint();
+  }).catch(function () {
+    if (wxState.at) wxRepaint();
+  });
+}
+// dayN에 해당하는 day를 찾아 타임라인만 다시 그린다. renderTabs(따라서 tab strip의
+// scrollIntoView)는 건드리지 않는다 — 탭 목록이나 선택된 탭이 바뀌지 않은 상황(날씨 갱신,
+// 편집 모드 토글)에서 renderTabs까지 다시 부르면 스크롤이 제자리서 튄다.
+// showDay가 하던 "day.items가 배열이 아니면 빈 배열로 고쳐 넣는" 보정도 여기서 함께
+// 한다 — renderTimeline을 직접 부르는 경로(wxRepaint, 편집 모드 토글, afterItemEdit)가
+// 전부 이 보정을 거치게 해서, 손상된 저장값(items 없는 day)을 만나도 던지지 않는다.
+function repaintDay(trip, dayN, st) {
+  var day = pickDay(trip, dayN);
+  if (!day) return null;
+  if (!Array.isArray(day.items)) day.items = [];
+  renderTimeline(trip, day, st);
+  return day;
+}
+
+// 날씨가 바뀌면 날씨를 쓰는 화면(요약·타임라인)만 다시 그린다.
+// showTrip 전체를 다시 부르면 renderTabs의 scrollIntoView로 스크롤이 튀고
+// renderFixed가 열려 있던 아코디언(details)과 입력 중이던 값을 날린다.
+function wxRepaint() {
+  if (!CUR.trip) return;
+  if (document.getElementById("screen-trip").hidden) return;
+  renderSummary(CUR.trip, CUR.st);
+  repaintDay(CUR.trip, CUR.dayN, CUR.st);
+}
+
+// ---- 라우터 ----
+
+var CUR = { id: null, trip: null, st: null, dayN: null };
+
+function currentTrip() { return CUR.trip; }
+
+function go(hash) {
+  if (location.hash === hash) route(); else location.hash = hash;
+}
+
+function showScreen(which) {
+  ["list", "trip", "edit"].forEach(function (s) {
+    document.getElementById("screen-" + s).hidden = (s !== which);
+  });
+}
+
+function showList() {
+  showScreen("list");
+  var trips = listTrips();
+  document.getElementById("triplist").innerHTML = trips.length
+    ? trips.map(function (t) {
+        return '<article class="tripcard" data-id="' + escHtml(t.id) + '">' +
+          '<div class="tc-title">' + escHtml(t.title) + '</div>' +
+          '<div class="tc-period">' + escHtml(t.start) + ' ~ ' + escHtml(t.end) + '</div>' +
+          '<div class="tc-dday">' + dday(todayLocal(), t.start, t.end) + '</div>' +
+          '<button class="tc-del" type="button" aria-label="삭제">×</button></article>';
+      }).join('')
+    : '<p class="empty">아직 여행이 없습니다. 새로 만들어 보세요.</p>';
+
+  var list = document.getElementById("triplist");
+  list.querySelectorAll('.tripcard').forEach(function (c) {
+    c.addEventListener('click', function (e) {
+      // closest: 삭제 버튼이 나중에 아이콘 같은 자식을 갖게 돼도 그대로 동작한다.
+      if (e.target.closest('.tc-del')) return;
+      go('#/t/' + c.dataset.id);
+    });
+  });
+  list.querySelectorAll('.tc-del').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var card = b.closest('.tripcard');
+      var name = card.querySelector('.tc-title').textContent;
+      if (!confirm('"' + name + '" 여행을 삭제할까요? 되돌릴 수 없습니다.')) return;
+      deleteTrip(card.dataset.id);
+      showList();
+    });
+  });
+}
+
+// 그릴 일차를 고른다. 요청한 일차가 없거나(손상된 JSON을 가져온 경우 등)
+// days 자체가 비어 있으면 던지지 않고 대신 오늘 → 첫날/마지막날 순으로 물러난다.
+// 고를 수 있는 일차가 하나도 없으면 null.
+// todayISO는 테스트에서 주입하기 위한 선택 인자다. 비우면 오늘 날짜를 쓴다.
+function pickDay(trip, dayN, todayISO) {
+  var days = (trip && Array.isArray(trip.days)) ? trip.days : [];
+  if (!days.length) return null;
+  var day = null;
+  if (dayN) day = days.filter(function (d) { return d.n === dayN; })[0];
+  var today = todayISO || todayLocal();
+  if (!day) day = days.filter(function (d) { return d.date === today; })[0];
+  if (!day) day = today < days[0].date ? days[0] : days[days.length - 1];
+  return day || null;
+}
+
+// 일차만 바뀔 때 다시 그리는 것: 탭 + 타임라인. 그게 전부다.
+// #fixed(고정 정보·짐·경비)는 건드리지 않는다 — innerHTML을 통째로 갈아엎으면
+// 열어 둔 아코디언이 닫히고 경비 입력창에 치던 값이 사라진다.
+function showDay(trip, dayN) {
+  var day = pickDay(trip, dayN);
+  CUR.dayN = day ? day.n : null;
+  if (day) {
+    renderTabs(trip, day.n, function (n) { go('#/t/' + trip.id + '/d/' + n); });
+    if (!Array.isArray(day.items)) day.items = [];
+    renderTimeline(trip, day, CUR.st);
+  } else {
+    document.getElementById("daytabs").innerHTML = '';
+    document.getElementById("timeline").innerHTML =
+      '<p class="empty">표시할 일정이 없습니다.</p>';
+  }
+}
+
+function showTrip(id, dayN) {
+  var trip = loadTrip(id);
+  if (!trip) { go('#/'); return; }
+  // 여행을 "여는" 경우에만 화면 전체를 세운다: 다른 여행으로 바뀌었거나,
+  // 목록·편집 등 다른 화면에서 돌아온 경우. 같은 여행 안에서 일차 탭만 누른
+  // 경우에는 showDay만 돈다.
+  var switched = (CUR.id !== id);
+  var opening = switched || document.getElementById("screen-trip").hidden;
+
+  CUR.id = id; CUR.trip = trip; CUR.st = tripStore(id);
+  // EDIT_MODE는 세션에 묶인 UI 상태일 뿐 trip 데이터가 아니다(views.js 위 주석 참고) —
+  // 다른 여행으로 전환하면서 편집 모드가 그대로 넘어가면, A에서 편집 모드를 켠 채 목록으로
+  // 돌아가 B를 열었을 때 B가 편집 모드로 열려버린다. 새로고침은 전역 변수 자체가 초기화되며
+  // 자연히 꺼지므로 여기서는 "여행이 바뀌는" 경우만 챙기면 된다.
+  if (switched) { wxReset(); EDIT_MODE = false; }
+  showScreen("trip");
+
+  if (opening) renderSummary(trip, CUR.st);
+  showDay(trip, dayN);
+  if (opening) {
+    renderFixed(trip, CUR.st);
+    // 날씨 요청은 여행을 열 때만, 그것도 최근에 받아온 게 없을 때만 보낸다.
+    wxRefresh(CUR.st);
+  }
+}
+
+function route() {
+  var h = location.hash || "#/";
+  var m = h.match(/^#\/t\/([^/]+)(?:\/d\/(\d+))?$/);
+  if (m) { showTrip(m[1], m[2] ? parseInt(m[2], 10) : null); return; }
+  if (/^#\/t\/[^/]+\/edit$/.test(h)) { showEdit(h.split('/')[2]); return; }
+  if (h === "#/new") { showEdit(null); return; }
+  showList();
+}
+
+window.addEventListener("hashchange", route);
+
+document.addEventListener("DOMContentLoaded", function () {
+  // 앱 화면이 없는 페이지(test.html 등)에서는 부팅하지 않는다.
+  if (!document.getElementById("screen-list")) return;
+  migrateLegacy();
+
+  document.getElementById("new-trip")
+    .addEventListener("click", function () { go('#/new'); });
+  document.getElementById("add-sample")
+    .addEventListener("click", function () { go('#/t/' + installSample()); });
+
+  // 여행이 하나뿐이면 목록을 건너뛰고 바로 연다.
+  var trips = listTrips();
+  if (!location.hash && trips.length === 1) { go('#/t/' + trips[0].id); return; }
+  route();
+});
+
+</script>
+</body>
+</html>
