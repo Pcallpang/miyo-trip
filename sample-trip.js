@@ -374,34 +374,6 @@ window.SAMPLE_TRIP = {
       ]
     },
     {
-      "id": "s_hotel",
-      "icon": "🏨",
-      "title": "숙소",
-      "type": "builtin",
-      "body": "hotel"
-    },
-    {
-      "id": "s_packing",
-      "icon": "🎒",
-      "title": "준비물",
-      "type": "builtin",
-      "body": "packing"
-    },
-    {
-      "id": "s_spend",
-      "icon": "💸",
-      "title": "현지 경비",
-      "type": "builtin",
-      "body": "spend"
-    },
-    {
-      "id": "s_expenses",
-      "icon": "💰",
-      "title": "경비 내역",
-      "type": "builtin",
-      "body": "expenses"
-    },
-    {
       "id": "s_tips",
       "icon": "💡",
       "title": "팁",

@@ -162,6 +162,25 @@ body { margin:0; background:var(--bg); color:var(--text);
   border-radius:10px; background:var(--card); color:var(--text); }
 .item-add button { font:inherit; font-weight:700; padding:9px 16px; border:0; border-radius:10px;
   background:var(--accent); color:#fff; cursor:pointer; }
+#tabbar { position:fixed; left:0; right:0; bottom:0; z-index:10;
+  display:flex; background:var(--card); border-top:1px solid #dde4e8;
+  padding-bottom:env(safe-area-inset-bottom); }
+#tabbar .tb { flex:1; border:0; background:none; font:inherit; cursor:pointer;
+  display:flex; flex-direction:column; align-items:center; gap:2px;
+  padding:8px 2px 6px; color:var(--muted); }
+#tabbar .tb[data-selected] { color:var(--accent); font-weight:700; }
+#tabbar .tb-i { font-size:1.15rem; line-height:1.1; }
+#tabbar .tb-l { font-size:.7rem; }
+/* 하단 고정 바에 마지막 항목이 가리지 않도록 본문에 여백을 준다. */
+#screen-trip { padding-bottom:calc(64px + env(safe-area-inset-bottom)); }
+#tab-panel { padding:12px; }
+.panel-card { background:var(--card); border-radius:14px; padding:14px 16px;
+  margin-bottom:10px; box-shadow:0 1px 4px rgba(0,0,0,.06); }
+.panel-h { margin:0 0 8px; font-size:.9rem; color:var(--accent); }
+#tab-panel .empty { color:var(--muted); text-align:center; padding:32px 16px; }
+#tab-panel details { background:var(--card); border-radius:14px; margin-bottom:10px;
+  box-shadow:0 1px 4px rgba(0,0,0,.06); overflow:hidden; }
+#tab-panel summary { padding:14px 16px; font-weight:700; cursor:pointer; }
 
 </style>
 </head>
@@ -176,9 +195,12 @@ body { margin:0; background:var(--bg); color:var(--text);
 </section>
 <section id="screen-trip" hidden>
 <header id="summary"></header>
+<div id="tab-day">
 <nav id="daytabs"></nav>
 <main id="timeline"></main>
-<section id="fixed"></section>
+</div>
+<div id="tab-panel"></div>
+<nav id="tabbar"></nav>
 </section>
 <section id="screen-edit" hidden></section>
 <script>
@@ -558,34 +580,6 @@ window.SAMPLE_TRIP = {
       ]
     },
     {
-      "id": "s_hotel",
-      "icon": "🏨",
-      "title": "숙소",
-      "type": "builtin",
-      "body": "hotel"
-    },
-    {
-      "id": "s_packing",
-      "icon": "🎒",
-      "title": "준비물",
-      "type": "builtin",
-      "body": "packing"
-    },
-    {
-      "id": "s_spend",
-      "icon": "💸",
-      "title": "현지 경비",
-      "type": "builtin",
-      "body": "spend"
-    },
-    {
-      "id": "s_expenses",
-      "icon": "💰",
-      "title": "경비 내역",
-      "type": "builtin",
-      "body": "expenses"
-    },
-    {
       "id": "s_tips",
       "icon": "💡",
       "title": "팁",
@@ -847,6 +841,26 @@ function mealMigrateKey(sub, byN) {
 // 저장된 모든 여행의 구 식사 메모 키를 한 번 옮긴다. 여러 번 불러도 안전하다
 // (위 mealMigrateKey가 이미 날짜 기준인 키를 걸러낸다). 새 키 쓰기가 실패하면
 // 구 키를 지우지 않으므로 다음 부팅에 그대로 재시도된다. 옮긴 키 개수를 돌려준다.
+function stripBuiltinSections(sections) {
+  if (!Array.isArray(sections)) return [];
+  return sections.filter(function (s) { return !s || s.type !== "builtin"; });
+}
+
+// 내장 섹션은 하단 탭이 됐으므로 데이터에서 걷어낸다. 재실행해도 안전하다
+// (걸러낼 게 없으면 길이가 같아 쓰기를 건너뛴다).
+function migrateSections() {
+  var changed = 0;
+  listTrips().forEach(function (row) {
+    var trip = loadTrip(row.id);
+    if (!trip) return;
+    var next = stripBuiltinSections(trip.sections);
+    if (next.length === (trip.sections || []).length) return;
+    trip.sections = next;
+    if (saveTripBody(trip)) changed++;
+  });
+  return changed;
+}
+
 function migrateMealKeys() {
   var moved = 0;
   listTrips().forEach(function (row) {
@@ -992,14 +1006,11 @@ function resyncDays(days, start, end) {
   return out;
 }
 
+// 내장 항목(숙소·준비물·경비)은 하단 탭이 됐다. sections는 사용자가 만든 것만 담는다.
 function defaultSections() {
-  return [
-    { id: newSectionId(), icon: "🏨", title: "숙소",      type: "builtin", body: "hotel" },
-    { id: newSectionId(), icon: "🎒", title: "준비물",    type: "builtin", body: "packing" },
-    { id: newSectionId(), icon: "💸", title: "현지 경비", type: "builtin", body: "spend" },
-    { id: newSectionId(), icon: "💰", title: "경비 내역", type: "builtin", body: "expenses" }
-  ];
+  return [];
 }
+
 
 function emptyTrip(o) {
   return {
@@ -1144,8 +1155,13 @@ function renderSummary(trip, st) {
   const nights = daysBetween(trip.start, trip.end) - 1;
   el.innerHTML =
     '<button class="edit-trip" type="button" aria-label="여행 설정">⚙</button>' +
-    '<button class="edit-mode" type="button" aria-pressed="' + (EDIT_MODE ? 'true' : 'false') +
-      '">' + (EDIT_MODE ? '완료' : '편집') + '</button>' +
+    // 편집 토글은 일정 탭에서만 의미가 있다. CUR은 app.js에 있고 런타임에만
+    // 참조되므로 로드 순서 문제는 없다. 앱 화면이 없는 test.html에서는 CUR이
+    // 없을 수 있으므로 typeof로 막는다.
+    ((typeof CUR !== 'undefined' && CUR.tab !== 'day')
+      ? ''
+      : '<button class="edit-mode" type="button" aria-pressed="' + (EDIT_MODE ? 'true' : 'false') +
+        '">' + (EDIT_MODE ? '완료' : '편집') + '</button>') +
     '<div class="dday">' + dday(today, trip.start, trip.end) + '</div>' +
     '<h1>' + escHtml(trip.title) + '</h1>' +
     '<div class="period">' + escHtml(trip.start) + ' ~ ' + escHtml(trip.end) +
@@ -1343,14 +1359,6 @@ function renderTimeline(trip, day, st) {
 // ---- 하단 고정 섹션 ----
 
 function sectionBodyHtml(trip, sec) {
-  if (sec.type === "builtin") {
-    // 숙소는 여러 줄 입력이므로 type:"text" 섹션과 같은 방식으로 줄 단위로 그린다.
-    if (sec.body === "hotel")    return trip.hotel ? itemLinesHtml(trip.hotel) : '';
-    if (sec.body === "packing")  return '<div id="packing-body"></div>';
-    if (sec.body === "spend")    return '<div id="spend-body"></div>';
-    if (sec.body === "expenses") return expensesTableHtml(trip);
-    return '';
-  }
   if (sec.type === "text") return itemLinesHtml(sec.body);
   if (sec.type === "list") {
     return '<ul>' + sec.body.map(function (t) {
@@ -1388,19 +1396,72 @@ function expensesTableHtml(trip) {
       total.toLocaleString('ko-KR') + '</td></tr></tfoot></table></div>';
 }
 
-function renderFixed(trip, st) {
-  document.getElementById("fixed").innerHTML = trip.sections.map(function (sec, i) {
-    return '<details' + (i === 0 ? ' open' : '') + '>' +
-      '<summary>' + escHtml(sec.icon) + ' ' + escHtml(sec.title) + '</summary>' +
-      '<div class="acc">' + sectionBodyHtml(trip, sec) + '</div></details>';
-  }).join('');
-  renderPacking(trip, st);
-  renderSpend(trip, st);
+// 탭 본문. 일정 탭은 #daytabs/#timeline을 따로 쓰므로 여기서는 빈 문자열.
+function panelHtml(trip, tab) {
+  if (tab === "hotel") {
+    return trip.hotel
+      ? '<div class="panel-card">' + itemLinesHtml(trip.hotel) + '</div>'
+      : '<p class="empty">숙소가 아직 없습니다. ⚙ 여행 설정에서 입력할 수 있습니다.</p>';
+  }
+  if (tab === "packing") {
+    return '<div class="panel-card" id="packing-body"></div>';
+  }
+  if (tab === "money") {
+    var exp = (trip.expenses && trip.expenses.length)
+      ? '<div class="panel-card"><h2 class="panel-h">💰 출발 전 결제 내역</h2>' +
+        expensesTableHtml(trip) + '</div>'
+      : '';
+    return '<div class="panel-card" id="spend-body"></div>' + exp;
+  }
+  if (tab === "info") {
+    var secs = trip.sections || [];
+    if (!secs.length) {
+      // 섹션 편집기는 2단계다 — 지금 할 수 있는 게 없으므로 없는 기능을 가리키지 않는다.
+      return '<p class="empty">시간표·메모처럼 직접 만드는 항목이 여기 표시됩니다.</p>';
+    }
+    return secs.map(function (sec, i) {
+      return '<details' + (i === 0 ? ' open' : '') + '>' +
+        '<summary>' + escHtml(sec.icon) + ' ' + escHtml(sec.title) + '</summary>' +
+        '<div class="acc">' + sectionBodyHtml(trip, sec) + '</div></details>';
+    }).join('');
+  }
+  return '';
 }
 
+function renderPanel(trip, st, tab) {
+  var el = document.getElementById("tab-panel");
+  if (!el) return;
+  el.innerHTML = panelHtml(trip, tab);
+  if (tab === "packing") renderPacking(trip, st);
+  if (tab === "money") renderSpend(trip, st);
+}
+
+function renderTabbar(trip, tab, onSelect) {
+  var nav = document.getElementById("tabbar");
+  if (!nav) return;
+  nav.innerHTML = TAB_DEFS.map(function (t) {
+    var on = t.key === tab ? ' data-selected="1"' : '';
+    return '<button class="tb"' + on + ' data-tab="' + escHtml(t.key) + '"' +
+      ' aria-current="' + (t.key === tab ? 'page' : 'false') + '">' +
+      '<span class="tb-i">' + t.icon + '</span>' +
+      '<span class="tb-l">' + escHtml(t.label) + '</span></button>';
+  }).join('');
+  nav.querySelectorAll('.tb').forEach(function (b) {
+    b.addEventListener('click', function () { onSelect(b.dataset.tab); });
+  });
+}
+
+
+// renderSpend는 #spend-body를 통째로 다시 그린다 — 목록·합계·환율이 한 덩어리라
+// 부분 갱신이 오히려 복잡하다. 대신 추가 폼에 치던 값은 보존한다: 항목을 하나
+// 삭제하거나 환율을 고치는 것만으로 입력 중이던 금액·내용이 사라지면 안 된다.
+// 제출 경로는 값을 비우는 게 맞으므로 그쪽에서 명시적으로 지운다.
 function renderSpend(trip, st) {
   const body = document.getElementById("spend-body");
   if (!body) return;
+  const keepAmt = (body.querySelector('.sjpy-in') || {}).value || '';
+  const keepNote = (body.querySelector('.snote-in') || {}).value || '';
+  const keepCat = (body.querySelector('.scat-in') || {}).value || '';
   const list = spendList(st);
   const fx = spendFx(st);
   const tot = spendTotalJpy(list);
@@ -1439,6 +1500,9 @@ function renderSpend(trip, st) {
       fx + '"> 원</div>';
 
   const form = body.querySelector('.spend-add');
+  if (keepAmt) form.querySelector('.sjpy-in').value = keepAmt;
+  if (keepNote) form.querySelector('.snote-in').value = keepNote;
+  if (keepCat) form.querySelector('.scat-in').value = keepCat;
   form.addEventListener('submit', function (e) {
     e.preventDefault();
     const jin = form.querySelector('.sjpy-in');
@@ -1455,6 +1519,9 @@ function renderSpend(trip, st) {
       note: form.querySelector('.snote-in').value.trim()
     });
     st.set("spend", cur);
+    // 방금 기록한 값이 폼에 되살아나지 않도록 명시적으로 비운다.
+    jin.value = '';
+    form.querySelector('.snote-in').value = '';
     renderSpend(trip, st);
     renderSummary(trip, st);
     const next = body.querySelector('.sjpy-in');
@@ -1836,7 +1903,7 @@ function repaintDay(trip, dayN, st) {
 
 // 날씨가 바뀌면 날씨를 쓰는 화면(요약·타임라인)만 다시 그린다.
 // showTrip 전체를 다시 부르면 renderTabs의 scrollIntoView로 스크롤이 튀고
-// renderFixed가 열려 있던 아코디언(details)과 입력 중이던 값을 날린다.
+// 패널(#tab-panel)이 열려 있던 아코디언과 입력 중이던 값을 날린다.
 function wxRepaint() {
   if (!CUR.trip) return;
   if (document.getElementById("screen-trip").hidden) return;
@@ -1846,7 +1913,7 @@ function wxRepaint() {
 
 // ---- 라우터 ----
 
-var CUR = { id: null, trip: null, st: null, dayN: null };
+var CUR = { id: null, trip: null, st: null, dayN: null, tab: "day" };
 
 function currentTrip() { return CUR.trip; }
 
@@ -1927,20 +1994,20 @@ function showDay(trip, dayN) {
   }
 }
 
-function showTrip(id, dayN) {
+function showTrip(id, tab, dayN) {
   // 여행을 "여는" 경우에만 화면 전체를 세운다: 다른 여행으로 바뀌었거나,
-  // 목록·편집 등 다른 화면에서 돌아온 경우. 같은 여행 안에서 일차 탭만 누른
-  // 경우에는 showDay만 돈다.
+  // 목록·편집 등 다른 화면에서 돌아온 경우. 같은 여행 안에서 탭이나 일차만
+  // 누른 경우에는 showPanelTab만 돈다.
   var switched = (CUR.id !== id);
   var opening = switched || document.getElementById("screen-trip").hidden;
 
-  // 여는 경우에만 저장소에서 다시 읽는다. 일차 탭 전환에서까지 loadTrip을 부르면
-  // CUR.trip이 매번 새 객체로 갈아치워지는데, #summary와 #fixed는 여는 경로에서만
+  // 여는 경우에만 저장소에서 다시 읽는다. 일차·탭 전환에서까지 loadTrip을 부르면
+  // CUR.trip이 매번 새 객체로 갈아치워지는데, #summary는 여는 경로에서만
   // 다시 그려지므로 그 핸들러들은 "이전에 불러온" trip을 계속 붙들고 있게 된다.
   // 그 상태에서 편집 토글(renderSummary→repaintDay)을 누르면 타임라인 전체가 낡은
   // 스냅샷에 다시 묶이고, 그 뒤의 addItem/updateItem/removeItem + saveTripBody(trip)이
   // 탭 전환 이후 저장된 일정을 통째로 덮어써 지운다(실제로 재현됨).
-  // 여는 경로는 항상 #summary/#fixed를 함께 다시 그리므로, 그때만 다시 읽으면
+  // 여는 경로는 항상 #summary를 함께 다시 그리므로, 그때만 다시 읽으면
   // 화면 위의 모든 핸들러가 언제나 CUR.trip 하나만 붙들게 된다.
   // 덤으로 탭을 누를 때마다 돌던 JSON.parse 한 번이 사라진다.
   var trip = opening ? loadTrip(id) : CUR.trip;
@@ -1955,18 +2022,57 @@ function showTrip(id, dayN) {
   showScreen("trip");
 
   if (opening) renderSummary(trip, CUR.st);
-  showDay(trip, dayN);
-  if (opening) {
-    renderFixed(trip, CUR.st);
-    // 날씨 요청은 여행을 열 때만, 그것도 최근에 받아온 게 없을 때만 보낸다.
-    wxRefresh(CUR.st);
-  }
+  showPanelTab(trip, tab || "day", dayN);
+  // 날씨 요청은 여행을 열 때만, 그것도 최근에 받아온 게 없을 때만 보낸다.
+  if (opening) wxRefresh(CUR.st);
+}
+
+// 탭 전환: 본문과 내비만 다시 그린다. 요약 헤더는 탭이 실제로 바뀔 때만 —
+// 편집 토글이 일정 탭에서만 보여야 하기 때문이다. 화면 전체를 다시 그리면
+// 열어둔 것이 닫히고 입력 중이던 값이 날아간다.
+function showPanelTab(trip, tab, dayN) {
+  var prev = CUR.tab;
+  CUR.tab = tab;
+  // renderPanel/renderTabbar와 같은 계약 — 컨테이너가 없는 페이지(test.html 등)에서도
+  // 던지지 않는다.
+  var dayEl = document.getElementById("tab-day");
+  var panelEl = document.getElementById("tab-panel");
+  if (dayEl) dayEl.hidden = (tab !== "day");
+  if (panelEl) panelEl.hidden = (tab === "day");
+  if (tab === "day") showDay(trip, dayN);
+  else renderPanel(trip, CUR.st, tab);
+  renderTabbar(trip, tab, function (t) { go(tabHash(trip.id, t, CUR.dayN)); });
+  if (prev !== tab) renderSummary(trip, CUR.st);
+}
+
+var TAB_DEFS = [
+  { key: "day",     icon: "🗓", label: "일정" },
+  { key: "hotel",   icon: "🏨", label: "숙소" },
+  { key: "packing", icon: "🎒", label: "준비물" },
+  { key: "money",   icon: "💰", label: "경비" },
+  { key: "info",    icon: "ℹ️", label: "정보" }
+];
+var TAB_KEYS = TAB_DEFS.map(function (t) { return t.key; });
+
+// 여행 화면 해시를 {id, tab, dayN}으로. 여행 화면이 아니면 null.
+// /edit은 일부러 안 잡는다 — 라우터가 별도 분기로 처리한다.
+function parseTripHash(hash) {
+  var m = String(hash || "").match(
+    /^#\/t\/([^/]+)(?:\/(?:d\/(\d+)|(hotel|packing|money|info)))?$/);
+  if (!m) return null;
+  if (m[2]) return { id: m[1], tab: "day", dayN: parseInt(m[2], 10) };
+  return { id: m[1], tab: m[3] || "day", dayN: null };
+}
+
+function tabHash(id, tab, dayN) {
+  if (tab !== "day") return '#/t/' + id + '/' + tab;
+  return dayN ? '#/t/' + id + '/d/' + dayN : '#/t/' + id;
 }
 
 function route() {
   var h = location.hash || "#/";
-  var m = h.match(/^#\/t\/([^/]+)(?:\/d\/(\d+))?$/);
-  if (m) { showTrip(m[1], m[2] ? parseInt(m[2], 10) : null); return; }
+  var t = parseTripHash(h);
+  if (t) { showTrip(t.id, t.tab, t.dayN); return; }
   if (/^#\/t\/[^/]+\/edit$/.test(h)) { showEdit(h.split('/')[2]); return; }
   if (h === "#/new") { showEdit(null); return; }
   showList();
@@ -1981,6 +2087,8 @@ document.addEventListener("DOMContentLoaded", function () {
   // 식사 메모 키를 일차 번호 기준에서 날짜 기준으로 옮긴다(store.js 주석 참고).
   // migrateLegacy 뒤에 두지만, 어느 쪽이 먼저 돌아도 결과가 같도록 설계돼 있다.
   migrateMealKeys();
+  // 내장 섹션은 하단 탭이 됐다 — 데이터에 남아 있던 항목을 걷어낸다.
+  migrateSections();
 
   document.getElementById("new-trip")
     .addEventListener("click", function () { go('#/new'); });

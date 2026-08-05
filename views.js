@@ -111,8 +111,13 @@ function renderSummary(trip, st) {
   const nights = daysBetween(trip.start, trip.end) - 1;
   el.innerHTML =
     '<button class="edit-trip" type="button" aria-label="여행 설정">⚙</button>' +
-    '<button class="edit-mode" type="button" aria-pressed="' + (EDIT_MODE ? 'true' : 'false') +
-      '">' + (EDIT_MODE ? '완료' : '편집') + '</button>' +
+    // 편집 토글은 일정 탭에서만 의미가 있다. CUR은 app.js에 있고 런타임에만
+    // 참조되므로 로드 순서 문제는 없다. 앱 화면이 없는 test.html에서는 CUR이
+    // 없을 수 있으므로 typeof로 막는다.
+    ((typeof CUR !== 'undefined' && CUR.tab !== 'day')
+      ? ''
+      : '<button class="edit-mode" type="button" aria-pressed="' + (EDIT_MODE ? 'true' : 'false') +
+        '">' + (EDIT_MODE ? '완료' : '편집') + '</button>') +
     '<div class="dday">' + dday(today, trip.start, trip.end) + '</div>' +
     '<h1>' + escHtml(trip.title) + '</h1>' +
     '<div class="period">' + escHtml(trip.start) + ' ~ ' + escHtml(trip.end) +
@@ -310,14 +315,6 @@ function renderTimeline(trip, day, st) {
 // ---- 하단 고정 섹션 ----
 
 function sectionBodyHtml(trip, sec) {
-  if (sec.type === "builtin") {
-    // 숙소는 여러 줄 입력이므로 type:"text" 섹션과 같은 방식으로 줄 단위로 그린다.
-    if (sec.body === "hotel")    return trip.hotel ? itemLinesHtml(trip.hotel) : '';
-    if (sec.body === "packing")  return '<div id="packing-body"></div>';
-    if (sec.body === "spend")    return '<div id="spend-body"></div>';
-    if (sec.body === "expenses") return expensesTableHtml(trip);
-    return '';
-  }
   if (sec.type === "text") return itemLinesHtml(sec.body);
   if (sec.type === "list") {
     return '<ul>' + sec.body.map(function (t) {
@@ -355,19 +352,72 @@ function expensesTableHtml(trip) {
       total.toLocaleString('ko-KR') + '</td></tr></tfoot></table></div>';
 }
 
-function renderFixed(trip, st) {
-  document.getElementById("fixed").innerHTML = trip.sections.map(function (sec, i) {
-    return '<details' + (i === 0 ? ' open' : '') + '>' +
-      '<summary>' + escHtml(sec.icon) + ' ' + escHtml(sec.title) + '</summary>' +
-      '<div class="acc">' + sectionBodyHtml(trip, sec) + '</div></details>';
-  }).join('');
-  renderPacking(trip, st);
-  renderSpend(trip, st);
+// 탭 본문. 일정 탭은 #daytabs/#timeline을 따로 쓰므로 여기서는 빈 문자열.
+function panelHtml(trip, tab) {
+  if (tab === "hotel") {
+    return trip.hotel
+      ? '<div class="panel-card">' + itemLinesHtml(trip.hotel) + '</div>'
+      : '<p class="empty">숙소가 아직 없습니다. ⚙ 여행 설정에서 입력할 수 있습니다.</p>';
+  }
+  if (tab === "packing") {
+    return '<div class="panel-card" id="packing-body"></div>';
+  }
+  if (tab === "money") {
+    var exp = (trip.expenses && trip.expenses.length)
+      ? '<div class="panel-card"><h2 class="panel-h">💰 출발 전 결제 내역</h2>' +
+        expensesTableHtml(trip) + '</div>'
+      : '';
+    return '<div class="panel-card" id="spend-body"></div>' + exp;
+  }
+  if (tab === "info") {
+    var secs = trip.sections || [];
+    if (!secs.length) {
+      // 섹션 편집기는 2단계다 — 지금 할 수 있는 게 없으므로 없는 기능을 가리키지 않는다.
+      return '<p class="empty">시간표·메모처럼 직접 만드는 항목이 여기 표시됩니다.</p>';
+    }
+    return secs.map(function (sec, i) {
+      return '<details' + (i === 0 ? ' open' : '') + '>' +
+        '<summary>' + escHtml(sec.icon) + ' ' + escHtml(sec.title) + '</summary>' +
+        '<div class="acc">' + sectionBodyHtml(trip, sec) + '</div></details>';
+    }).join('');
+  }
+  return '';
 }
 
+function renderPanel(trip, st, tab) {
+  var el = document.getElementById("tab-panel");
+  if (!el) return;
+  el.innerHTML = panelHtml(trip, tab);
+  if (tab === "packing") renderPacking(trip, st);
+  if (tab === "money") renderSpend(trip, st);
+}
+
+function renderTabbar(trip, tab, onSelect) {
+  var nav = document.getElementById("tabbar");
+  if (!nav) return;
+  nav.innerHTML = TAB_DEFS.map(function (t) {
+    var on = t.key === tab ? ' data-selected="1"' : '';
+    return '<button class="tb"' + on + ' data-tab="' + escHtml(t.key) + '"' +
+      ' aria-current="' + (t.key === tab ? 'page' : 'false') + '">' +
+      '<span class="tb-i">' + t.icon + '</span>' +
+      '<span class="tb-l">' + escHtml(t.label) + '</span></button>';
+  }).join('');
+  nav.querySelectorAll('.tb').forEach(function (b) {
+    b.addEventListener('click', function () { onSelect(b.dataset.tab); });
+  });
+}
+
+
+// renderSpend는 #spend-body를 통째로 다시 그린다 — 목록·합계·환율이 한 덩어리라
+// 부분 갱신이 오히려 복잡하다. 대신 추가 폼에 치던 값은 보존한다: 항목을 하나
+// 삭제하거나 환율을 고치는 것만으로 입력 중이던 금액·내용이 사라지면 안 된다.
+// 제출 경로는 값을 비우는 게 맞으므로 그쪽에서 명시적으로 지운다.
 function renderSpend(trip, st) {
   const body = document.getElementById("spend-body");
   if (!body) return;
+  const keepAmt = (body.querySelector('.sjpy-in') || {}).value || '';
+  const keepNote = (body.querySelector('.snote-in') || {}).value || '';
+  const keepCat = (body.querySelector('.scat-in') || {}).value || '';
   const list = spendList(st);
   const fx = spendFx(st);
   const tot = spendTotalJpy(list);
@@ -406,6 +456,9 @@ function renderSpend(trip, st) {
       fx + '"> 원</div>';
 
   const form = body.querySelector('.spend-add');
+  if (keepAmt) form.querySelector('.sjpy-in').value = keepAmt;
+  if (keepNote) form.querySelector('.snote-in').value = keepNote;
+  if (keepCat) form.querySelector('.scat-in').value = keepCat;
   form.addEventListener('submit', function (e) {
     e.preventDefault();
     const jin = form.querySelector('.sjpy-in');
@@ -422,6 +475,9 @@ function renderSpend(trip, st) {
       note: form.querySelector('.snote-in').value.trim()
     });
     st.set("spend", cur);
+    // 방금 기록한 값이 폼에 되살아나지 않도록 명시적으로 비운다.
+    jin.value = '';
+    form.querySelector('.snote-in').value = '';
     renderSpend(trip, st);
     renderSummary(trip, st);
     const next = body.querySelector('.sjpy-in');
