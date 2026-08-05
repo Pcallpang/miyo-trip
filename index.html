@@ -10,16 +10,34 @@
   <link rel="apple-touch-icon" sizes="180x180" href="icon-180.png">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="오사카">
+  <meta name="apple-mobile-web-app-title" content="여행">
   <link rel="stylesheet" href="styles.css">
-  <title>오사카 여행</title>
+  <title>여행 플래너</title>
 </head>
 <body>
-  <header id="summary"></header>
-  <nav id="daytabs"></nav>
-  <main id="timeline"></main>
-  <section id="fixed"></section>
-  <script src="data.js"></script>
+  <section id="screen-list" hidden>
+    <header class="lhead"><h1>내 여행</h1></header>
+    <div id="triplist"></div>
+    <div class="lactions">
+      <button id="new-trip" type="button">+ 새 여행 만들기</button>
+      <button id="add-sample" type="button">샘플 여행 보기</button>
+    </div>
+  </section>
+
+  <section id="screen-trip" hidden>
+    <header id="summary"></header>
+    <nav id="daytabs"></nav>
+    <main id="timeline"></main>
+    <section id="fixed"></section>
+  </section>
+
+  <section id="screen-edit" hidden></section>
+
+  <script src="sample-trip.js"></script>
+  <script src="store.js"></script>
+  <script src="schema.js"></script>
+  <script src="views.js"></script>
+  <script src="editor.js"></script>
   <script src="app.js"></script>
   <script>
     if ("serviceWorker" in navigator && location.protocol !== "file:") {

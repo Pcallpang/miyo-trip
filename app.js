@@ -1,55 +1,4 @@
-var store = {
-  _p: "osaka-trip:v1:",
-  get: function (k, fb) {
-    try { var v = localStorage.getItem(this._p + k); return v === null ? fb : JSON.parse(v); }
-    catch (e) { return fb; }
-  },
-  set: function (k, v) {
-    try { localStorage.setItem(this._p + k, JSON.stringify(v)); } catch (e) {}
-  }
-};
-
-var SPEND_CATS = ["식비", "교통", "쇼핑", "관광", "기타"];
-
-function spendList() {
-  var v = store.get("spend", []);
-  return Array.isArray(v) ? v : [];
-}
-function spendFx() {
-  var n = Number(store.get("fx", 900));
-  return isFinite(n) && n > 0 ? n : 0;
-}
-function spendTotalJpy(list) {
-  return list.reduce(function (s, e) {
-    var n = Number(e.jpy);
-    return s + (isFinite(n) ? n : 0);
-  }, 0);
-}
-function jpyToKrw(jpy, fx) {
-  return Math.round(jpy * fx / 100);
-}
-function spendByCat(list) {
-  var m = {};
-  list.forEach(function (e) {
-    var n = Number(e.jpy);
-    m[e.cat] = (m[e.cat] || 0) + (isFinite(n) ? n : 0);
-  });
-  return SPEND_CATS.filter(function (c) { return m[c]; })
-    .map(function (c) { return { cat: c, jpy: m[c] }; });
-}
-function spendByDate(list) {
-  var m = {}, dates = [];
-  list.forEach(function (e) {
-    if (!m[e.date]) { m[e.date] = []; dates.push(e.date); }
-    m[e.date].push(e);
-  });
-  dates.sort().reverse();
-  return dates.map(function (d) {
-    return { date: d, items: m[d].slice().reverse() };
-  });
-}
-
-function mealKey(dayN, i) { return "meal:" + dayN + ":" + i; }
+// 날씨 조회 + 해시 라우터. 렌더는 views.js에 있다.
 
 function todayLocal() {
   var d = new Date();
@@ -93,8 +42,17 @@ function wxLine(map, date) {
   return wxIcon(w.code).e + " " + w.tmax + "° / " + w.tmin + "°" + rain;
 }
 
-var wxState = { map: {}, at: null, live: false };
-var currentDayN = null;
+var wxState = { map: {}, at: null, live: false, fetchedAt: 0 };
+// 여행이 바뀌면 이전 여행의 날씨가 남아 첫 페인트에 엉뚱한 도시가 보인다(지금은
+// WX_URL이 좌표를 고정하고 있어 안 보이지만, 좌표가 여행별이 되는 순간 버그가 된다).
+function wxReset() {
+  wxState = { map: {}, at: null, live: false, fetchedAt: 0 };
+}
+// 같은 세션에서 방금 받아온 예보는 다시 받지 않는다(일 단위 예보라 30분이면 충분).
+var WX_TTL_MS = 30 * 60 * 1000;
+function wxIsFresh() {
+  return wxState.live && (Date.now() - wxState.fetchedAt) < WX_TTL_MS;
+}
 
 function wxStamp() {
   if (wxState.live || !wxState.at) return "";
@@ -104,8 +62,9 @@ function wxStamp() {
   return ' <span class="wxstamp">(' + (d.getMonth() + 1) + "/" + d.getDate() +
     " " + hh + ":" + mm + " 기준)</span>";
 }
-function wxRefresh() {
-  var cached = store.get("weather", null);
+function wxRefresh(st) {
+  if (wxIsFresh()) return;
+  var cached = st.get("weather", null);
   if (cached && cached.api) {
     wxState.map = wxDailyMap(cached.api);
     wxState.at = cached.at;
@@ -115,322 +74,193 @@ function wxRefresh() {
     return r.json();
   }).then(function (api) {
     var map = wxDailyMap(api);
-    store.set("weather", { at: new Date().toISOString(), api: api });
+    st.set("weather", { at: new Date().toISOString(), api: api });
     wxState.map = map;
     wxState.at = null;
     wxState.live = true;
+    wxState.fetchedAt = Date.now();
     wxRepaint();
   }).catch(function () {
     if (wxState.at) wxRepaint();
   });
 }
+// dayN에 해당하는 day를 찾아 타임라인만 다시 그린다. renderTabs(따라서 tab strip의
+// scrollIntoView)는 건드리지 않는다 — 탭 목록이나 선택된 탭이 바뀌지 않은 상황(날씨 갱신,
+// 편집 모드 토글)에서 renderTabs까지 다시 부르면 스크롤이 제자리서 튄다.
+// 손상된 저장값 보정(normalizeDay)도 여기서 함께 한다 — renderTimeline을 직접 부르는
+// 경로(wxRepaint, 편집 모드 토글, afterItemEdit)가 전부 이 보정을 거치게 해서,
+// items/date/text가 망가진 day를 만나도 던지지 않는다.
+function repaintDay(trip, dayN, st) {
+  var day = pickDay(trip, dayN);
+  if (!day) return null;
+  renderTimeline(trip, day, st);
+  return day;
+}
+
+// 날씨가 바뀌면 날씨를 쓰는 화면(요약·타임라인)만 다시 그린다.
+// showTrip 전체를 다시 부르면 renderTabs의 scrollIntoView로 스크롤이 튀고
+// renderFixed가 열려 있던 아코디언(details)과 입력 중이던 값을 날린다.
 function wxRepaint() {
-  renderSummary(window.TRIP.meta);
-  if (currentDayN !== null) selectDay(currentDayN);
+  if (!CUR.trip) return;
+  if (document.getElementById("screen-trip").hidden) return;
+  renderSummary(CUR.trip, CUR.st);
+  repaintDay(CUR.trip, CUR.dayN, CUR.st);
 }
 
-function dday(todayISO, startISO, endISO) {
-  const day = 86400000;
-  const t = Date.parse(todayISO + "T00:00:00");
-  const s = Date.parse(startISO + "T00:00:00");
-  const e = Date.parse(endISO + "T00:00:00");
-  if (t < s) return "D-" + Math.round((s - t) / day);
-  if (t > e) return "여행 종료";
-  return "여행 중 " + (Math.round((t - s) / day) + 1) + "일차";
+// ---- 라우터 ----
+
+var CUR = { id: null, trip: null, st: null, dayN: null };
+
+function currentTrip() { return CUR.trip; }
+
+function go(hash) {
+  if (location.hash === hash) route(); else location.hash = hash;
 }
 
-function renderSummary(meta) {
-  const today = todayLocal();
-  const el = document.getElementById("summary");
-  el.innerHTML =
-    '<div class="dday">' + dday(today, meta.start, meta.end) + '</div>' +
-    '<h1>' + meta.title + '</h1>' +
-    '<div class="period">' + meta.start + ' ~ ' + meta.end +
-      ' · ' + meta.nights + '박 ' + meta.days + '일</div>' +
-    '<div class="hotel">🏨 ' + meta.hotel + '</div>' +
-    (function () {
-      var line = wxLine(wxState.map, todayLocal());
-      return line ? '<div class="wx">' + line.replace(" ", " 오늘 ") + wxStamp() + '</div>' : '';
-    })() +
-    '<div class="cost">💰 총 ' + meta.totalCostKRW.toLocaleString('ko-KR') + '원 (2인)' +
-      summarySpend() + '</div>';
-}
-function summarySpend() {
-  const tot = spendTotalJpy(spendList());
-  if (!tot) return '';
-  const fx = spendFx();
-  const krw = fx ? ' (약 ' + jpyToKrw(tot, fx).toLocaleString('ko-KR') + '원)' : '';
-  return ' <span class="spent">· 💸 현지 ¥' + tot.toLocaleString('ko-KR') + krw + '</span>';
-}
-function isUndecided(text) {
-  return /뭐먹지|\?$/.test(text.trim()) || text.trim() === "";
-}
-
-function renderTabs(days, selectedN) {
-  const nav = document.getElementById("daytabs");
-  nav.innerHTML = days.map(function (d) {
-    const on = d.n === selectedN ? ' data-selected="1"' : '';
-    return '<button class="tab"' + on + ' data-n="' + d.n + '">' +
-      '<span class="tn">' + d.n + '일차</span>' +
-      '<span class="td">' + d.date.slice(5) + '(' + d.dow + ')</span></button>';
-  }).join('');
-  nav.querySelectorAll('.tab').forEach(function (b) {
-    b.addEventListener('click', function () { selectDay(parseInt(b.dataset.n, 10)); });
+function showScreen(which) {
+  ["list", "trip", "edit"].forEach(function (s) {
+    document.getElementById("screen-" + s).hidden = (s !== which);
   });
 }
 
-function usjMapSVG() {
-  var route = [
-    { t: "슈퍼 닌텐도 월드", c: "#e03131" },
-    { t: "해리포터", c: "#7048e8" },
-    { t: "쥬라기 공원", c: "#2f9e44" },
-    { t: "워터 월드", c: "#1c7ed6" },
-    { t: "애머티 (죠스)", c: "#7950f2" },
-    { t: "미니언 파크", c: "#f08c00" },
-    { t: "할리우드 · 입구", c: "#c2255c" },
-    { t: "시티워크 (저녁)", c: "#e8590c" }
-  ];
-  var chips = route.map(function (z) {
-    return '<li><i style="background:' + z.c + '"></i>' + z.t + '</li>';
-  }).join('');
-  var src = window.USJ_MAP_SRC || 'usj-map-ko.webp';
-  return '<div class="usjmap"><div class="cap">🗺️ 유니버셜 스튜디오 재팬 구역 안내도 ' +
-    '<span>(아래 목록 = 2일차 동선)</span></div>' +
-    '<img src="' + src + '" alt="유니버셜 스튜디오 재팬 한국어 구역 안내도" loading="lazy">' +
-    '<ul class="zonelegend">' + chips + '</ul></div>';
-}
+function showList() {
+  showScreen("list");
+  var trips = listTrips();
+  document.getElementById("triplist").innerHTML = trips.length
+    ? trips.map(function (t) {
+        return '<article class="tripcard" data-id="' + escHtml(t.id) + '">' +
+          '<div class="tc-title">' + escHtml(t.title) + '</div>' +
+          '<div class="tc-period">' + escHtml(t.start) + ' ~ ' + escHtml(t.end) + '</div>' +
+          '<div class="tc-dday">' + dday(todayLocal(), t.start, t.end) + '</div>' +
+          '<button class="tc-del" type="button" aria-label="삭제">×</button></article>';
+      }).join('')
+    : '<p class="empty">아직 여행이 없습니다. 새로 만들어 보세요.</p>';
 
-function renderTimeline(day) {
-  const main = document.getElementById("timeline");
-  const rows = day.items.map(function (it) {
-    const cls = isUndecided(it.text) ? ' undecided' : '';
-    const lines = it.text.split('\n').map(function (l) {
-      if (/\(패스권-시간\)|\(시간\)/.test(l)) {
-        return '<div class="line timed"><span class="tag">⏰ 시간지정</span>' + l + '</div>';
-      }
-      if (/예약 완료/.test(l)) {
-        return '<div class="line booked"><span class="tag">✅ 예약완료</span>' + l + '</div>';
-      }
-      return '<div class="line">' + l + '</div>';
-    }).join('');
-    return '<div class="slot' + cls + '"><div class="time">' + it.time +
-      '</div><div class="what">' + lines + '</div></div>';
-  }).join('');
-  const escAttr = function (s) { return String(s).replace(/"/g, '&quot;'); };
-  const meals = (day.meals && day.meals.length)
-    ? '<div class="meals"><div class="meals-h">🍽 뭐먹지</div>' +
-      day.meals.map(function (m, i) {
-        const lines = m.split('\n').map(function (l) {
-          return '<div class="line">' + l + '</div>';
-        }).join('');
-        const val = escAttr(store.get(mealKey(day.n, i), ""));
-        return '<div class="meal"><div class="meal-note">' + lines + '</div>' +
-          '<input class="memo" data-key="' + mealKey(day.n, i) +
-          '" placeholder="식당/메모 입력" value="' + val + '"></div>';
-      }).join('') + '</div>'
-    : '';
-  const map = day.n === 2 ? usjMapSVG() : '';
-  main.innerHTML =
-    '<div class="daycard"><div class="dayhead">' +
-      '<span class="dnum">' + day.n + '일차</span> ' +
-      '<span class="ddate">' + day.date + '(' + day.dow + ')</span>' +
-      '<div class="dtheme">' + day.theme.replace(/\n/g, ' · ') + '</div>' +
-      (function () {
-        var line = wxLine(wxState.map, day.date);
-        return line ? '<div class="dwx">' + line + wxStamp() + '</div>' : '';
-      })() + '</div>' +
-      map +
-      '<div class="slots">' + rows + '</div>' + meals + '</div>';
-  main.querySelectorAll('.memo').forEach(function (inp) {
-    inp.addEventListener('input', function () { store.set(inp.dataset.key, inp.value); });
-  });
-}
-function selectDay(n) {
-  currentDayN = n;
-  const days = window.TRIP.days;
-  const day = days.find(function (d) { return d.n === n; });
-  renderTabs(days, n);
-  renderTimeline(day);
-}
-
-function renderFixed(trip) {
-  const rapitRows = function (arr) {
-    return arr.map(function (r) {
-      return '<tr><td>' + r.type + '</td><td>' + r.dep + '</td><td>' + r.arr + '</td></tr>';
-    }).join('');
-  };
-  const expRows = trip.expenses.map(function (e) {
-    return '<tr><td>' + e.cat + '</td><td>' + e.detail + '</td>' +
-      '<td class="num">' + e.krw.toLocaleString('ko-KR') + '</td></tr>';
-  }).join('');
-  const tips = trip.tips.map(function (t) { return '<li>' + t + '</li>'; }).join('');
-  document.getElementById("fixed").innerHTML =
-    '<details open><summary>🚄 라피트 시간표</summary><div class="acc">' +
-      '<div class="tblwrap"><table><caption>간사이 → 난바</caption>' +
-      '<thead><tr><th>편</th><th>출발</th><th>도착</th></tr></thead><tbody>' +
-      rapitRows(trip.rapit.to) + '</tbody></table></div>' +
-      '<div class="tblwrap"><table><caption>난바 → 간사이</caption>' +
-      '<thead><tr><th>편</th><th>출발</th><th>도착</th></tr></thead><tbody>' +
-      rapitRows(trip.rapit.from) + '</tbody></table></div></div></details>' +
-    '<details><summary>🏨 숙소</summary><div class="acc">' + trip.meta.hotel + '</div></details>' +
-    '<details><summary>🎒 준비물</summary><div class="acc" id="packing-body"></div></details>' +
-    '<details><summary>💸 현지 경비</summary><div class="acc" id="spend-body"></div></details>' +
-    '<details><summary>💰 경비 내역</summary><div class="acc"><div class="tblwrap"><table>' +
-      '<thead><tr><th>항목</th><th>상세</th><th class="num">금액(원)</th></tr></thead><tbody>' +
-      expRows + '</tbody><tfoot><tr><td colspan="2">합계</td><td class="num">' +
-      trip.meta.totalCostKRW.toLocaleString('ko-KR') + '</td></tr></tfoot>' +
-      '</table></div></div></details>' +
-    '<details><summary>💡 팁</summary><div class="acc"><ul>' + tips + '</ul></div></details>';
-}
-
-function escHtml(s) {
-  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-}
-
-function renderSpend() {
-  const body = document.getElementById("spend-body");
-  if (!body) return;
-  const list = spendList();
-  const fx = spendFx();
-  const tot = spendTotalJpy(list);
-  const krw = fx
-    ? ' <span class="skrw">(약 ' + jpyToKrw(tot, fx).toLocaleString('ko-KR') + '원)</span>'
-    : '';
-  const chips = spendByCat(list).map(function (c) {
-    return '<li>' + escHtml(c.cat) + ' <b>¥' + c.jpy.toLocaleString('ko-KR') + '</b></li>';
-  }).join('');
-  const groups = spendByDate(list).map(function (g) {
-    const rows = g.items.map(function (e) {
-      const n = Number(e.jpy);
-      return '<li><span class="scat">' + escHtml(e.cat) + '</span>' +
-        '<span class="snote">' + escHtml(e.note || e.cat) + '</span>' +
-        '<span class="sjpy">¥' + (isFinite(n) ? n : 0).toLocaleString('ko-KR') + '</span>' +
-        '<button class="spend-del" type="button" data-id="' + e.id + '" aria-label="삭제">×</button></li>';
-    }).join('');
-    return '<div class="sgroup"><div class="sdate">' + escHtml(g.date) + '</div>' +
-      '<ul class="slist">' + rows + '</ul></div>';
-  }).join('');
-  body.innerHTML =
-    '<div class="stotal">¥' + tot.toLocaleString('ko-KR') + krw + '</div>' +
-    (chips ? '<ul class="scats">' + chips + '</ul>' : '') +
-    '<form class="spend-add">' +
-      '<input class="sjpy-in" type="number" inputmode="numeric" min="1" step="1" ' +
-        'placeholder="금액 ¥" aria-label="금액(엔)">' +
-      '<input class="snote-in" type="text" placeholder="내용" aria-label="내용">' +
-      '<select class="scat-in" aria-label="분류">' +
-        SPEND_CATS.map(function (c) { return '<option>' + c + '</option>'; }).join('') +
-      '</select>' +
-      '<button type="submit">추가</button>' +
-    '</form>' +
-    (groups || '<div class="sempty">아직 기록이 없습니다.</div>') +
-    '<div class="sfx">100엔 = <input class="sfx-in" type="number" min="0" step="1" value="' +
-      fx + '"> 원</div>';
-
-  const form = body.querySelector('.spend-add');
-  form.addEventListener('submit', function (e) {
-    e.preventDefault();
-    const jin = form.querySelector('.sjpy-in');
-    const jpy = Math.round(Number(jin.value));
-    if (!isFinite(jpy) || jpy <= 0) { jin.focus(); return; }
-    const cur = spendList();
-    let id = Date.now();
-    while (cur.some(function (x) { return x.id === id; })) id++;
-    cur.push({
-      id: id,
-      date: todayLocal(),
-      jpy: jpy,
-      cat: form.querySelector('.scat-in').value,
-      note: form.querySelector('.snote-in').value.trim()
-    });
-    store.set("spend", cur);
-    renderSpend();
-    renderSummary(window.TRIP.meta);
-    const next = body.querySelector('.sjpy-in');
-    if (next) next.focus();
-  });
-
-  body.querySelectorAll('.spend-del').forEach(function (btn) {
-    btn.addEventListener('click', function () {
-      const id = Number(btn.dataset.id);
-      store.set("spend", spendList().filter(function (x) { return x.id !== id; }));
-      renderSpend();
-      renderSummary(window.TRIP.meta);
+  var list = document.getElementById("triplist");
+  list.querySelectorAll('.tripcard').forEach(function (c) {
+    c.addEventListener('click', function (e) {
+      // closest: 삭제 버튼이 나중에 아이콘 같은 자식을 갖게 돼도 그대로 동작한다.
+      if (e.target.closest('.tc-del')) return;
+      go('#/t/' + c.dataset.id);
     });
   });
-
-  const fxin = body.querySelector('.sfx-in');
-  fxin.addEventListener('change', function () {
-    store.set("fx", Number(fxin.value) || 0);
-    renderSpend();
-    renderSummary(window.TRIP.meta);
+  list.querySelectorAll('.tc-del').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var card = b.closest('.tripcard');
+      var name = card.querySelector('.tc-title').textContent;
+      if (!confirm('"' + name + '" 여행을 삭제할까요? 되돌릴 수 없습니다.')) return;
+      deleteTrip(card.dataset.id);
+      showList();
+    });
   });
 }
 
-function renderPacking() {
-  const body = document.getElementById("packing-body");
-  if (!body) return;
-  const customs = store.get("packing_add", []);
-  const checked = store.get("packing_checked", {});
-  const items = window.TRIP.packing.map(function (t) { return { text: t, custom: false }; })
-    .concat(customs.map(function (t) { return { text: t, custom: true }; }));
-  body.innerHTML =
-    '<ul class="packlist">' + items.map(function (it) {
-      const on = checked[it.text] ? ' checked' : '';
-      const doneCls = checked[it.text] ? ' class="done"' : '';
-      const del = it.custom
-        ? '<button class="pack-del" type="button" data-text="' + escHtml(it.text) + '" aria-label="삭제">×</button>'
-        : '';
-      return '<li' + doneCls + '><label><input type="checkbox" data-text="' + escHtml(it.text) + '"' +
-        on + '> ' + escHtml(it.text) + '</label>' + del + '</li>';
-    }).join('') + '</ul>' +
-    '<form class="pack-add"><input type="text" placeholder="준비물 추가" aria-label="준비물 추가">' +
-    '<button type="submit">추가</button></form>';
-
-  body.querySelectorAll('input[type=checkbox]').forEach(function (cb) {
-    cb.addEventListener('change', function () {
-      const c = store.get("packing_checked", {});
-      c[cb.dataset.text] = cb.checked;
-      store.set("packing_checked", c);
-      cb.closest('li').classList.toggle('done', cb.checked);
-    });
-  });
-  body.querySelectorAll('.pack-del').forEach(function (btn) {
-    btn.addEventListener('click', function () {
-      const list = store.get("packing_add", []).filter(function (t) { return t !== btn.dataset.text; });
-      store.set("packing_add", list);
-      renderPacking();
-    });
-  });
-  const form = body.querySelector('.pack-add');
-  form.addEventListener('submit', function (e) {
-    e.preventDefault();
-    const inp = form.querySelector('input');
-    const v = inp.value.trim();
-    if (!v) return;
-    const list = store.get("packing_add", []);
-    if (list.indexOf(v) === -1 && window.TRIP.packing.indexOf(v) === -1) {
-      list.push(v);
-      store.set("packing_add", list);
-    }
-    renderPacking();
-    const nextInput = body.querySelector('.pack-add input');
-    if (nextInput) nextInput.focus();
-  });
+// 그릴 일차를 고른다. 요청한 일차가 없거나(손상된 JSON을 가져온 경우 등)
+// days 자체가 비어 있으면 던지지 않고 대신 오늘 → 첫날/마지막날 순으로 물러난다.
+// 고를 수 있는 일차가 하나도 없으면 null.
+// todayISO는 테스트에서 주입하기 위한 선택 인자다. 비우면 오늘 날짜를 쓴다.
+function pickDay(trip, dayN, todayISO) {
+  var days = (trip && Array.isArray(trip.days)) ? trip.days : [];
+  // 손상된 저장값 보정은 고르기 전에, 그리고 고른 일차뿐 아니라 모든 일차에 대해 한다 —
+  // 탭 목록(renderTabs)은 선택되지 않은 일차의 date까지 읽으므로(d.date.slice(5)),
+  // 고른 일차만 보정해서는 date가 없는 다른 일차 하나 때문에 화면 전체가 죽는다.
+  days.forEach(normalizeDay);
+  if (!days.length) return null;
+  var day = null;
+  if (dayN) day = days.filter(function (d) { return d.n === dayN; })[0];
+  var today = todayISO || todayLocal();
+  if (!day) day = days.filter(function (d) { return d.date === today; })[0];
+  if (!day) day = today < days[0].date ? days[0] : days[days.length - 1];
+  return day || null;
 }
+
+// 일차만 바뀔 때 다시 그리는 것: 탭 + 타임라인. 그게 전부다.
+// #fixed(고정 정보·짐·경비)는 건드리지 않는다 — innerHTML을 통째로 갈아엎으면
+// 열어 둔 아코디언이 닫히고 경비 입력창에 치던 값이 사라진다.
+function showDay(trip, dayN) {
+  var day = pickDay(trip, dayN);
+  CUR.dayN = day ? day.n : null;
+  if (day) {
+    renderTabs(trip, day.n, function (n) { go('#/t/' + trip.id + '/d/' + n); });
+    renderTimeline(trip, day, CUR.st);
+  } else {
+    document.getElementById("daytabs").innerHTML = '';
+    document.getElementById("timeline").innerHTML =
+      '<p class="empty">표시할 일정이 없습니다.</p>';
+  }
+}
+
+function showTrip(id, dayN) {
+  // 여행을 "여는" 경우에만 화면 전체를 세운다: 다른 여행으로 바뀌었거나,
+  // 목록·편집 등 다른 화면에서 돌아온 경우. 같은 여행 안에서 일차 탭만 누른
+  // 경우에는 showDay만 돈다.
+  var switched = (CUR.id !== id);
+  var opening = switched || document.getElementById("screen-trip").hidden;
+
+  // 여는 경우에만 저장소에서 다시 읽는다. 일차 탭 전환에서까지 loadTrip을 부르면
+  // CUR.trip이 매번 새 객체로 갈아치워지는데, #summary와 #fixed는 여는 경로에서만
+  // 다시 그려지므로 그 핸들러들은 "이전에 불러온" trip을 계속 붙들고 있게 된다.
+  // 그 상태에서 편집 토글(renderSummary→repaintDay)을 누르면 타임라인 전체가 낡은
+  // 스냅샷에 다시 묶이고, 그 뒤의 addItem/updateItem/removeItem + saveTripBody(trip)이
+  // 탭 전환 이후 저장된 일정을 통째로 덮어써 지운다(실제로 재현됨).
+  // 여는 경로는 항상 #summary/#fixed를 함께 다시 그리므로, 그때만 다시 읽으면
+  // 화면 위의 모든 핸들러가 언제나 CUR.trip 하나만 붙들게 된다.
+  // 덤으로 탭을 누를 때마다 돌던 JSON.parse 한 번이 사라진다.
+  var trip = opening ? loadTrip(id) : CUR.trip;
+  if (!trip) { go('#/'); return; }
+
+  CUR.id = id; CUR.trip = trip; CUR.st = tripStore(id);
+  // EDIT_MODE는 세션에 묶인 UI 상태일 뿐 trip 데이터가 아니다(views.js 위 주석 참고) —
+  // 다른 여행으로 전환하면서 편집 모드가 그대로 넘어가면, A에서 편집 모드를 켠 채 목록으로
+  // 돌아가 B를 열었을 때 B가 편집 모드로 열려버린다. 새로고침은 전역 변수 자체가 초기화되며
+  // 자연히 꺼지므로 여기서는 "여행이 바뀌는" 경우만 챙기면 된다.
+  if (switched) { wxReset(); EDIT_MODE = false; }
+  showScreen("trip");
+
+  if (opening) renderSummary(trip, CUR.st);
+  showDay(trip, dayN);
+  if (opening) {
+    renderFixed(trip, CUR.st);
+    // 날씨 요청은 여행을 열 때만, 그것도 최근에 받아온 게 없을 때만 보낸다.
+    wxRefresh(CUR.st);
+  }
+}
+
+function route() {
+  var h = location.hash || "#/";
+  var m = h.match(/^#\/t\/([^/]+)(?:\/d\/(\d+))?$/);
+  if (m) { showTrip(m[1], m[2] ? parseInt(m[2], 10) : null); return; }
+  if (/^#\/t\/[^/]+\/edit$/.test(h)) { showEdit(h.split('/')[2]); return; }
+  if (h === "#/new") { showEdit(null); return; }
+  showList();
+}
+
+window.addEventListener("hashchange", route);
 
 document.addEventListener("DOMContentLoaded", function () {
-  if (!window.TRIP) return;
-  wxRefresh();
+  // 앱 화면이 없는 페이지(test.html 등)에서는 부팅하지 않는다.
+  if (!document.getElementById("screen-list")) return;
+  migrateLegacy();
+  // 식사 메모 키를 일차 번호 기준에서 날짜 기준으로 옮긴다(store.js 주석 참고).
+  // migrateLegacy 뒤에 두지만, 어느 쪽이 먼저 돌아도 결과가 같도록 설계돼 있다.
+  migrateMealKeys();
 
-  const days = window.TRIP.days;
-  const today = todayLocal();
-  let initial = days.find(function (d) { return d.date === today; });
-  if (!initial) initial = today < days[0].date ? days[0] : days[days.length - 1];
-  selectDay(initial.n);
+  document.getElementById("new-trip")
+    .addEventListener("click", function () { go('#/new'); });
+  document.getElementById("add-sample")
+    .addEventListener("click", function () {
+      // installSample은 저장 실패 시 null을 돌려준다 — 그대로 이동하면 showTrip이
+      // 여행을 찾지 못해 목록으로 조용히 튕겨 나가고, 사용자는 아무 설명도 못 받는다.
+      var id = installSample();
+      if (!id) {
+        alert('샘플 여행을 저장하지 못했습니다. 기기 저장 공간을 확인해 주세요.');
+        return;
+      }
+      go('#/t/' + id);
+    });
 
-  renderFixed(window.TRIP);
-  renderPacking();
-  renderSpend();
-  renderSummary(window.TRIP.meta);
+  // 여행이 하나뿐이면 목록을 건너뛰고 바로 연다.
+  var trips = listTrips();
+  if (!location.hash && trips.length === 1) { go('#/t/' + trips[0].id); return; }
+  route();
 });

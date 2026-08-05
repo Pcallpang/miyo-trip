@@ -30,6 +30,11 @@
 - **오사카 전용 요소는 범용 첨부 기능으로 흡수.** 라피트 표 → 사용자 정의 섹션,
   USJ 지도 → 일차별 이미지 첨부. 내 오사카 여행도 그대로 재현되어야 한다
 - **여행별 통화 + 환율 자동 조회.** 수동 입력으로 항상 덮어쓸 수 있게
+- **일차별 도시·통화 지정.** 한 여행이 여러 나라를 지나는 경우(예: 베트남 →
+  대만 경유)가 흔하다. `days[]`가 여행 기본값을 덮어쓰는 `place`·`curCode`를
+  갖고, 날씨는 그 일차의 좌표로, 금액은 그 일차의 통화로 표시한다
+- **앱 사용자는 한국인 전제.** UI는 한국어 고정, 기준 통화는 원화(KRW).
+  현지 통화 금액은 언제나 "약 ○○원"을 함께 보여준다
 - **GitHub Pages 배포.** 이미 배포 중인 URL을 그대로 쓴다
 
 목표 결과: 링크를 받은 사람이 "여행 만들기"를 눌러 도시·날짜를 넣으면, 자기 일정·
@@ -49,25 +54,41 @@
   title: "오사카 여행",
   start: "2026-07-28", end: "2026-08-03",
   party: 2,                                    // "총 ○○원 (2인)"의 2
-  place: { name:"오사카", lat:34.69, lon:135.5, tz:"Asia/Tokyo" },
-  currency: { code:"JPY", symbol:"¥", unit:100,
+  place: { name:"오사카", lat:34.69, lon:135.5, tz:"Asia/Tokyo" },   // 여행 기본 도시
+  currency: { code:"JPY", symbol:"¥", decimals:0, unit:100,
               rateKRW:900, rateAt:null, rateManual:false },
   hotel: "…",
   budgetKRW: 2612367,
-  days: [{ n, date, theme, items:[{id,time,text}], meals:[], images:[imageId] }],
-  sections: [{ id, icon, title, type:"text"|"list"|"table", body }],
+  days: [{ n, date, theme,
+           place: null,      // null이면 trip.place 상속. 그 일차만 다른 도시일 때 지정
+           curCode: null,    // null이면 trip.currency 상속. 경유국 통화용
+           items:[{id,time,text}], meals:[], images:[imageId] }],
+  sections: [{ id, icon, title,
+               type:"builtin"|"text"|"list"|"table", body }],
   packing: ["여권", …],
   expenses: [{ date, cat, detail, pay, krw, note }]   // 출발 전 결제 내역
 }
 
 // 런타임 상태는 여행별로 분리
-// trip:<id>:spend  → [{ id, date, amount, cat, note }]   (기존 필드 jpy → amount)
-// trip:<id>:packing_checked / packing_add / meal:<n>:<i> / wx
+// trip:<id>:spend  → [{ id, date, amount, cur, cat, note }]   (기존 필드 jpy → amount)
+// trip:<id>:packing_checked / packing_add / meal:<date>:<i>
+//   (번호(<n>)가 아니라 날짜 기준이다 — resyncDays가 여행 시작일이 바뀔 때마다 일차
+//   번호를 다시 매기므로, 번호를 키로 쓰면 그 일차의 메모가 엉뚱한 날로 옮겨간다.
+//   store.js migrateMealKeys가 구 번호 기준 키를 날짜 기준으로 옮긴다.)
+// trip:<id>:wx:<lat>,<lon>  → 좌표별 날씨 캐시 (일차마다 도시가 다를 수 있으므로)
+// fx                        → 환율 캐시. 여행 밖 전역 키 하나로 공유한다
 ```
 
 - `dow`(요일)는 저장하지 않고 `date`에서 파생한다. 현재는 `gen_data.py`가 수기 매핑해 두었다
 - `sections`가 라피트 시간표와 팁을 모두 흡수한다. `type:"table"`은 `{caption, head, rows}`,
   `type:"list"`는 문자열 배열, `type:"text"`는 문자열
+- `sections`는 **내장 섹션(숙소·준비물·현지 경비·경비 내역)까지 포함**한다.
+  `type:"builtin"`에 `body`가 `"hotel"|"packing"|"spend"|"expenses"` 중 하나다.
+  하단 아코디언은 이 배열을 그대로 순회해 그리므로 **순서가 데이터로 결정된다** —
+  사용자가 내장 섹션과 사용자 정의 섹션을 섞어 정렬할 수 있다
+- `spend` 레코드는 `cur`(그때 쓴 통화 코드)를 함께 저장한다. 일차마다 통화가
+  다를 수 있어 금액만으로는 나중에 환산할 수 없다
+- `currency.decimals`는 소수점 자릿수다. JPY·KRW·VND는 0, USD·EUR는 2
 - 이미지는 Trip 객체에 넣지 않는다. IndexedDB에 blob으로 두고 id만 참조한다
   (localStorage 5MB 한도에 base64 지도 한 장이면 터진다)
 
@@ -144,14 +165,22 @@
 
 1. **도시 검색** — Open-Meteo Geocoding
    (`geocoding-api.open-meteo.com/v1/search?name=…&language=ko`, 키 불요).
-   `latitude/longitude/timezone`을 `place`에 저장 → 좌표 하드코딩 제거
+   `latitude/longitude/timezone`을 `place`에 저장 → 좌표 하드코딩 제거.
+   한국어 결과가 **0건이면 `language=en`으로 한 번 더 조회**한다 — 중소도시는
+   한국어 색인이 비어 있는 경우가 많다(예: "다낭"은 나오지만 "호이안"은 안 나온다).
+   일차별 도시 지정도 같은 검색 UI를 쓴다
 2. **통화** — `currency`로 `¥`·`÷100` 리터럴 전부 대체. `jpyToKrw` → `toKRW(amount, currency)`.
-   경비 레코드 `jpy` → `amount` 마이그레이션 포함
+   경비 레코드 `jpy` → `amount` + `cur` 마이그레이션 포함.
+   표시는 `decimals`를 따른다(VND `₫120,000`, USD `$12.50`).
+   금액 입력의 `step`/반올림도 `decimals`로 결정한다
 3. **환율 자동 조회** — `wxRefresh`와 같은 패턴(캐시 우선, 실패 시 마지막 값 유지).
-   후보는 Frankfurter(`api.frankfurter.app/latest?from=JPY&to=KRW`, 키 불요, ECB 기준).
-   **구현 시 실제 응답과 KRW 지원을 먼저 확인한다.** 수동 입력이 항상 있으므로
-   조회가 실패해도 앱은 동작한다. 사용자가 직접 입력하면 `rateManual:true`로
-   자동 갱신을 멈춘다
+   **`open.er-api.com/v6/latest/KRW`를 쓴다.** 처음 후보였던
+   Frankfurter(`api.frankfurter.app`)는 ECB 기준이라 **31개 통화뿐이고 VND·TWD가 없다** —
+   동남아·대만 여행에서 바로 막힌다. `open.er-api.com`은 키 없이 152개 통화
+   (VND·TWD·MOP·KHR·LAK 포함)를 주고 하루 1회 갱신되며, 이용 조건상 **출처 표기가
+   필요하다**(설정 화면 하단에 표기). KRW 기준 한 번 조회로 모든 통화를 얻으므로
+   캐시는 `fx` 전역 키 하나면 된다. 수동 입력이 항상 있으므로 조회가 실패해도 앱은
+   동작한다. 사용자가 직접 입력하면 `rateManual:true`로 자동 갱신을 멈춘다
 4. **사용자 정의 섹션** — `sections[]` 편집 UI. 하단 아코디언이 이 배열을 순회해
    그린다 → 라피트 전용 렌더 제거
 5. **일차별 이미지 첨부** — `<input type="file">` → canvas로 최대 1600px·JPEG 0.8

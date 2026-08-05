@@ -1,7 +1,7 @@
-const CACHE = "osaka-trip-v7";
-const ASSETS = ["./", "./index.html", "./styles.css", "./data.js", "./app.js",
-  "./manifest.json", "./icon.svg", "./icon-180.png", "./icon-512.png",
-  "./usj-map-ko.webp"];
+const CACHE = "trip-v8";
+const ASSETS = ["./", "./index.html", "./styles.css",
+  "./sample-trip.js", "./store.js", "./schema.js", "./views.js", "./editor.js", "./app.js",
+  "./manifest.json", "./icon.svg", "./icon-180.png", "./icon-512.png"];
 self.addEventListener("install", function (e) {
   // {cache:"reload"}: 브라우저 HTTP 캐시를 건너뛰고 서버에서 새로 받는다.
   e.waitUntil(caches.open(CACHE).then(function (c) {

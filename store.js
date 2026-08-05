@@ -1,0 +1,195 @@
+// 저장소 계층: 여행 목록·본체·여행별 런타임 키(trip:<id>:*)를 다룬다.
+// app.js의 기존 osaka-trip:v1: store와는 무관한 새 코드다.
+
+var SCHEMA = 1;
+
+function lsGet(key, fb) {
+  try {
+    var v = localStorage.getItem(key);
+    return v === null ? fb : JSON.parse(v);
+  } catch (e) { return fb; }
+}
+// 쓰기 성공 여부를 boolean으로 돌려준다. 예외가 안 났다는 것만으론 부족하다 —
+// 일부 환경(프라이빗 모드 등)은 setItem이 조용히 no-op일 수 있으므로 읽어서 확인한다.
+function lsSet(key, v) {
+  try {
+    var s = JSON.stringify(v);
+    localStorage.setItem(key, s);
+    return localStorage.getItem(key) === s;
+  } catch (e) { return false; }
+}
+function lsDel(key) {
+  try { localStorage.removeItem(key); } catch (e) {}
+}
+
+function newTripId() {
+  return "t_" + Date.now().toString(36) + Math.floor(Math.random() * 1296).toString(36);
+}
+
+function tripKey(id, k) { return "trip:" + id + ":" + k; }
+
+function tripStore(id) {
+  return {
+    get: function (k, fb) { return lsGet(tripKey(id, k), fb); },
+    set: function (k, v) { return lsSet(tripKey(id, k), v); }
+  };
+}
+
+function listTrips() {
+  var v = lsGet("trip:index", []);
+  return Array.isArray(v) ? v : [];
+}
+
+// 본체(큰 쓰기)와 인덱스(작은 쓰기)를 나눠 쓴다. 용량 초과 등으로 본체 쓰기만 실패하고
+// 인덱스 쓰기는 성공하는 경우(실제로 재현됨), 인덱스만 갱신되고 본체는 예전 값 그대로
+// 남으면 목록과 본체가 서로 다른 얘기를 하게 된다(새 여행이면 목록에 loadTrip이 null인
+// 고아 항목이 생기고, 수정이면 목록엔 새 제목/날짜가 보이는데 본체는 예전 값). 그래서
+// 본체 쓰기가 실패하면 인덱스는 아예 건드리지 않는다.
+function saveTrip(trip) {
+  var okBody = lsSet("trip:" + trip.id, trip);
+  if (!okBody) return false;
+  var idx = listTrips();
+  var row = { id: trip.id, title: trip.title, start: trip.start, end: trip.end };
+  var at = -1;
+  idx.forEach(function (r, i) { if (r.id === trip.id) at = i; });
+  if (at >= 0) idx[at] = row; else idx.push(row);
+  return lsSet("trip:index", idx);
+}
+
+function loadTrip(id) {
+  return lsGet("trip:" + id, null);
+}
+
+// 일정 항목(추가·수정·삭제) 전용 저장. 인덱스 행(id/title/start/end)은 항목 편집으로
+// 바뀌지 않으므로 본체만 쓴다 — saveTrip처럼 인덱스까지 같이 쓰면, 실제로는 본체 저장이
+// 성공했는데 인덱스 쓰기만(용량 초과 등으로) 실패한 경우에도 saveTrip이 false를 돌려줘
+// 정상 반영된 편집을 실패로 취급해버린다. 본체만 쓰면 그 모호함 자체가 없어진다.
+function saveTripBody(trip) {
+  return lsSet("trip:" + trip.id, trip);
+}
+
+// 여행 본체 + 그 여행의 런타임 키(trip:<id>:*) + 인덱스 항목을 모두 지운다.
+function deleteTrip(id) {
+  lsDel("trip:" + id);
+  var prefix = tripKey(id, "");
+  var doomed = [];
+  for (var i = 0; i < localStorage.length; i++) {
+    var k = localStorage.key(i);
+    if (k && k.indexOf(prefix) === 0) doomed.push(k);
+  }
+  doomed.forEach(lsDel);
+  lsSet("trip:index", listTrips().filter(function (r) { return r.id !== id; }));
+}
+
+var LEGACY_PREFIX = "osaka-trip:v1:";
+var LEGACY_KEYS = ["spend", "fx", "packing_checked", "packing_add", "weather"];
+
+function cloneSample() {
+  return JSON.parse(JSON.stringify(window.SAMPLE_TRIP));
+}
+
+// 저장에 성공하면 새 여행 id, 실패하면 null. 다른 쓰기 경로(submitTripForm,
+// afterItemEdit)와 동일하게 성공 여부를 호출부에 넘긴다 — 여기서 삼키면 저장이
+// 실패해도 화면은 존재하지 않는 여행으로 이동했다가 목록으로 되튕길 뿐이라
+// 사용자에게 실패가 전혀 드러나지 않는다.
+function installSample() {
+  var t = cloneSample();
+  t.id = newTripId();
+  return saveTrip(t) ? t.id : null;
+}
+
+// ---- 식사 메모 키: 일차 번호 → 날짜 ----
+// meal 메모는 원래 meal:<n>:<i>로 저장됐는데, resyncDays는 날짜를 기준으로 일차를
+// 보존하면서 n을 1부터 다시 매긴다. 그래서 시작일을 하루 앞당기기만 해도 모든 n이
+// 밀려 메모가 엉뚱한 날에 붙거나(meals가 없는 날로 밀리면) 아예 화면에서 사라진다.
+// 날짜는 그 일차의 안정된 식별자이므로 meal:<date>:<i>로 다시 키를 잡는다.
+
+// trip.days에서 { 일차번호: 날짜 } 표를 만든다.
+function dayDateByN(trip) {
+  var m = {};
+  var days = (trip && Array.isArray(trip.days)) ? trip.days : [];
+  days.forEach(function (d) {
+    if (d && typeof d.date === 'string' && d.date) m[String(d.n)] = d.date;
+  });
+  return m;
+}
+
+// 구 키(meal:<숫자>:<i>)를 새 키(meal:<날짜>:<i>)로 옮긴다. 옮길 필요가 없거나
+// 옮길 수 없으면 null:
+//  - meal: 로 시작하지 않는 키
+//  - 가운데 조각이 숫자가 아닌 키 = 이미 날짜 기준이다(YYYY-MM-DD에는 '-'가 있다).
+//    이 판정 덕분에 마이그레이션을 몇 번을 돌려도 두 번째부터는 아무 것도 하지 않는다.
+//  - 그 번호에 해당하는 일차가 없는 여행(고아 메모는 건드리지 않고 남겨 둔다)
+function mealMigrateKey(sub, byN) {
+  var m = /^meal:([0-9]+):(.+)$/.exec(String(sub));
+  if (!m) return null;
+  var date = byN[m[1]];
+  return date ? ("meal:" + date + ":" + m[2]) : null;
+}
+
+// 저장된 모든 여행의 구 식사 메모 키를 한 번 옮긴다. 여러 번 불러도 안전하다
+// (위 mealMigrateKey가 이미 날짜 기준인 키를 걸러낸다). 새 키 쓰기가 실패하면
+// 구 키를 지우지 않으므로 다음 부팅에 그대로 재시도된다. 옮긴 키 개수를 돌려준다.
+function migrateMealKeys() {
+  var moved = 0;
+  listTrips().forEach(function (row) {
+    var trip = loadTrip(row.id);
+    if (!trip) return;
+    var byN = dayDateByN(trip);
+    var prefix = tripKey(row.id, "meal:");
+    var found = [];
+    for (var i = 0; i < localStorage.length; i++) {
+      var k = localStorage.key(i);
+      if (k && k.indexOf(prefix) === 0) found.push(k);
+    }
+    found.forEach(function (k) {
+      var sub = k.slice(tripKey(row.id, "").length);
+      var nk = mealMigrateKey(sub, byN);
+      if (!nk || nk === sub) return;
+      var target = tripKey(row.id, nk);
+      // 이미 날짜 기준 값이 있으면 그쪽이 최신이다 — 구 키만 치운다.
+      if (localStorage.getItem(target) !== null) { lsDel(k); moved++; return; }
+      if (lsSet(target, lsGet(k, null))) { lsDel(k); moved++; }
+    });
+  });
+  return moved;
+}
+
+// 구 osaka-trip:v1:* 를 새 여행 하나로 옮긴다. 옮길 게 없으면 null.
+// 복사가 하나라도 실제로 저장되지 않았으면(예: 용량 초과) 구 키를 절대 지우지 않고,
+// 이번에 만든 반쪽짜리 새 여행은 되돌린 뒤 null을 돌려준다 — 다음 부팅 때
+// 구 키가 그대로 남아 있으므로 깨끗하게 재시도된다(고아 여행이 쌓이지 않는다).
+function migrateLegacy() {
+  var found = [];
+  for (var i = 0; i < localStorage.length; i++) {
+    var k = localStorage.key(i);
+    if (k && k.indexOf(LEGACY_PREFIX) === 0) found.push(k);
+  }
+  if (!found.length) return null;
+
+  var t = cloneSample();
+  t.id = newTripId();
+  var ok = saveTrip(t);
+  var st = tripStore(t.id);
+  var byN = dayDateByN(t);
+  found.forEach(function (k) {
+    var sub = k.slice(LEGACY_PREFIX.length);
+    // 알려진 키와 meal:<n>:<i> 형태만 옮긴다
+    if (LEGACY_KEYS.indexOf(sub) >= 0 || sub.indexOf("meal:") === 0) {
+      // 구 데이터의 meal 키는 일차 번호 기준이다 — 옮기는 김에 날짜 기준으로 바꿔
+      // 넣는다. 그래야 migrateMealKeys와 이 함수의 실행 순서가 어느 쪽이든 결과가
+      // 같다(이 함수가 먼저면 애초에 옮길 게 없고, migrateMealKeys가 먼저였다면
+      // 그때는 이 여행이 아직 없었으므로 여기서 처리된다).
+      // st.set을 먼저 평가해야 ok가 이미 false여도 나머지 키 복사를 계속 시도한다
+      ok = st.set(mealMigrateKey(sub, byN) || sub, lsGet(k, null)) && ok;
+    }
+  });
+
+  if (!ok) {
+    deleteTrip(t.id);
+    return null;
+  }
+
+  found.forEach(lsDel);
+  return t.id;
+}

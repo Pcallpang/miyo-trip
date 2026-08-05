@@ -1,6 +1,6 @@
 {
-  "name": "오사카 여행",
-  "short_name": "오사카",
+  "name": "여행 플래너",
+  "short_name": "여행",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#0b7285",

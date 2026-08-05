@@ -6,8 +6,73 @@
 <body>
 <h1>경비 함수 테스트</h1>
 <div id="out"></div>
-<script src="app.js"></script>
 <script>
+// test-node.js와 같은 스텁을 브라우저에도 마련한다 — tests.js는 두 러너에서
+// 있는 그대로(수정 없이) 돌아가야 한다.
+//
+// 실제 localStorage는 절대 만지지 않는다: 로드 시점에 window.localStorage 자체를
+// 순수 메모리 구현으로 치환해 버린다(test-node.js가 global.localStorage를 스텁으로
+// 까는 것과 동일한 전략). 그래서 사용자가 실제로 저장해 둔 여행 데이터는 이 페이지를
+// 열어도 절대 지워지거나 바뀌지 않는다.
+var __mem = {};
+var __failWrites = false;
+var __writeSizeLimit = -1;
+var __fakeStorage = {
+  getItem: function (k) { return Object.prototype.hasOwnProperty.call(__mem, k) ? __mem[k] : null; },
+  setItem: function (k, v) {
+    if (__failWrites) return;
+    if (__writeSizeLimit >= 0 && String(v).length > __writeSizeLimit) return;
+    __mem[k] = String(v);
+  },
+  removeItem: function (k) { delete __mem[k]; },
+  key: function (i) { return Object.keys(__mem)[i]; },
+  get length() { return Object.keys(__mem).length; }
+};
+Object.defineProperty(window, 'localStorage', { value: __fakeStorage, configurable: true });
+var __resetStorage = function () { __mem = {}; __failWrites = false; __writeSizeLimit = -1; window.__alerts = []; };
+var __setWritesFail = function (v) { __failWrites = v; };
+var __setWriteSizeLimit = function (n) { __writeSizeLimit = n; };
+// afterItemEdit(views.js)이 실패 시 window.alert를 직접 부른다. 진짜 alert()를 그대로
+// 두면 테스트 실행이 다이얼로그에서 멈추므로, test-node.js와 같은 전략으로 호출을
+// 기록만 하는 스텁으로 치환한다.
+window.__alerts = [];
+window.alert = function (msg) { window.__alerts.push(msg); };
+
+// tests.js는 Node 러너와 맞추려고 global.__setDomTarget(...) 형태로 호출한다.
+// Node에서는 global === window이므로, 브라우저에서도 같은 관계를 만들어 둔다.
+var global = window;
+
+// renderXxx류는 document.getElementById(id)로 대상을 찾아 innerHTML을 쓴다.
+// Node처럼 흉내만 낸 가짜 객체 대신, 화면에는 보이지 않는 진짜 DOM 엘리먼트를
+// 만들어 붙인다 — querySelectorAll 등도 진짜로 동작해서 렌더 함수 입장에서
+// 실제 페이지와 다를 게 없다. 매번 새로 만들어 갈아 끼우므로(Node와 동일하게)
+// 이전 단언이 같은 id를 썼어도 상태가 새지 않는다.
+var __domHost = document.createElement('div');
+__domHost.style.display = 'none';
+document.body.appendChild(__domHost);
+var __domTargets = {};
+var __setDomTarget = function (id) {
+  if (__domTargets[id] && __domTargets[id].parentNode) {
+    __domTargets[id].parentNode.removeChild(__domTargets[id]);
+  }
+  var el = document.createElement('div');
+  el.id = id;
+  __domHost.appendChild(el);
+  __domTargets[id] = el;
+  return el;
+};
+
+// tests.js 실행 중 어디서든 예외가 나면(예: 스텁 누락, ReferenceError 등) 스크립트
+// 태그는 거기서 조용히 멈추지만 그 다음 <script> 태그(집계 렌더링)는 그대로 실행된다.
+// window.onerror로 그 예외를 잡아 두었다가, 마지막 집계에서 반드시 실패로 표시한다.
+// 이게 없으면 "일부만 돌고 나머지는 건너뛴 채로 초록불"이 될 수 있다 — 바로 이 파일이
+// 예전에 실제로 그랬던 버그다.
+var __runtimeError = null;
+window.onerror = function (msg, src, line, col, err) {
+  __runtimeError = msg + (line ? (' (line ' + line + ')') : '');
+  return false;
+};
+
 var results = [], failed = 0;
 function eq(name, got, want) {
   var ok = JSON.stringify(got) === JSON.stringify(want);
@@ -16,64 +81,28 @@ function eq(name, got, want) {
     (ok ? '' : '<br>&nbsp;&nbsp;got&nbsp;: ' + JSON.stringify(got) +
                '<br>&nbsp;&nbsp;want: ' + JSON.stringify(want)) + '</div>');
 }
-
-var L = [
-  { id: 1, date: "2026-07-29", jpy: 1200, cat: "식비", note: "이치란" },
-  { id: 2, date: "2026-07-29", jpy: 800,  cat: "교통", note: "지하철" },
-  { id: 3, date: "2026-07-30", jpy: 2000, cat: "식비", note: "저녁" },
-  { id: 4, date: "2026-07-28", jpy: 500,  cat: "기타", note: "" }
-];
-
-eq('합계', spendTotalJpy(L), 4500);
-eq('빈 목록 합계', spendTotalJpy([]), 0);
-eq('잘못된 금액은 0으로', spendTotalJpy([{jpy:"abc"},{jpy:100}]), 100);
-
-eq('환산 900', jpyToKrw(4500, 900), 40500);
-eq('환산 반올림', jpyToKrw(1234, 900), 11106);
-eq('환율 0이면 0', jpyToKrw(4500, 0), 0);
-
-eq('분류별 집계', spendByCat(L), [
-  { cat: "식비", jpy: 3200 },
-  { cat: "교통", jpy: 800 },
-  { cat: "기타", jpy: 500 }
-]);
-eq('빈 목록 분류', spendByCat([]), []);
-
-eq('날짜별 그룹', spendByDate(L).map(function (g) {
-  return { date: g.date, ids: g.items.map(function (e) { return e.id; }) };
-}), [
-  { date: "2026-07-30", ids: [3] },
-  { date: "2026-07-29", ids: [2, 1] },
-  { date: "2026-07-28", ids: [4] }
-]);
-
-eq('분류 목록', SPEND_CATS, ["식비", "교통", "쇼핑", "관광", "기타"]);
-
-eq('wxIcon 맑음', wxIcon(0), { e: "☀️", t: "맑음" });
-eq('wxIcon 구름', wxIcon(2), { e: "🌤️", t: "구름 조금" });
-eq('wxIcon 흐림', wxIcon(3), { e: "☁️", t: "흐림" });
-eq('wxIcon 이슬비', wxIcon(55), { e: "🌦️", t: "이슬비" });
-eq('wxIcon 비', wxIcon(63), { e: "🌧️", t: "비" });
-eq('wxIcon 소나기', wxIcon(81), { e: "🌧️", t: "소나기" });
-eq('wxIcon 뇌우', wxIcon(96), { e: "⛈️", t: "뇌우" });
-eq('wxIcon 미지 코드', wxIcon(42), { e: "🌡️", t: "" });
-
-var WXAPI = { daily: {
-  time: ["2026-07-28", "2026-07-29"],
-  weather_code: [1, 61],
-  temperature_2m_max: [33.4, 29.6],
-  temperature_2m_min: [26.2, 25.5],
-  precipitation_probability_max: [10, null]
-} };
-eq('wxDailyMap 변환', wxDailyMap(WXAPI)["2026-07-28"],
-  { code: 1, tmax: 33, tmin: 26, rain: 10 });
-eq('wxDailyMap null api', wxDailyMap(null), {});
-eq('wxLine 포맷', wxLine(wxDailyMap(WXAPI), "2026-07-28"), "🌤️ 33° / 26° · 비 10%");
-eq('wxLine 강수 null 생략', wxLine(wxDailyMap(WXAPI), "2026-07-29"), "🌧️ 30° / 26°");
-eq('wxLine 없는 날짜', wxLine(wxDailyMap(WXAPI), "2026-08-09"), "");
-
-document.getElementById('out').innerHTML =
-  '<h2>' + (failed ? failed + '개 실패' : '전부 통과') + '</h2>' + results.join('');
+</script>
+<script src="sample-trip.js"></script>
+<script src="store.js"></script>
+<script src="schema.js"></script>
+<script src="views.js"></script>
+<script src="editor.js"></script>
+<script src="app.js"></script>
+<script src="tests.js"></script>
+<script>
+var out = document.getElementById('out');
+if (__runtimeError) {
+  // 도중에 죽었다 — 실행된 단언 수와 무관하게 무조건 실패로 표시한다.
+  out.innerHTML =
+    '<h2 class="f">테스트 실행이 예외로 중단됨 (' + results.length + '개만 실행됨)</h2>' +
+    '<div class="f">' + String(__runtimeError).replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</div>' +
+    results.join('');
+} else {
+  out.innerHTML =
+    '<h2 class="' + (failed ? 'f' : 'p') + '">' +
+    (failed ? failed + '개 실패' : results.length + '개 전부 통과') + '</h2>' +
+    results.join('');
+}
 </script>
 </body>
 </html>
