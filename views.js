@@ -355,6 +355,61 @@ function expensesTableHtml(trip) {
       total.toLocaleString('ko-KR') + '</td></tr></tfoot></table></div>';
 }
 
+// 탭 본문. 일정 탭은 #daytabs/#timeline을 따로 쓰므로 여기서는 빈 문자열.
+function panelHtml(trip, tab) {
+  if (tab === "hotel") {
+    return trip.hotel
+      ? '<div class="panel-card">' + itemLinesHtml(trip.hotel) + '</div>'
+      : '<p class="empty">숙소가 아직 없습니다. ⚙ 여행 설정에서 입력할 수 있습니다.</p>';
+  }
+  if (tab === "packing") {
+    return '<div class="panel-card" id="packing-body"></div>';
+  }
+  if (tab === "money") {
+    var exp = (trip.expenses && trip.expenses.length)
+      ? '<div class="panel-card"><h2 class="panel-h">💰 출발 전 결제 내역</h2>' +
+        expensesTableHtml(trip) + '</div>'
+      : '';
+    return '<div class="panel-card" id="spend-body"></div>' + exp;
+  }
+  if (tab === "info") {
+    var secs = trip.sections || [];
+    if (!secs.length) {
+      // 섹션 편집기는 2단계다 — 지금 할 수 있는 게 없으므로 없는 기능을 가리키지 않는다.
+      return '<p class="empty">시간표·메모처럼 직접 만드는 항목이 여기 표시됩니다.</p>';
+    }
+    return secs.map(function (sec, i) {
+      return '<details' + (i === 0 ? ' open' : '') + '>' +
+        '<summary>' + escHtml(sec.icon) + ' ' + escHtml(sec.title) + '</summary>' +
+        '<div class="acc">' + sectionBodyHtml(trip, sec) + '</div></details>';
+    }).join('');
+  }
+  return '';
+}
+
+function renderPanel(trip, st, tab) {
+  var el = document.getElementById("tab-panel");
+  if (!el) return;
+  el.innerHTML = panelHtml(trip, tab);
+  if (tab === "packing") renderPacking(trip, st);
+  if (tab === "money") renderSpend(trip, st);
+}
+
+function renderTabbar(trip, tab, onSelect) {
+  var nav = document.getElementById("tabbar");
+  if (!nav) return;
+  nav.innerHTML = TAB_DEFS.map(function (t) {
+    var on = t.key === tab ? ' data-selected="1"' : '';
+    return '<button class="tb"' + on + ' data-tab="' + escHtml(t.key) + '"' +
+      ' aria-current="' + (t.key === tab ? 'page' : 'false') + '">' +
+      '<span class="tb-i">' + t.icon + '</span>' +
+      '<span class="tb-l">' + escHtml(t.label) + '</span></button>';
+  }).join('');
+  nav.querySelectorAll('.tb').forEach(function (b) {
+    b.addEventListener('click', function () { onSelect(b.dataset.tab); });
+  });
+}
+
 function renderFixed(trip, st) {
   document.getElementById("fixed").innerHTML = trip.sections.map(function (sec, i) {
     return '<details' + (i === 0 ? ' open' : '') + '>' +

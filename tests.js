@@ -971,3 +971,39 @@ eq('일차가 숫자 아니면 null', parseTripHash('#/t/t_a/d/abc'), null);
 eq('해시 생성 일정', tabHash('t_a', 'day'), '#/t/t_a');
 eq('해시 생성 일차', tabHash('t_a', 'day', 3), '#/t/t_a/d/3');
 eq('해시 생성 경비', tabHash('t_a', 'money'), '#/t/t_a/money');
+
+// ---- 하단 내비: 패널 HTML ----
+var PT = {
+  id: 't_p', title: '여행', start: '2026-09-01', end: '2026-09-03', party: 2,
+  hotel: '빈펄 리조트\n체크인 14시',
+  budgetKRW: 0, days: [], packing: [], expenses: [],
+  sections: [{ id: 's1', icon: '🚄', title: '기차', type: 'list', body: ['08:00 출발'] }]
+};
+
+eq('숙소 패널은 줄바꿈을 살린다',
+  panelHtml(PT, 'hotel').indexOf('<div class="line">체크인 14시</div>') >= 0, true);
+eq('숙소 없으면 빈 상태',
+  panelHtml({ hotel: '' }, 'hotel').indexOf('class="empty"') >= 0, true);
+eq('숙소 패널 XSS',
+  panelHtml({ hotel: '<img src=x onerror=alert(1)>' }, 'hotel').indexOf('<img') === -1, true);
+
+eq('준비물 패널은 packing-body 컨테이너',
+  panelHtml(PT, 'packing').indexOf('id="packing-body"') >= 0, true);
+
+eq('경비 패널은 spend-body 컨테이너',
+  panelHtml(PT, 'money').indexOf('id="spend-body"') >= 0, true);
+eq('경비 내역 없으면 표를 안 그린다',
+  panelHtml(PT, 'money').indexOf('<table') === -1, true);
+eq('경비 내역 있으면 표를 그린다',
+  panelHtml({ hotel: '', expenses: [{ date: '2026-08-01', cat: '항공', detail: '왕복', krw: 300000 }],
+              sections: [] }, 'money').indexOf('<table') >= 0, true);
+
+eq('정보 패널은 사용자 섹션을 그린다',
+  panelHtml(PT, 'info').indexOf('기차') >= 0, true);
+eq('정보 패널 섹션 없으면 빈 상태',
+  panelHtml({ sections: [] }, 'info').indexOf('class="empty"') >= 0, true);
+eq('정보 패널 섹션 제목 XSS',
+  panelHtml({ sections: [{ id: 's', icon: '📌', title: '<img src=x>', type: 'list', body: [] }] },
+    'info').indexOf('<img src=x>') === -1, true);
+
+eq('일정 탭은 패널을 안 쓴다', panelHtml(PT, 'day'), '');
