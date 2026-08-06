@@ -330,6 +330,26 @@ eq('D-day 이후', dday('2026-08-05', '2026-07-28', '2026-08-03'), '여행 종�
       html.indexOf('NaN원 (NaN인)') !== -1, true);
   })();
 
+  // renderSummary: 여행 화면에서 목록으로 돌아가는 버튼이 항상 있어야 한다
+  // (여행이 하나뿐이어도 — 목록에서 새 여행을 만들거나 지울 수 있어야 하므로).
+  // 클릭 핸들러 동작 자체는 이 Node 스텁의 querySelector가 항상 null이라 여기서
+  // 검증할 수 없다(addEventListener도 no-op) — 마크업 존재만 확인하고, 실제 이동은
+  // 브라우저에서 확인한다.
+  (function () {
+    var trip = {
+      id: "t_x", title: "테스트", start: "2026-07-28", end: "2026-08-03",
+      hotel: "", party: 2, budgetKRW: 0
+    };
+    var st = { get: function (k, fb) { return fb; }, set: function () {} };
+    var el = global.__setDomTarget("summary");
+    renderSummary(trip, st);
+    var html = el.innerHTML;
+
+    eq('renderSummary: 목록 버튼 마크업 존재', html.indexOf('class="back-list"') !== -1, true);
+    eq('renderSummary: 목록 버튼이 접근성 라벨을 가짐',
+      html.indexOf('aria-label="여행 목록"') !== -1, true);
+  })();
+
   // renderSummary: 💰 예산 줄과 💸 현지 경비 합계 줄은 서로 독립이어야 한다.
   // budgetKRW는 생성/설정 폼에 입력란이 없어 기본값 0으로 남는 여행이 대부분이므로,
   // 예산이 없어도 기록된 경비 합계는 반드시 보여야 한다(원래 결함).
