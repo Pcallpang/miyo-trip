@@ -15,9 +15,10 @@ body { margin:0; background:var(--bg); color:var(--text);
 #summary { background:var(--accent); color:#fff; padding:20px 16px; }
 /* 56px는 ⚙ 버튼(right:14px) 하나만 셈한 값이었다. 편집 버튼(.edit-mode, right:52px)까지
    더하면 왼쪽 끝이 오른쪽에서 대략 98px 지점에서 시작하므로, 긴 D-day 문자열이 그
-   버튼 밑으로 파고들지 않게 두 버튼을 함께 감안한 여백을 준다. */
-#summary h1 { margin:4px 0; font-size:1.5rem; padding-right:100px; }
-#summary .dday { font-weight:700; opacity:.9; padding-right:100px; }
+   버튼 밑으로 파고들지 않게 두 버튼을 함께 감안한 여백을 준다.
+   왼쪽에는 목록으로 돌아가는 버튼(.back-list) 하나뿐이라 40px면 충분하다. */
+#summary h1 { margin:4px 0; font-size:1.5rem; padding-right:100px; padding-left:40px; }
+#summary .dday { font-weight:700; opacity:.9; padding-right:100px; padding-left:40px; }
 #summary .period,#summary .hotel,#summary .cost { font-size:.9rem; opacity:.95; margin-top:2px; }
 #daytabs { display:flex; gap:6px; overflow-x:auto; padding:10px 12px;
   position:sticky; top:0; background:var(--bg); z-index:5; -webkit-overflow-scrolling:touch; }
@@ -133,6 +134,8 @@ body { margin:0; background:var(--bg); color:var(--text);
   font-weight:700; }
 
 #summary { position:relative; }
+.back-list { position:absolute; top:16px; left:14px; border:0; background:rgba(255,255,255,.18);
+  color:#fff; font-size:1.05rem; line-height:1; padding:7px 10px; border-radius:10px; cursor:pointer; }
 .edit-trip { position:absolute; top:16px; right:14px; border:0; background:rgba(255,255,255,.18);
   color:#fff; font-size:1.05rem; line-height:1; padding:7px 10px; border-radius:10px; cursor:pointer; }
 .ehead { background:var(--accent); color:#fff; padding:16px; display:flex; align-items:center; gap:10px; }
@@ -1154,6 +1157,7 @@ function renderSummary(trip, st) {
   const el = document.getElementById("summary");
   const nights = daysBetween(trip.start, trip.end) - 1;
   el.innerHTML =
+    '<button class="back-list" type="button" aria-label="여행 목록">←</button>' +
     '<button class="edit-trip" type="button" aria-label="여행 설정">⚙</button>' +
     // 편집 토글은 일정 탭에서만 의미가 있다. CUR은 app.js에 있고 런타임에만
     // 참조되므로 로드 순서 문제는 없다. 앱 화면이 없는 test.html에서는 CUR이
@@ -1185,6 +1189,8 @@ function renderSummary(trip, st) {
       if (!budgetLine && !spendLine) return '';
       return '<div class="cost">' + budgetLine + spendLine + '</div>';
     })();
+  var bl = el.querySelector('.back-list');
+  if (bl) bl.addEventListener('click', function () { go('#/'); });
   var eb = el.querySelector('.edit-trip');
   if (eb) eb.addEventListener('click', function () { go('#/t/' + trip.id + '/edit'); });
   var mb = el.querySelector('.edit-mode');
