@@ -319,12 +319,6 @@ function renderTimeline(trip, day, st) {
                 : '') + '</div>';
           }).join('')
         : '<p class="notes-empty">아직 메모가 없습니다.</p>') +
-      (EDIT_MODE
-        ? '<form class="note-add">' +
-          '<textarea class="nt-text" rows="2" placeholder="메모 (예: 스시야 19시 예약)" ' +
-            'required aria-label="메모"></textarea>' +
-          '<button type="submit">메모 추가</button></form>'
-        : '') +
       '</div>'
     : '';
   main.innerHTML =
@@ -342,16 +336,18 @@ function renderTimeline(trip, day, st) {
         var line = wxLine(wxGet(st, dp).map, day.date);
         var wx = line ? '<div class="dwx">' + line + wxStamp(dp) + '</div>' : '';
         return badge + wx;
-      })() + '</div>' +
+      })() +
+      // 추가 폼을 카드 아래에 붙이면 스크롤이 길어져 불편하다 — 날짜 바로 밑에
+      // 버튼만 두고 입력은 모달에서 받는다.
+      (EDIT_MODE
+        ? '<div class="day-actions">' +
+          '<button class="day-add-item" type="button">+ 일정</button>' +
+          '<button class="day-add-note" type="button">+ 메모</button>' +
+          '</div>'
+        : '') + '</div>' +
       imagesHtml(day) +
       '<div class="slots">' + rows + '</div>' +
-      (EDIT_MODE
-        ? '<form class="item-add">' +
-          '<input class="ia-time" type="time" step="300" required aria-label="시간">' +
-          '<textarea class="ia-text" rows="2" placeholder="일정 내용" required ' +
-            'aria-label="일정 내용"></textarea>' +
-          '<button type="submit">일정 추가</button></form>'
-        : '') +
+
       notes + '</div>';
   bindDayImages(trip, day, st, main);
 
@@ -366,23 +362,12 @@ function renderTimeline(trip, day, st) {
     main.querySelectorAll('.nt-edit').forEach(function (b) {
       b.addEventListener('click', function () {
         var n = (day.notes || []).filter(function (x) { return x.id === b.dataset.id; })[0];
-        if (!n) return;
-        var text = prompt('메모', n.text);
-        if (text === null) return;
-        if (!String(text).trim()) { alert(MSG_EMPTY_TEXT); return; }
-        updateNote(day, n.id, text);
-        afterItemEdit(trip, day, st, saveTripBody(trip));
+        if (n) openNoteModal(trip, day, st, n);
       });
     });
-    var nf = main.querySelector('.note-add');
-    if (nf) nf.addEventListener('submit', function (e) {
-      e.preventDefault();
-      var ta = nf.querySelector('.nt-text');
-      var text = ta.value.trim();
-      if (!text) { alert(MSG_EMPTY_TEXT); return; }
-      addNote(day, text);
-      ta.value = '';
-      afterItemEdit(trip, day, st, saveTripBody(trip));
+    var addNoteBtn = main.querySelector('.day-add-note');
+    if (addNoteBtn) addNoteBtn.addEventListener('click', function () {
+      openNoteModal(trip, day, st, null);
     });
   }
 
@@ -400,47 +385,55 @@ function renderTimeline(trip, day, st) {
     main.querySelectorAll('.it-edit').forEach(function (b) {
       b.addEventListener('click', function () {
         var it = day.items.filter(function (x) { return x.id === b.dataset.id; })[0];
-        if (!it) return;
-        var time = prompt('시간 (HH:MM)', it.time);
-        if (time === null) return;
-        // 추가 폼은 <input type=time>이 형식을 강제하지만 prompt()는 아무 문자열이나
-        // 받는다 — '9:00'처럼 자릿수만 틀린 흔한 실수는 정규화해서 받아주고, 그 밖의
-        // ('9시', 'abc' 등) 잘못된 값은 저장하지 않고 알린다. 정규화 없이 그대로 저장하면
-        // sortItems의 사전순 비교에서 '9:00'이 '14:00'보다 뒤로 밀려버린다(review 지적).
-        var normTime = normalizeTimeInput(time);
-        if (!normTime) {
-          alert(MSG_BAD_TIME);
-          return;
-        }
-        var text = prompt('일정 내용', it.text);
-        if (text === null) return;
-        text = text.trim();
-        // 추가 폼(item-add)은 빈 내용을 거부한다(required + trim 확인) — prompt 경로만
-        // 빈 문자열을 그대로 받아주면 "시간만 있고 내용은 빈" undecided 행이 생긴다.
-        // 두 입력 경로의 보장을 맞춘다.
-        if (!text) {
-          alert(MSG_EMPTY_TEXT);
-          return;
-        }
-        updateItem(trip, day.n, it.id, { time: normTime, text: text });
-        afterItemEdit(trip, day, st, saveTripBody(trip));
+        if (it) openItemModal(trip, day, st, it);
       });
     });
-    var af = main.querySelector('.item-add');
-    if (af) af.addEventListener('submit', function (e) {
-      e.preventDefault();
-      // required 속성이 막아 주는 "아무것도 안 채운 제출"은 조용히 무시하고, 실제로
-      // 값이 들어왔는데 형식이 틀린 경우만 알린다(parseItemInput — prompt 경로와 동일한
-      // 검증·메시지를 쓴다).
-      var raw = af.querySelector('.ia-time').value;
-      var rawText = af.querySelector('.ia-text').value;
-      if (!raw && !rawText.trim()) return;
-      var p = parseItemInput(raw, rawText);
-      if (!p.ok) { alert(p.message); return; }
-      addItem(trip, day.n, { time: p.time, text: p.text });
-      afterItemEdit(trip, day, st, saveTripBody(trip));
+    var addItemBtn = main.querySelector('.day-add-item');
+    if (addItemBtn) addItemBtn.addEventListener('click', function () {
+      openItemModal(trip, day, st, null);
     });
   }
+}
+
+// 일정 추가·수정. 두 경우가 같은 폼을 쓰므로 검증도 한 곳(parseItemInput)만 거친다.
+function openItemModal(trip, day, st, it) {
+  modalOpen({
+    title: (it ? '일정 수정' : '일정 추가') + ' · ' + Number(day.n) + '일차',
+    submitLabel: it ? '저장' : '추가',
+    html:
+      '<label>시간<input class="m-time" type="time" step="300" required ' +
+        'value="' + escHtml(it ? it.time : '') + '"></label>' +
+      '<label>내용<textarea class="m-text" rows="4" required ' +
+        'placeholder="예: 이치란 라멘 신사이바시점">' + escHtml(it ? it.text : '') + '</textarea></label>',
+    onSubmit: function (form) {
+      var p = parseItemInput(form.querySelector('.m-time').value,
+                            form.querySelector('.m-text').value);
+      if (!p.ok) return p.message;
+      if (it) updateItem(trip, day.n, it.id, { time: p.time, text: p.text });
+      else addItem(trip, day.n, { time: p.time, text: p.text });
+      afterItemEdit(trip, day, st, saveTripBody(trip));
+      return null;
+    }
+  });
+}
+
+function openNoteModal(trip, day, st, note) {
+  modalOpen({
+    title: (note ? '메모 수정' : '메모 추가') + ' · ' + Number(day.n) + '일차',
+    submitLabel: note ? '저장' : '추가',
+    html:
+      '<label>메모<textarea class="m-note" rows="5" required ' +
+        'placeholder="예: 스시야 19시 예약 · 010-1234-5678">' +
+        escHtml(note ? note.text : '') + '</textarea></label>',
+    onSubmit: function (form) {
+      var text = form.querySelector('.m-note').value.trim();
+      if (!text) return MSG_EMPTY_TEXT;
+      if (note) updateNote(day, note.id, text);
+      else addNote(day, text);
+      afterItemEdit(trip, day, st, saveTripBody(trip));
+      return null;
+    }
+  });
 }
 
 // ---- 하단 고정 섹션 ----
@@ -505,23 +498,82 @@ function expenseEditorHtml(trip) {
   return '<div class="exp-actions">' +
       '<button class="exp-mode" type="button" data-on="1">완료</button>' +
       '<button class="exp-new" type="button">+ 내역 추가</button>' +
-    '</div>' +
-    '<form class="exp-form" hidden>' +
-      '<div class="exp-row">' +
-        '<input class="exp-cat" type="text" placeholder="항목 (예: 항공권)" aria-label="항목">' +
-        '<input class="exp-krw" type="number" min="1" step="1" placeholder="금액(원)" aria-label="금액">' +
+    '</div>';
+}
+
+// ---- 모달 ----
+// 폼을 화면 아래에 길게 붙이면 스크롤이 늘어나 쓰기 불편하다. 일정·메모·결제내역
+// 입력은 모두 이 모달 하나를 쓴다(prompt()로 하던 것도 여기로 옮겼다 — prompt는
+// 여러 줄을 못 받고 형식 검증도 못 한다).
+var _modalEl = null;
+var _modalPrevFocus = null;
+
+function modalClose() {
+  if (!_modalEl) return;
+  _modalEl.remove();
+  _modalEl = null;
+  document.body.classList.remove('modal-open');
+  document.removeEventListener('keydown', _modalKey);
+  if (_modalPrevFocus && _modalPrevFocus.focus) {
+    try { _modalPrevFocus.focus(); } catch (e) {}
+  }
+  _modalPrevFocus = null;
+}
+
+function _modalKey(e) {
+  if (e.key === 'Escape') { e.preventDefault(); modalClose(); }
+}
+
+// opts: { title, html, submitLabel, onSubmit(form) -> 오류 문자열 또는 null }
+// onSubmit이 문자열을 돌려주면 모달을 닫지 않고 그 오류를 보여준다.
+function modalOpen(opts) {
+  modalClose();
+  _modalPrevFocus = document.activeElement;
+  var el = document.createElement('div');
+  el.className = 'modal';
+  el.innerHTML =
+    '<div class="modal-back"></div>' +
+    '<div class="modal-card" role="dialog" aria-modal="true" aria-label="' +
+      escHtml(opts.title) + '">' +
+      '<div class="modal-head">' +
+        '<h2>' + escHtml(opts.title) + '</h2>' +
+        '<button class="modal-x" type="button" aria-label="닫기">×</button>' +
       '</div>' +
-      '<input class="exp-detail" type="text" placeholder="상세 (예: 왕복 2인)" aria-label="상세">' +
-      '<div class="exp-row">' +
-        '<input class="exp-date" type="date" aria-label="결제일">' +
-        '<input class="exp-pay" type="text" placeholder="결제수단" aria-label="결제수단">' +
-      '</div>' +
-      '<div class="exp-err" hidden></div>' +
-      '<div class="exp-row">' +
-        '<button type="submit">저장</button>' +
-        '<button class="exp-cancel" type="button">취소</button>' +
-      '</div>' +
-    '</form>';
+      '<form class="modal-form">' +
+        opts.html +
+        '<div class="modal-err" hidden></div>' +
+        '<div class="modal-btns">' +
+          '<button type="submit">' + escHtml(opts.submitLabel || '저장') + '</button>' +
+          '<button class="modal-cancel" type="button">취소</button>' +
+        '</div>' +
+      '</form>' +
+    '</div>';
+  document.body.appendChild(el);
+  document.body.classList.add('modal-open');
+  _modalEl = el;
+
+  el.querySelector('.modal-back').addEventListener('click', modalClose);
+  el.querySelector('.modal-x').addEventListener('click', modalClose);
+  el.querySelector('.modal-cancel').addEventListener('click', modalClose);
+  document.addEventListener('keydown', _modalKey);
+
+  var form = el.querySelector('.modal-form');
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    var err = opts.onSubmit ? opts.onSubmit(form) : null;
+    if (err) {
+      var box = el.querySelector('.modal-err');
+      box.textContent = err;
+      box.hidden = false;
+      return;
+    }
+    modalClose();
+  });
+
+  // 첫 입력칸에 포커스를 준다 — 폰에서 바로 타이핑할 수 있게.
+  var first = form.querySelector('input, textarea, select');
+  if (first && first.focus) { try { first.focus(); } catch (e) {} }
+  return form;
 }
 
 // 정보 탭의 섹션 편집 모드. EDIT_MODE와 같은 성격의 세션 상태다 —
@@ -624,8 +676,6 @@ function saveSections(trip, st, el) {
 }
 
 function bindExpenseEditor(trip, st, el) {
-  var form = el.querySelector('.exp-form');
-
   function save() {
     if (!saveTripBody(trip)) {
       var fresh = loadTrip(trip.id);
@@ -643,16 +693,39 @@ function bindExpenseEditor(trip, st, el) {
   });
 
   function openForm(e) {
-    if (!form) return;
-    EXP_TARGET = e ? e.id : null;
-    form.querySelector('.exp-cat').value = e ? e.cat : '';
-    form.querySelector('.exp-krw').value = e ? Number(e.krw) : '';
-    form.querySelector('.exp-detail').value = e ? (e.detail || '') : '';
-    form.querySelector('.exp-date').value = e ? (e.date || '') : '';
-    form.querySelector('.exp-pay').value = e ? (e.pay || '') : '';
-    form.querySelector('.exp-err').hidden = true;
-    form.hidden = false;
-    form.querySelector('.exp-cat').focus();
+    modalOpen({
+      title: e ? '내역 수정' : '내역 추가',
+      submitLabel: e ? '저장' : '추가',
+      html:
+        '<label>항목<input class="exp-cat" type="text" required ' +
+          'placeholder="예: 항공권" value="' + escHtml(e ? e.cat : '') + '"></label>' +
+        '<label>금액(원)<input class="exp-krw" type="number" min="1" step="1" required ' +
+          'placeholder="640000" value="' + (e ? Number(e.krw) : '') + '"></label>' +
+        '<label>상세<input class="exp-detail" type="text" ' +
+          'placeholder="예: 왕복 2인" value="' + escHtml(e ? (e.detail || '') : '') + '"></label>' +
+        '<div class="modal-row">' +
+          '<label>결제일<input class="exp-date" type="date" ' +
+            'value="' + escHtml(e ? (e.date || '') : '') + '"></label>' +
+          '<label>결제수단<input class="exp-pay" type="text" ' +
+            'placeholder="신한카드" value="' + escHtml(e ? (e.pay || '') : '') + '"></label>' +
+        '</div>',
+      onSubmit: function (form) {
+        var f = {
+          cat: form.querySelector('.exp-cat').value,
+          krw: form.querySelector('.exp-krw').value,
+          detail: form.querySelector('.exp-detail').value,
+          date: form.querySelector('.exp-date').value,
+          pay: form.querySelector('.exp-pay').value,
+          note: ''
+        };
+        var err = validateExpenseForm(f);
+        if (err) return err;
+        if (e) updateExpense(trip, e.id, f);
+        else addExpense(trip, f);
+        save();
+        return null;
+      }
+    });
   }
 
   var newBtn = el.querySelector('.exp-new');
@@ -674,30 +747,6 @@ function bindExpenseEditor(trip, st, el) {
     });
   });
 
-  if (form) {
-    form.querySelector('.exp-cancel').addEventListener('click', function () {
-      form.hidden = true;
-      EXP_TARGET = null;
-    });
-    form.addEventListener('submit', function (ev) {
-      ev.preventDefault();
-      var f = {
-        cat: form.querySelector('.exp-cat').value,
-        krw: form.querySelector('.exp-krw').value,
-        detail: form.querySelector('.exp-detail').value,
-        date: form.querySelector('.exp-date').value,
-        pay: form.querySelector('.exp-pay').value,
-        note: ''
-      };
-      var err = validateExpenseForm(f);
-      var box = form.querySelector('.exp-err');
-      if (err) { box.textContent = err; box.hidden = false; return; }
-      if (EXP_TARGET) updateExpense(trip, EXP_TARGET, f);
-      else addExpense(trip, f);
-      EXP_TARGET = null;
-      save();
-    });
-  }
 }
 
 function bindSectionEditor(trip, st, el) {

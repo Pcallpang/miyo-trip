@@ -877,13 +877,18 @@ eq('두 입력 경로가 같은 시간 오류 메시지를 쓴다', MSG_BAD_TIME
   renderTimeline(trip, trip.days[0], st);
   eq('빈 일차에는 안내 문구가 보인다', el.innerHTML.indexOf(EMPTY_MSG) !== -1, true);
 
-  // 편집 모드에서는 바로 아래에 추가 폼이 있으므로 안내가 필요 없다.
+  // 편집 모드에서는 날짜 바로 밑에 추가 버튼이 있으므로 안내가 필요 없다.
+  // (입력 폼은 카드 아래가 아니라 모달에서 받는다 — 스크롤이 길어지지 않게.)
   var el2 = global.__setDomTarget('timeline');
   EDIT_MODE = true;
   renderTimeline(trip, trip.days[0], st);
-  eq('편집 모드의 빈 일차에는 안내 대신 추가 폼', el2.innerHTML.indexOf(EMPTY_MSG) === -1, true);
-  eq('편집 모드의 빈 일차에는 추가 폼이 있다',
-    el2.innerHTML.indexOf('class="item-add"') !== -1, true);
+  eq('편집 모드의 빈 일차에는 안내 대신 추가 버튼', el2.innerHTML.indexOf(EMPTY_MSG) === -1, true);
+  eq('편집 모드의 빈 일차에는 일정 추가 버튼이 있다',
+    el2.innerHTML.indexOf('class="day-add-item"') !== -1, true);
+  eq('편집 모드의 빈 일차에는 메모 추가 버튼이 있다',
+    el2.innerHTML.indexOf('class="day-add-note"') !== -1, true);
+  eq('추가 폼은 카드에 붙지 않는다(모달로 이동)',
+    el2.innerHTML.indexOf('class="item-add"') === -1, true);
 
   // 일정이 있으면 안내 문구는 나오지 않는다.
   var el3 = global.__setDomTarget('timeline');
