@@ -349,6 +349,39 @@ function expensesTableHtml(trip) {
       total.toLocaleString('ko-KR') + '</td></tr></tfoot></table></div>';
 }
 
+// 정보 탭의 섹션 편집 모드. EDIT_MODE와 같은 성격의 세션 상태다 —
+// trip 데이터가 아니므로 저장소에 넣지 않는다.
+var SECT_EDIT = false;
+// 편집 중인 섹션 id. null이면 "새로 추가" 상태다.
+var SECT_TARGET = null;
+
+function sectionEditorHtml() {
+  if (!SECT_EDIT) {
+    return '<div class="sec-actions">' +
+      '<button class="sec-mode" type="button">✏️ 항목 편집</button></div>';
+  }
+  return '<div class="sec-actions">' +
+      '<button class="sec-mode" type="button" data-on="1">완료</button>' +
+      '<button class="sec-new" type="button">+ 새 항목</button>' +
+    '</div>' +
+    '<form class="sec-form" hidden>' +
+      '<div class="sec-row">' +
+        '<input class="sec-icon" type="text" maxlength="2" placeholder="📌" aria-label="아이콘">' +
+        '<input class="sec-title" type="text" placeholder="제목 (예: 맛집 목록)" aria-label="제목">' +
+      '</div>' +
+      '<select class="sec-type" aria-label="형식">' +
+        '<option value="list">목록 — 한 줄에 하나씩</option>' +
+        '<option value="text">글 — 줄바꿈 그대로</option>' +
+      '</select>' +
+      '<textarea class="sec-body" rows="5" placeholder="내용" aria-label="내용"></textarea>' +
+      '<div class="sec-err" hidden></div>' +
+      '<div class="sec-row">' +
+        '<button type="submit">저장</button>' +
+        '<button class="sec-cancel" type="button">취소</button>' +
+      '</div>' +
+    '</form>';
+}
+
 // 탭 본문. 일정 탭은 #daytabs/#timeline을 따로 쓰므로 여기서는 빈 문자열.
 function panelHtml(trip, tab) {
   if (tab === "hotel") {
@@ -368,15 +401,25 @@ function panelHtml(trip, tab) {
   }
   if (tab === "info") {
     var secs = trip.sections || [];
-    if (!secs.length) {
-      // 섹션 편집기는 2단계다 — 지금 할 수 있는 게 없으므로 없는 기능을 가리키지 않는다.
-      return '<p class="empty">시간표·메모처럼 직접 만드는 항목이 여기 표시됩니다.</p>';
-    }
-    return secs.map(function (sec, i) {
-      return '<details' + (i === 0 ? ' open' : '') + '>' +
-        '<summary>' + escHtml(sec.icon) + ' ' + escHtml(sec.title) + '</summary>' +
-        '<div class="acc">' + sectionBodyHtml(trip, sec) + '</div></details>';
-    }).join('');
+    var body = secs.length
+      ? secs.map(function (sec, i) {
+          // 표는 편집기가 다루지 않는다(읽기 전용) — 버튼 자체를 내지 않는다.
+          var tools = SECT_EDIT && sectionEditable(sec)
+            ? '<div class="sec-tools">' +
+              '<button class="sec-up" type="button" data-id="' + escHtml(sec.id) + '">↑</button>' +
+              '<button class="sec-dn" type="button" data-id="' + escHtml(sec.id) + '">↓</button>' +
+              '<button class="sec-ed" type="button" data-id="' + escHtml(sec.id) + '">수정</button>' +
+              '<button class="sec-rm" type="button" data-id="' + escHtml(sec.id) + '">삭제</button>' +
+              '</div>'
+            : (SECT_EDIT
+                ? '<div class="sec-tools"><span class="sec-ro">표는 여기서 수정할 수 없습니다</span></div>'
+                : '');
+          return '<details' + (i === 0 ? ' open' : '') + '>' +
+            '<summary>' + escHtml(sec.icon) + ' ' + escHtml(sec.title) + '</summary>' +
+            '<div class="acc">' + sectionBodyHtml(trip, sec) + tools + '</div></details>';
+        }).join('')
+      : '<p class="empty">시간표·메모처럼 직접 만드는 항목이 여기 표시됩니다.</p>';
+    return body + sectionEditorHtml();
   }
   return '';
 }
@@ -387,6 +430,96 @@ function renderPanel(trip, st, tab) {
   el.innerHTML = panelHtml(trip, tab);
   if (tab === "packing") renderPacking(trip, st);
   if (tab === "money") renderSpend(trip, st);
+  if (tab === "info") bindSectionEditor(trip, st, el);
+}
+
+// 섹션을 고쳐 저장하고 정보 탭만 다시 그린다. saveTripBody의 성공 여부를 확인한다 —
+// 조용히 실패하면 화면에는 반영됐는데 저장은 안 된 상태가 된다.
+function saveSections(trip, st, el) {
+  var ok = saveTripBody(trip);
+  if (!ok) {
+    var fresh = loadTrip(trip.id);
+    if (fresh) trip.sections = fresh.sections;
+    alert('저장에 실패했습니다. 기기 저장 공간을 확인해 주세요.');
+  }
+  renderPanel(trip, st, "info");
+}
+
+function bindSectionEditor(trip, st, el) {
+  var form = el.querySelector('.sec-form');
+
+  var modeBtn = el.querySelector('.sec-mode');
+  if (modeBtn) modeBtn.addEventListener('click', function () {
+    SECT_EDIT = !SECT_EDIT;
+    SECT_TARGET = null;
+    renderPanel(trip, st, "info");
+  });
+
+  function openForm(sec) {
+    if (!form) return;
+    SECT_TARGET = sec ? sec.id : null;
+    form.querySelector('.sec-icon').value = sec ? sec.icon : '';
+    form.querySelector('.sec-title').value = sec ? sec.title : '';
+    form.querySelector('.sec-type').value = sec ? sec.type : 'list';
+    form.querySelector('.sec-body').value = sec ? sectionBodyToText(sec) : '';
+    form.querySelector('.sec-err').hidden = true;
+    form.hidden = false;
+    form.querySelector('.sec-title').focus();
+  }
+
+  var newBtn = el.querySelector('.sec-new');
+  if (newBtn) newBtn.addEventListener('click', function () { openForm(null); });
+
+  el.querySelectorAll('.sec-ed').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var sec = (trip.sections || []).filter(function (s) { return s.id === b.dataset.id; })[0];
+      if (sec) openForm(sec);
+    });
+  });
+  el.querySelectorAll('.sec-rm').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var sec = (trip.sections || []).filter(function (s) { return s.id === b.dataset.id; })[0];
+      if (!sec) return;
+      if (!confirm('"' + sec.title + '" 항목을 삭제할까요?')) return;
+      removeSection(trip, b.dataset.id);
+      saveSections(trip, st, el);
+    });
+  });
+  el.querySelectorAll('.sec-up').forEach(function (b) {
+    b.addEventListener('click', function () {
+      moveSection(trip, b.dataset.id, -1);
+      saveSections(trip, st, el);
+    });
+  });
+  el.querySelectorAll('.sec-dn').forEach(function (b) {
+    b.addEventListener('click', function () {
+      moveSection(trip, b.dataset.id, 1);
+      saveSections(trip, st, el);
+    });
+  });
+
+  if (form) {
+    form.querySelector('.sec-cancel').addEventListener('click', function () {
+      form.hidden = true;
+      SECT_TARGET = null;
+    });
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var f = {
+        icon: form.querySelector('.sec-icon').value,
+        title: form.querySelector('.sec-title').value,
+        type: form.querySelector('.sec-type').value,
+        body: form.querySelector('.sec-body').value
+      };
+      var err = validateSectionForm(f);
+      var box = form.querySelector('.sec-err');
+      if (err) { box.textContent = err; box.hidden = false; return; }
+      if (SECT_TARGET) updateSection(trip, SECT_TARGET, f);
+      else addSection(trip, f);
+      SECT_TARGET = null;
+      saveSections(trip, st, el);
+    });
+  }
 }
 
 function renderTabbar(trip, tab, onSelect) {

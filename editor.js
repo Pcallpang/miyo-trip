@@ -386,3 +386,79 @@ function setDayPlace(trip, dayN, place) {
   day.place = place || null;
   return trip;
 }
+
+// ---- 섹션 편집 (2단계-C) ----
+// 데이터는 text/list/table 세 형식을 지원하지만 편집기는 글·목록만 다룬다.
+// 표는 좁은 화면에서 행·열을 편집하는 UI가 번거로운 데 비해 쓰임이 적다 —
+// 오사카 샘플의 라피트 시간표처럼 이미 있는 표는 읽기 전용으로 그대로 보존된다.
+function sectionEditable(sec) {
+  return !!sec && (sec.type === "text" || sec.type === "list");
+}
+
+// 편집기의 textarea 한 칸으로 두 형식을 다룬다: 목록은 줄 단위로 쪼갠다.
+function sectionBodyFromText(type, text) {
+  var t = String(text == null ? "" : text);
+  if (type !== "list") return t;
+  return t.split('\n').map(function (l) { return l.trim(); })
+    .filter(function (l) { return l.length > 0; });
+}
+
+function sectionBodyToText(sec) {
+  if (!sec) return "";
+  if (sec.type === "list") return (sec.body || []).join('\n');
+  if (sec.type === "text") return String(sec.body == null ? "" : sec.body);
+  return "";
+}
+
+function validateSectionForm(f) {
+  if (!f || !f.title || !f.title.trim()) return '섹션 제목을 입력하세요.';
+  if (!f.body || !f.body.trim()) return '내용을 입력하세요.';
+  return null;
+}
+
+// addItem/updateItem과 같은 계약 — 인자로 받은 trip을 그 자리에서 고친다.
+function addSection(trip, f) {
+  if (!trip) return trip;
+  if (!Array.isArray(trip.sections)) trip.sections = [];
+  trip.sections.push({
+    id: newSectionId(),
+    icon: (f.icon || '📌').trim() || '📌',
+    title: f.title.trim(),
+    type: f.type === 'text' ? 'text' : 'list',
+    body: sectionBodyFromText(f.type, f.body)
+  });
+  return trip;
+}
+
+function updateSection(trip, id, f) {
+  if (!trip || !Array.isArray(trip.sections)) return trip;
+  trip.sections.forEach(function (s) {
+    if (s.id !== id) return;
+    s.icon = (f.icon || '📌').trim() || '📌';
+    s.title = f.title.trim();
+    s.type = f.type === 'text' ? 'text' : 'list';
+    // 형식이 바뀌면 본문 표현도 함께 바꾼다(목록 ↔ 여러 줄 글).
+    s.body = sectionBodyFromText(f.type, f.body);
+  });
+  return trip;
+}
+
+function removeSection(trip, id) {
+  if (!trip || !Array.isArray(trip.sections)) return trip;
+  trip.sections = trip.sections.filter(function (s) { return s.id !== id; });
+  return trip;
+}
+
+// dir는 -1(위) 또는 1(아래). 끝에서 더 밀면 아무 일도 하지 않는다.
+function moveSection(trip, id, dir) {
+  if (!trip || !Array.isArray(trip.sections)) return trip;
+  var i = -1;
+  trip.sections.forEach(function (s, n) { if (s.id === id) i = n; });
+  if (i < 0) return trip;
+  var j = i + dir;
+  if (j < 0 || j >= trip.sections.length) return trip;
+  var tmp = trip.sections[i];
+  trip.sections[i] = trip.sections[j];
+  trip.sections[j] = tmp;
+  return trip;
+}

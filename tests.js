@@ -1246,3 +1246,39 @@ eq('빈 값은 null', currencyForCountry(''), null);
 eq('geoParse가 국가 코드를 담는다',
   geoParse({ results: [{ name:'다낭', country:'베트남', country_code:'VN',
     latitude:16.06778, longitude:108.22083, timezone:'Asia/Ho_Chi_Minh' }] })[0].cc, 'VN');
+
+// ---- 섹션 편집 ----
+eq('본문 → list 변환', sectionBodyFromText('list', '첫 줄\n둘째 줄'), ['첫 줄', '둘째 줄']);
+eq('빈 줄은 버린다', sectionBodyFromText('list', 'a\n\n  \nb'), ['a', 'b']);
+eq('본문 → text는 그대로', sectionBodyFromText('text', 'a\nb'), 'a\nb');
+eq('list → 편집용 텍스트', sectionBodyToText({ type:'list', body:['a','b'] }), 'a\nb');
+eq('text → 편집용 텍스트', sectionBodyToText({ type:'text', body:'a\nb' }), 'a\nb');
+// 표는 편집 대상이 아니다(읽기 전용) — 편집기가 열리지 않아야 한다.
+eq('표는 편집 불가', sectionEditable({ type:'table' }), false);
+eq('글·목록은 편집 가능', [sectionEditable({type:'text'}), sectionEditable({type:'list'})], [true, true]);
+
+eq('섹션 폼 검증 통과', validateSectionForm({ title:'팁', icon:'💡', body:'a' }), null);
+eq('제목 없으면 거부', validateSectionForm({ title:' ', icon:'💡', body:'a' }), '섹션 제목을 입력하세요.');
+eq('본문 없으면 거부', validateSectionForm({ title:'팁', icon:'💡', body:'  ' }), '내용을 입력하세요.');
+
+(function () {
+  var trip = { sections: [{ id:'s1', icon:'🚄', title:'기차', type:'table', body:[] }] };
+  addSection(trip, { title:'팁', icon:'💡', type:'list', body:'첫 줄\n둘째 줄' });
+  eq('섹션 추가', trip.sections.length, 2);
+  eq('추가된 섹션 형식', trip.sections[1].type, 'list');
+  eq('추가된 본문이 배열로', trip.sections[1].body, ['첫 줄', '둘째 줄']);
+  eq('id가 부여됨', trip.sections[1].id.slice(0,2), 's_');
+
+  updateSection(trip, trip.sections[1].id, { title:'꿀팁', icon:'⭐', type:'text', body:'한 줄' });
+  eq('수정된 제목', trip.sections[1].title, '꿀팁');
+  eq('형식 변경 시 본문도 변환', trip.sections[1].body, '한 줄');
+
+  moveSection(trip, trip.sections[1].id, -1);
+  eq('위로 이동', trip.sections.map(function(s){return s.title;}), ['꿀팁', '기차']);
+  moveSection(trip, trip.sections[0].id, -1);
+  eq('맨 위에서 더 못 올라감', trip.sections[0].title, '꿀팁');
+
+  removeSection(trip, trip.sections[0].id);
+  eq('삭제', trip.sections.map(function(s){return s.title;}), ['기차']);
+  eq('없는 id 삭제는 무해', removeSection(trip, 'nope').sections.length, 1);
+})();

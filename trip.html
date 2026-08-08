@@ -231,6 +231,31 @@ body { margin:0; background:var(--bg); color:var(--text);
 .fx-attrib { font-size:.72rem; color:var(--muted); text-decoration:none; opacity:.8; }
 .fx-attrib:hover { text-decoration:underline; }
 
+.sec-actions { display:flex; gap:8px; margin-top:4px; }
+.sec-actions button { flex:1; font:inherit; font-size:.85rem; padding:10px; border:1px solid #d5dde1;
+  border-radius:10px; background:var(--card); color:var(--text); cursor:pointer; }
+.sec-actions .sec-mode[data-on] { background:var(--accent); color:#fff; border-color:var(--accent);
+  font-weight:700; }
+.sec-actions .sec-new { background:var(--accent); color:#fff; border-color:var(--accent); font-weight:700; }
+.sec-tools { display:flex; gap:6px; margin-top:10px; padding-top:10px; border-top:1px dashed #dde4e8; }
+.sec-tools button { font:inherit; font-size:.75rem; padding:4px 10px; border:1px solid #d5dde1;
+  border-radius:8px; background:var(--card); color:var(--muted); cursor:pointer; }
+.sec-tools .sec-rm { color:#c92a2a; border-color:#ffc9c9; }
+.sec-tools .sec-ro { font-size:.75rem; color:var(--muted); }
+.sec-form { display:flex; flex-direction:column; gap:8px; margin-top:10px; padding:12px;
+  background:var(--card); border-radius:14px; box-shadow:0 1px 4px rgba(0,0,0,.06); }
+.sec-form input, .sec-form textarea, .sec-form select { font:inherit; color:var(--text);
+  padding:10px; border:1px solid #d5dde1; border-radius:10px; background:var(--card); }
+.sec-row { display:flex; gap:8px; }
+.sec-row .sec-icon { flex:0 0 62px; text-align:center; }
+.sec-row .sec-title { flex:1; min-width:0; }
+.sec-row button { flex:1; font:inherit; font-weight:700; padding:11px; border:0; border-radius:10px;
+  background:var(--accent); color:#fff; cursor:pointer; }
+.sec-row .sec-cancel { background:var(--card); color:var(--muted); border:1px solid #d5dde1;
+  font-weight:400; }
+.sec-err { background:#fff0f0; color:#c92a2a; border-left:4px solid #e03131;
+  padding:9px 12px; border-radius:8px; font-size:.85rem; }
+
 </style>
 </head>
 <body>
@@ -1875,6 +1900,39 @@ function expensesTableHtml(trip) {
       total.toLocaleString('ko-KR') + '</td></tr></tfoot></table></div>';
 }
 
+// 정보 탭의 섹션 편집 모드. EDIT_MODE와 같은 성격의 세션 상태다 —
+// trip 데이터가 아니므로 저장소에 넣지 않는다.
+var SECT_EDIT = false;
+// 편집 중인 섹션 id. null이면 "새로 추가" 상태다.
+var SECT_TARGET = null;
+
+function sectionEditorHtml() {
+  if (!SECT_EDIT) {
+    return '<div class="sec-actions">' +
+      '<button class="sec-mode" type="button">✏️ 항목 편집</button></div>';
+  }
+  return '<div class="sec-actions">' +
+      '<button class="sec-mode" type="button" data-on="1">완료</button>' +
+      '<button class="sec-new" type="button">+ 새 항목</button>' +
+    '</div>' +
+    '<form class="sec-form" hidden>' +
+      '<div class="sec-row">' +
+        '<input class="sec-icon" type="text" maxlength="2" placeholder="📌" aria-label="아이콘">' +
+        '<input class="sec-title" type="text" placeholder="제목 (예: 맛집 목록)" aria-label="제목">' +
+      '</div>' +
+      '<select class="sec-type" aria-label="형식">' +
+        '<option value="list">목록 — 한 줄에 하나씩</option>' +
+        '<option value="text">글 — 줄바꿈 그대로</option>' +
+      '</select>' +
+      '<textarea class="sec-body" rows="5" placeholder="내용" aria-label="내용"></textarea>' +
+      '<div class="sec-err" hidden></div>' +
+      '<div class="sec-row">' +
+        '<button type="submit">저장</button>' +
+        '<button class="sec-cancel" type="button">취소</button>' +
+      '</div>' +
+    '</form>';
+}
+
 // 탭 본문. 일정 탭은 #daytabs/#timeline을 따로 쓰므로 여기서는 빈 문자열.
 function panelHtml(trip, tab) {
   if (tab === "hotel") {
@@ -1894,15 +1952,25 @@ function panelHtml(trip, tab) {
   }
   if (tab === "info") {
     var secs = trip.sections || [];
-    if (!secs.length) {
-      // 섹션 편집기는 2단계다 — 지금 할 수 있는 게 없으므로 없는 기능을 가리키지 않는다.
-      return '<p class="empty">시간표·메모처럼 직접 만드는 항목이 여기 표시됩니다.</p>';
-    }
-    return secs.map(function (sec, i) {
-      return '<details' + (i === 0 ? ' open' : '') + '>' +
-        '<summary>' + escHtml(sec.icon) + ' ' + escHtml(sec.title) + '</summary>' +
-        '<div class="acc">' + sectionBodyHtml(trip, sec) + '</div></details>';
-    }).join('');
+    var body = secs.length
+      ? secs.map(function (sec, i) {
+          // 표는 편집기가 다루지 않는다(읽기 전용) — 버튼 자체를 내지 않는다.
+          var tools = SECT_EDIT && sectionEditable(sec)
+            ? '<div class="sec-tools">' +
+              '<button class="sec-up" type="button" data-id="' + escHtml(sec.id) + '">↑</button>' +
+              '<button class="sec-dn" type="button" data-id="' + escHtml(sec.id) + '">↓</button>' +
+              '<button class="sec-ed" type="button" data-id="' + escHtml(sec.id) + '">수정</button>' +
+              '<button class="sec-rm" type="button" data-id="' + escHtml(sec.id) + '">삭제</button>' +
+              '</div>'
+            : (SECT_EDIT
+                ? '<div class="sec-tools"><span class="sec-ro">표는 여기서 수정할 수 없습니다</span></div>'
+                : '');
+          return '<details' + (i === 0 ? ' open' : '') + '>' +
+            '<summary>' + escHtml(sec.icon) + ' ' + escHtml(sec.title) + '</summary>' +
+            '<div class="acc">' + sectionBodyHtml(trip, sec) + tools + '</div></details>';
+        }).join('')
+      : '<p class="empty">시간표·메모처럼 직접 만드는 항목이 여기 표시됩니다.</p>';
+    return body + sectionEditorHtml();
   }
   return '';
 }
@@ -1913,6 +1981,96 @@ function renderPanel(trip, st, tab) {
   el.innerHTML = panelHtml(trip, tab);
   if (tab === "packing") renderPacking(trip, st);
   if (tab === "money") renderSpend(trip, st);
+  if (tab === "info") bindSectionEditor(trip, st, el);
+}
+
+// 섹션을 고쳐 저장하고 정보 탭만 다시 그린다. saveTripBody의 성공 여부를 확인한다 —
+// 조용히 실패하면 화면에는 반영됐는데 저장은 안 된 상태가 된다.
+function saveSections(trip, st, el) {
+  var ok = saveTripBody(trip);
+  if (!ok) {
+    var fresh = loadTrip(trip.id);
+    if (fresh) trip.sections = fresh.sections;
+    alert('저장에 실패했습니다. 기기 저장 공간을 확인해 주세요.');
+  }
+  renderPanel(trip, st, "info");
+}
+
+function bindSectionEditor(trip, st, el) {
+  var form = el.querySelector('.sec-form');
+
+  var modeBtn = el.querySelector('.sec-mode');
+  if (modeBtn) modeBtn.addEventListener('click', function () {
+    SECT_EDIT = !SECT_EDIT;
+    SECT_TARGET = null;
+    renderPanel(trip, st, "info");
+  });
+
+  function openForm(sec) {
+    if (!form) return;
+    SECT_TARGET = sec ? sec.id : null;
+    form.querySelector('.sec-icon').value = sec ? sec.icon : '';
+    form.querySelector('.sec-title').value = sec ? sec.title : '';
+    form.querySelector('.sec-type').value = sec ? sec.type : 'list';
+    form.querySelector('.sec-body').value = sec ? sectionBodyToText(sec) : '';
+    form.querySelector('.sec-err').hidden = true;
+    form.hidden = false;
+    form.querySelector('.sec-title').focus();
+  }
+
+  var newBtn = el.querySelector('.sec-new');
+  if (newBtn) newBtn.addEventListener('click', function () { openForm(null); });
+
+  el.querySelectorAll('.sec-ed').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var sec = (trip.sections || []).filter(function (s) { return s.id === b.dataset.id; })[0];
+      if (sec) openForm(sec);
+    });
+  });
+  el.querySelectorAll('.sec-rm').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var sec = (trip.sections || []).filter(function (s) { return s.id === b.dataset.id; })[0];
+      if (!sec) return;
+      if (!confirm('"' + sec.title + '" 항목을 삭제할까요?')) return;
+      removeSection(trip, b.dataset.id);
+      saveSections(trip, st, el);
+    });
+  });
+  el.querySelectorAll('.sec-up').forEach(function (b) {
+    b.addEventListener('click', function () {
+      moveSection(trip, b.dataset.id, -1);
+      saveSections(trip, st, el);
+    });
+  });
+  el.querySelectorAll('.sec-dn').forEach(function (b) {
+    b.addEventListener('click', function () {
+      moveSection(trip, b.dataset.id, 1);
+      saveSections(trip, st, el);
+    });
+  });
+
+  if (form) {
+    form.querySelector('.sec-cancel').addEventListener('click', function () {
+      form.hidden = true;
+      SECT_TARGET = null;
+    });
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var f = {
+        icon: form.querySelector('.sec-icon').value,
+        title: form.querySelector('.sec-title').value,
+        type: form.querySelector('.sec-type').value,
+        body: form.querySelector('.sec-body').value
+      };
+      var err = validateSectionForm(f);
+      var box = form.querySelector('.sec-err');
+      if (err) { box.textContent = err; box.hidden = false; return; }
+      if (SECT_TARGET) updateSection(trip, SECT_TARGET, f);
+      else addSection(trip, f);
+      SECT_TARGET = null;
+      saveSections(trip, st, el);
+    });
+  }
 }
 
 function renderTabbar(trip, tab, onSelect) {
@@ -2543,6 +2701,82 @@ function setDayPlace(trip, dayN, place) {
   var day = findDay(trip, dayN);
   if (!day) return trip;
   day.place = place || null;
+  return trip;
+}
+
+// ---- 섹션 편집 (2단계-C) ----
+// 데이터는 text/list/table 세 형식을 지원하지만 편집기는 글·목록만 다룬다.
+// 표는 좁은 화면에서 행·열을 편집하는 UI가 번거로운 데 비해 쓰임이 적다 —
+// 오사카 샘플의 라피트 시간표처럼 이미 있는 표는 읽기 전용으로 그대로 보존된다.
+function sectionEditable(sec) {
+  return !!sec && (sec.type === "text" || sec.type === "list");
+}
+
+// 편집기의 textarea 한 칸으로 두 형식을 다룬다: 목록은 줄 단위로 쪼갠다.
+function sectionBodyFromText(type, text) {
+  var t = String(text == null ? "" : text);
+  if (type !== "list") return t;
+  return t.split('\n').map(function (l) { return l.trim(); })
+    .filter(function (l) { return l.length > 0; });
+}
+
+function sectionBodyToText(sec) {
+  if (!sec) return "";
+  if (sec.type === "list") return (sec.body || []).join('\n');
+  if (sec.type === "text") return String(sec.body == null ? "" : sec.body);
+  return "";
+}
+
+function validateSectionForm(f) {
+  if (!f || !f.title || !f.title.trim()) return '섹션 제목을 입력하세요.';
+  if (!f.body || !f.body.trim()) return '내용을 입력하세요.';
+  return null;
+}
+
+// addItem/updateItem과 같은 계약 — 인자로 받은 trip을 그 자리에서 고친다.
+function addSection(trip, f) {
+  if (!trip) return trip;
+  if (!Array.isArray(trip.sections)) trip.sections = [];
+  trip.sections.push({
+    id: newSectionId(),
+    icon: (f.icon || '📌').trim() || '📌',
+    title: f.title.trim(),
+    type: f.type === 'text' ? 'text' : 'list',
+    body: sectionBodyFromText(f.type, f.body)
+  });
+  return trip;
+}
+
+function updateSection(trip, id, f) {
+  if (!trip || !Array.isArray(trip.sections)) return trip;
+  trip.sections.forEach(function (s) {
+    if (s.id !== id) return;
+    s.icon = (f.icon || '📌').trim() || '📌';
+    s.title = f.title.trim();
+    s.type = f.type === 'text' ? 'text' : 'list';
+    // 형식이 바뀌면 본문 표현도 함께 바꾼다(목록 ↔ 여러 줄 글).
+    s.body = sectionBodyFromText(f.type, f.body);
+  });
+  return trip;
+}
+
+function removeSection(trip, id) {
+  if (!trip || !Array.isArray(trip.sections)) return trip;
+  trip.sections = trip.sections.filter(function (s) { return s.id !== id; });
+  return trip;
+}
+
+// dir는 -1(위) 또는 1(아래). 끝에서 더 밀면 아무 일도 하지 않는다.
+function moveSection(trip, id, dir) {
+  if (!trip || !Array.isArray(trip.sections)) return trip;
+  var i = -1;
+  trip.sections.forEach(function (s, n) { if (s.id === id) i = n; });
+  if (i < 0) return trip;
+  var j = i + dir;
+  if (j < 0 || j >= trip.sections.length) return trip;
+  var tmp = trip.sections[i];
+  trip.sections[i] = trip.sections[j];
+  trip.sections[j] = tmp;
   return trip;
 }
 
