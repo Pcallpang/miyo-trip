@@ -1227,3 +1227,22 @@ eq('출처 표기에 링크가 있다', FX_ATTRIB_HTML.indexOf('exchangerate-api
                   hotel:'', party:2, budgetKRW:0 }, st);
   eq('요약: 통화 기호로 태그를 주입할 수 없다', el.innerHTML.indexOf('<img') === -1, true);
 })();
+
+// ---- 나라 → 통화 ----
+eq('일본은 엔', currencyForCountry('JP').code, 'JPY');
+eq('베트남은 동', currencyForCountry('VN').code, 'VND');
+eq('대만은 대만달러', currencyForCountry('TW').code, 'TWD');
+eq('홍콩·마카오 구분', [currencyForCountry('HK').code, currencyForCountry('MO').code], ['HKD', 'MOP']);
+eq('유로존은 유로', [currencyForCountry('FR').code, currencyForCountry('DE').code,
+  currencyForCountry('IT').code, currencyForCountry('ES').code].join(','), 'EUR,EUR,EUR,EUR');
+eq('한국은 원', currencyForCountry('KR').code, 'KRW');
+eq('소문자도 받는다', currencyForCountry('jp').code, 'JPY');
+// 프리셋에 없는 나라도 통화 코드는 준다 — currencyByCode가 기본 모양을 만들어 준다.
+eq('캐나다는 CAD', currencyForCountry('CA').code, 'CAD');
+eq('모르는 나라는 null', currencyForCountry('ZZ'), null);
+eq('빈 값은 null', currencyForCountry(''), null);
+
+// geoParse가 country_code를 보존해야 통화를 고를 수 있다
+eq('geoParse가 국가 코드를 담는다',
+  geoParse({ results: [{ name:'다낭', country:'베트남', country_code:'VN',
+    latitude:16.06778, longitude:108.22083, timezone:'Asia/Ho_Chi_Minh' }] })[0].cc, 'VN');

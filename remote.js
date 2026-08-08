@@ -147,7 +147,9 @@ function geoUrl(q, count) {
 function geoParse(api) {
   var rows = (api && api.results) || [];
   return rows.map(function (r) {
-    return { name: r.name, country: r.country,
+    // cc(country_code)는 통화 자동 선택에 쓴다 — 국가명은 언어에 따라 비어 있을 수
+    // 있지만(홍콩·마카오는 한국어 이름이 없다) 코드는 항상 온다.
+    return { name: r.name, country: r.country, cc: r.country_code,
              lat: r.latitude, lon: r.longitude, tz: r.timezone };
   });
 }

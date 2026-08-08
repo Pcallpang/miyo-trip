@@ -151,6 +151,25 @@ function showEdit(id) {
     msgEl.hidden = !text;
   }
 
+  // 고른 도시의 나라 통화를 통화 <select>에 반영한다. 반영했으면 통화 코드를,
+  // 아니면 null을 돌려준다(모르는 나라이거나 이미 같은 통화인 경우).
+  // 프리셋에 없는 통화(캐나다 달러 등)는 목록에 없으므로 항목을 만들어 넣는다.
+  function applyCountryCurrency(place) {
+    var sel = document.querySelector('#trip-form [name=cur]');
+    if (!sel || !place) return null;
+    var c = currencyForCountry(place.cc);
+    if (!c || sel.value === c.code) return null;
+    var has = Array.prototype.some.call(sel.options, function (o) { return o.value === c.code; });
+    if (!has) {
+      var opt = document.createElement('option');
+      opt.value = c.code;
+      opt.textContent = c.code + ' · ' + c.name + ' (' + c.symbol + ')';
+      sel.insertBefore(opt, sel.firstChild);
+    }
+    sel.value = c.code;
+    return c.code;
+  }
+
   function runSearch() {
     var q = qEl.value.trim();
     if (!q) return;
@@ -175,6 +194,7 @@ function showEdit(id) {
       listEl.querySelectorAll('li').forEach(function (li) {
         li.addEventListener('click', function () {
           var chosen = list[Number(li.dataset.i)];
+          var forDay = geoTarget;
           if (geoTarget === null) pickedPlace = chosen;
           else pickedDayPlaces[geoTarget] = chosen;
           geoTarget = null;
@@ -182,7 +202,14 @@ function showEdit(id) {
           qEl.value = '';
           paintCur();
           paintDays();
-          showMsg('저장을 눌러야 반영됩니다.');
+          // 여행 기본 도시를 고르면 그 나라 통화도 함께 맞춘다. 고른 뒤에도 통화
+          // 선택은 그대로 열려 있으므로 원하면 바꿀 수 있다(면세점만 달러로 계산하는
+          // 경우 등). 일차별 도시(forDay !== null)에서는 건드리지 않는다 — 그건
+          // 경유지일 뿐이고 여행 기본 통화를 바꿀 이유가 없다.
+          var picked = (forDay === null) ? applyCountryCurrency(chosen) : null;
+          showMsg(picked
+            ? '통화를 ' + picked + '(으)로 맞췄습니다. 저장을 눌러야 반영됩니다.'
+            : '저장을 눌러야 반영됩니다.');
         });
       });
     });
