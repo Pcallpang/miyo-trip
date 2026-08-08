@@ -1,6 +1,7 @@
 // 렌더 계층: DOM에 그리는 함수만 모은다.
 // trip(여행 본체)과 st(tripStore)를 인자로 받는다 — 전역 여행/저장소를 읽지 않는다.
-// schema.js 다음, app.js 앞에 로드된다 (dowOf/daysBetween 사용, wxLine/wxState/wxStamp는 app.js).
+// schema.js·remote.js 다음, app.js 앞에 로드된다 (dowOf/daysBetween은 schema.js,
+// wxGet/wxLine/wxStamp는 remote.js, dayPlace는 schema.js).
 
 // 사용자가 입력한 문자열이 HTML로 해석되지 않게 막는다.
 function escHtml(s) {
@@ -127,8 +128,11 @@ function renderSummary(trip, st) {
     // 가운뎃점으로 이어 한 줄에 눌러 담는다. 그냥 두면 줄바꿈이 사라져 붙어 보인다.
     (trip.hotel ? '<div class="hotel">🏨 ' + escHtml(trip.hotel).replace(/\n/g, ' · ') + '</div>' : '') +
     (function () {
-      var line = wxLine(wxState.map, todayLocal());
-      return line ? '<div class="wx">' + line.replace(" ", " 오늘 ") + wxStamp() + '</div>' : '';
+      // 여행 기본 도시의 오늘 날씨. 도시를 지정하지 않은 여행이면 캐시가 비어
+      // 줄 자체가 사라진다(예보 없는 날짜와 같은 처리 — 오류 문구를 넣지 않는다).
+      var place = trip.place;
+      var line = wxLine(wxGet(st, place).map, todayLocal());
+      return line ? '<div class="wx">' + line.replace(" ", " 오늘 ") + wxStamp(place) + '</div>' : '';
     })() +
     (function () {
       // 사전 예산(budgetKRW)과 현지 경비 합계(summarySpend)는 서로 독립된 정보다.
@@ -246,8 +250,10 @@ function renderTimeline(trip, day, st) {
       '<span class="ddate">' + escHtml(day.date) + '(' + dowOf(day.date) + ')</span>' +
       '<div class="dtheme">' + escHtml(day.theme).replace(/\n/g, ' · ') + '</div>' +
       (function () {
-        var line = wxLine(wxState.map, day.date);
-        return line ? '<div class="dwx">' + line + wxStamp() + '</div>' : '';
+        // 그 일차에 지정된 도시(없으면 여행 기본값)의 예보를 쓴다.
+        var dp = dayPlace(trip, day);
+        var line = wxLine(wxGet(st, dp).map, day.date);
+        return line ? '<div class="dwx">' + line + wxStamp(dp) + '</div>' : '';
       })() + '</div>' +
       '<div class="slots">' + rows + '</div>' +
       (EDIT_MODE

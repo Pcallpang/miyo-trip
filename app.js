@@ -135,13 +135,18 @@ function showTrip(id, tab, dayN) {
   // 다른 여행으로 전환하면서 편집 모드가 그대로 넘어가면, A에서 편집 모드를 켠 채 목록으로
   // 돌아가 B를 열었을 때 B가 편집 모드로 열려버린다. 새로고침은 전역 변수 자체가 초기화되며
   // 자연히 꺼지므로 여기서는 "여행이 바뀌는" 경우만 챙기면 된다.
-  if (switched) { wxReset(); EDIT_MODE = false; }
+  if (switched) { wxResetAll(); EDIT_MODE = false; }
   showScreen("trip");
 
   if (opening) renderSummary(trip, CUR.st);
   showPanelTab(trip, tab || "day", dayN);
   // 날씨 요청은 여행을 열 때만, 그것도 최근에 받아온 게 없을 때만 보낸다.
-  if (opening) wxRefresh(CUR.st);
+  // 좌표는 지금 보고 있는 일차 기준이다(일차마다 도시가 다를 수 있다).
+  if (opening) {
+    var d0 = pickDay(trip, CUR.dayN);
+    var p0 = d0 ? dayPlace(trip, d0) : trip.place;
+    if (p0) wxRefresh(CUR.st, p0, wxRepaint);
+  }
 }
 
 // 탭 전환: 본문과 내비만 다시 그린다. 요약 헤더는 탭이 실제로 바뀔 때만 —

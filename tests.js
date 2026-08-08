@@ -1058,3 +1058,33 @@ eq('샘플 여행에 builtin 섹션 없음',
 eq('샘플 여행의 사용자 섹션은 둘',
   window.SAMPLE_TRIP.sections.map(function (s) { return s.title; }),
   ['라피트 시간표', '팁']);
+
+// ---- 좌표별 날씨 캐시 ----
+var OSAKA = { name: '오사카', lat: 34.69379, lon: 135.50107, tz: 'Asia/Tokyo' };
+var DANANG = { name: '다낭', lat: 16.06778, lon: 108.22083, tz: 'Asia/Ho_Chi_Minh' };
+
+eq('wxKey 좌표 조합', wxKey(OSAKA), '34.694,135.501');
+eq('wxKey 반올림', wxKey({ lat: 1.23456, lon: 2.99999 }), '1.235,3');
+eq('wxKey place 없으면 빈 문자열', wxKey(null), '');
+
+eq('wxUrl에 좌표가 들어간다', wxUrl(DANANG).indexOf('latitude=16.06778') >= 0, true);
+eq('wxUrl에 시간대가 들어간다',
+  wxUrl(DANANG).indexOf('timezone=Asia%2FHo_Chi_Minh') >= 0, true);
+eq('wxUrl은 16일 예보', wxUrl(OSAKA).indexOf('forecast_days=16') >= 0, true);
+
+// 좌표가 다르면 캐시가 섞이지 않는다
+(function () {
+  __resetStorage();
+  wxResetAll();
+  var st = tripStore('t_w');
+  var apiO = { daily: { time: ['2026-09-01'], weather_code: [0],
+    temperature_2m_max: [30], temperature_2m_min: [20], precipitation_probability_max: [10] } };
+  var apiD = { daily: { time: ['2026-09-01'], weather_code: [61],
+    temperature_2m_max: [33], temperature_2m_min: [26], precipitation_probability_max: [80] } };
+  st.set('wx:' + wxKey(OSAKA), { at: '2026-09-01T00:00:00Z', api: apiO });
+  st.set('wx:' + wxKey(DANANG), { at: '2026-09-01T00:00:00Z', api: apiD });
+
+  eq('오사카 캐시를 읽는다', wxLine(wxGet(st, OSAKA).map, '2026-09-01'), '☀️ 30° / 20° · 비 10%');
+  eq('다낭 캐시를 읽는다', wxLine(wxGet(st, DANANG).map, '2026-09-01'), '🌧️ 33° / 26° · 비 80%');
+  eq('캐시 없는 좌표는 빈 맵', wxGet(st, { lat: 1, lon: 1 }).map, {});
+})();
