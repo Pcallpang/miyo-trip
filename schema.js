@@ -108,5 +108,5 @@ function dayPlace(trip, day) {
 }
 function dayCurrency(trip, day) {
   if (day && day.curCode) return { code: day.curCode };
-  return trip.currency;
+  return (trip && trip.currency) || null;
 }
