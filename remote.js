@@ -121,3 +121,43 @@ function wxRefresh(st, place, onDone) {
     if (wxMem[k] && wxMem[k].at && onDone) onDone();
   });
 }
+
+// ---- 도시 검색(지오코딩) ----
+
+// language는 표시 언어뿐 아니라 검색 색인 자체를 고른다(2026-08-06 브라우저 실측).
+// language=ko는 한국어 질의('다낭','호이안','타이베이' 8/8)와 영어 질의('Da Nang' 등
+// 4/4)를 모두 받으면서 결과를 한국어로 돌려준다. 반대로 language=en은 같은 한국어
+// 질의를 전부 0건으로 만든다. 그래서 ko 하나로 끝내고 폴백을 두지 않는다 —
+// 폴백은 이득이 없을 뿐 아니라 한국어 사용자에게 해롭다.
+function geoUrl(q, count) {
+  return "https://geocoding-api.open-meteo.com/v1/search?name=" +
+    encodeURIComponent(q) + "&language=ko&count=" + (count || 5);
+}
+
+// 0건이면 응답에 results 키가 아예 없다(실측) — 빈 배열로 받는다.
+function geoParse(api) {
+  var rows = (api && api.results) || [];
+  return rows.map(function (r) {
+    return { name: r.name, country: r.country,
+             lat: r.latitude, lon: r.longitude, tz: r.timezone };
+  });
+}
+
+function placeLabel(place) {
+  if (!place || !place.name) return "";
+  return place.country ? place.name + " · " + place.country : place.name;
+}
+
+// cb(list, err). 실패해도 던지지 않는다 — 화면은 안내 문구만 바꾼다.
+function geoSearch(q, cb) {
+  var query = String(q || "").trim();
+  if (!query) { cb([], null); return; }
+  fetch(geoUrl(query, 5)).then(function (r) {
+    if (!r.ok) throw new Error("geo " + r.status);
+    return r.json();
+  }).then(function (api) {
+    cb(geoParse(api), null);
+  }).catch(function () {
+    cb([], '검색에 실패했습니다. 연결을 확인해 주세요.');
+  });
+}

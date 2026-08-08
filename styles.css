@@ -175,3 +175,20 @@ body { margin:0; background:var(--bg); color:var(--text);
 #tab-panel details { background:var(--card); border-radius:14px; margin-bottom:10px;
   box-shadow:0 1px 4px rgba(0,0,0,.06); overflow:hidden; }
 #tab-panel summary { padding:14px 16px; font-weight:700; cursor:pointer; }
+.geo-block { display:flex; flex-direction:column; gap:6px; }
+.geo-lbl { font-size:.85rem; color:var(--muted); }
+.geo-hint { font-weight:400; }
+.geo-cur { font-size:.95rem; color:var(--text); }
+.geo-cur .geo-none { color:var(--muted); }
+.geo-row { display:flex; gap:8px; }
+.geo-row input { flex:1; font:inherit; color:var(--text);
+  padding:10px; border:1px solid #d5dde1; border-radius:10px; background:var(--card); }
+.geo-row button { font:inherit; padding:10px 14px; border:1px solid #d5dde1;
+  border-radius:10px; background:var(--card); color:var(--text); cursor:pointer; }
+.geo-row button[disabled] { opacity:.5; cursor:default; }
+.geo-list { list-style:none; margin:0; padding:0; border:1px solid #d5dde1;
+  border-radius:10px; overflow:hidden; background:var(--card); }
+.geo-list li { padding:10px 12px; cursor:pointer; border-bottom:1px solid #eef2f4; }
+.geo-list li:last-child { border-bottom:0; }
+.geo-list li:hover { background:#f1f5f7; }
+.geo-msg { font-size:.85rem; color:var(--muted); }

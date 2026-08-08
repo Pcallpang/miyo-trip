@@ -29,8 +29,11 @@ function validateTripForm(f) {
 // navigate하지 않고 에러를 보여준다(아래 참고).
 function applyTripForm(trip, f) {
   if (!trip) {
-    return emptyTrip({ title: f.title.trim(), start: f.start, end: f.end,
-                       party: Number(f.party), hotel: (f.hotel || '').trim() });
+    var made = emptyTrip({ title: f.title.trim(), start: f.start, end: f.end,
+                           party: Number(f.party), hotel: (f.hotel || '').trim() });
+    // f.place가 undefined면 도시를 건드리지 않은 저장이다(기본값 null 유지).
+    if (f.place !== undefined) made.place = f.place;
+    return made;
   }
   var next = {};
   for (var k in trip) { if (Object.prototype.hasOwnProperty.call(trip, k)) next[k] = trip[k]; }
@@ -39,6 +42,8 @@ function applyTripForm(trip, f) {
   next.end = f.end;
   next.party = Number(f.party);
   next.hotel = (f.hotel || '').trim();
+  // 도시를 건드리지 않은 저장(f.place === undefined)에서는 기존 값을 그대로 둔다.
+  if (f.place !== undefined) next.place = f.place;
   next.days = resyncDays(trip.days, f.start, f.end);
   return next;
 }
@@ -78,12 +83,86 @@ function showEdit(id) {
         'value="' + (trip ? Number(trip.party) : 2) + '"></label>' +
       '<label>숙소<textarea name="hotel" rows="2" ' +
         'placeholder="숙소명 · 체크인/아웃">' + escHtml(trip ? trip.hotel : '') + '</textarea></label>' +
+      // 도시는 폼 필드가 아니라 검색으로 고른다 — 선택값은 pickedPlace에 담아두고
+      // 저장할 때 함께 넘긴다(취소하면 반영되지 않는다).
+      '<div class="geo-block">' +
+        '<div class="geo-lbl">도시 <span class="geo-hint">(날씨에 쓰입니다)</span></div>' +
+        '<div class="geo-cur" id="geo-cur"></div>' +
+        '<div class="geo-row">' +
+          '<input id="geo-q" type="text" placeholder="예: 오사카, Da Nang" aria-label="도시 검색">' +
+          '<button id="geo-go" type="button">찾기</button>' +
+        '</div>' +
+        '<div class="geo-msg" id="geo-msg" hidden></div>' +
+        '<ul class="geo-list" id="geo-list" hidden></ul>' +
+      '</div>' +
       '<div class="eerr" id="e-err" hidden></div>' +
       '<button type="submit">' + (trip ? '저장' : '만들기') + '</button>' +
     '</form>';
 
   document.getElementById("e-back").addEventListener("click", function () {
     go(trip ? '#/t/' + trip.id : '#/');
+  });
+
+  // undefined면 "도시를 건드리지 않음" — applyTripForm이 기존 값을 유지한다.
+  var pickedPlace = undefined;
+  var curEl = document.getElementById("geo-cur");
+  var msgEl = document.getElementById("geo-msg");
+  var listEl = document.getElementById("geo-list");
+  var qEl = document.getElementById("geo-q");
+  var goEl = document.getElementById("geo-go");
+
+  function paintCur() {
+    var p = (pickedPlace !== undefined) ? pickedPlace : (trip ? trip.place : null);
+    curEl.innerHTML = p
+      ? '📍 ' + escHtml(placeLabel(p))
+      : '<span class="geo-none">도시가 지정되지 않았습니다</span>';
+  }
+  paintCur();
+
+  function showMsg(text) {
+    msgEl.textContent = text;
+    msgEl.hidden = !text;
+  }
+
+  function runSearch() {
+    var q = qEl.value.trim();
+    if (!q) return;
+    goEl.disabled = true;
+    listEl.hidden = true;
+    showMsg('검색 중…');
+    geoSearch(q, function (list, err) {
+      goEl.disabled = false;
+      if (err) { showMsg(err); return; }
+      if (!list.length) {
+        // 한국어 도시명은 대부분 그대로 찾힌다(다낭·호이안·타이베이 모두 O).
+        // 그래도 안 나오면 철자나 더 큰 지명을 권한다.
+        showMsg('결과가 없습니다. 철자를 확인하거나 가까운 큰 도시로 검색해 보세요.');
+        return;
+      }
+      showMsg('');
+      // 도시명·국가명은 외부 입력이다 — 반드시 escHtml을 거친다.
+      listEl.innerHTML = list.map(function (p, i) {
+        return '<li data-i="' + i + '">' + escHtml(placeLabel(p)) + '</li>';
+      }).join('');
+      listEl.hidden = false;
+      listEl.querySelectorAll('li').forEach(function (li) {
+        li.addEventListener('click', function () {
+          pickedPlace = list[Number(li.dataset.i)];
+          listEl.hidden = true;
+          qEl.value = '';
+          paintCur();
+          showMsg('저장을 눌러야 반영됩니다.');
+        });
+      });
+    });
+  }
+
+  goEl.addEventListener('click', runSearch);
+  // 폼 안의 text input은 Enter로 상위 폼이 제출된다 — 가로채서 검색으로 돌린다.
+  qEl.addEventListener('keydown', function (e) {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    runSearch();
   });
 
   // go()는 location.hash만 바꾸고 hashchange는 비동기로 뜨므로, 제출 직후에도 폼이
@@ -96,6 +175,8 @@ function showEdit(id) {
     var fd = new FormData(e.target);
     var f = { title: fd.get('title'), start: fd.get('start'), end: fd.get('end'),
               party: fd.get('party'), hotel: fd.get('hotel') };
+    // 검색으로 고른 도시가 있을 때만 넘긴다 — undefined면 기존 값이 유지된다.
+    if (pickedPlace !== undefined) f.place = pickedPlace;
     var box = document.getElementById("e-err");
     submitting = true;
     var res = submitTripForm(trip, f);

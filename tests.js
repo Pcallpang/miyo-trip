@@ -1088,3 +1088,27 @@ eq('wxUrl은 16일 예보', wxUrl(OSAKA).indexOf('forecast_days=16') >= 0, true)
   eq('다낭 캐시를 읽는다', wxLine(wxGet(st, DANANG).map, '2026-09-01'), '🌧️ 33° / 26° · 비 80%');
   eq('캐시 없는 좌표는 빈 맵', wxGet(st, { lat: 1, lon: 1 }).map, {});
 })();
+
+// ---- 도시 검색 ----
+eq('geoUrl 질의 인코딩', geoUrl('Da Nang', 5).indexOf('name=Da%20Nang') >= 0, true);
+eq('geoUrl은 한국어 표시', geoUrl('Da Nang', 5).indexOf('language=ko') >= 0, true);
+// language=en 폴백은 쓰지 않는다 — language는 검색 색인을 고르므로, en으로 바꾸면
+// 한국어 질의가 오히려 전부 0건이 된다(2026-08-06 브라우저 실측).
+eq('geoUrl에 en 폴백 흔적 없음', geoUrl('x', 5).indexOf('language=en') === -1, true);
+
+var GEOAPI = { results: [
+  { name: '다낭', country: '베트남', latitude: 16.06778, longitude: 108.22083,
+    timezone: 'Asia/Ho_Chi_Minh', admin1: 'Da Nang City' },
+  { name: '다낭 국제공항', country: '베트남', latitude: 16.04392, longitude: 108.19937,
+    timezone: 'Asia/Ho_Chi_Minh', admin1: 'Da Nang City' }
+] };
+eq('geoParse 변환', geoParse(GEOAPI)[0],
+  { name: '다낭', country: '베트남', lat: 16.06778, lon: 108.22083, tz: 'Asia/Ho_Chi_Minh' });
+eq('geoParse 개수', geoParse(GEOAPI).length, 2);
+// 0건일 때 응답에는 results 키 자체가 없다(실측) — 빈 배열로 받아야 한다.
+eq('geoParse 0건 응답', geoParse({ generationtime_ms: 0.1 }), []);
+eq('geoParse null 응답', geoParse(null), []);
+
+eq('placeLabel 조합', placeLabel({ name: '다낭', country: '베트남' }), '다낭 · 베트남');
+eq('placeLabel 국가 없으면 이름만', placeLabel({ name: '다낭' }), '다낭');
+eq('placeLabel 없으면 빈 문자열', placeLabel(null), '');
