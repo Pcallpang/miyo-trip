@@ -70,8 +70,9 @@ function summarySpend(st, lead) {
   if (totals.length === 1) {
     var one = totals[0];
     var krw = toKRW(one.amount, one.cur, rates);
-    body = '💸 현지 ' + fmtAmount(one.amount, currencyByCode(one.cur)) +
-      (krw === null ? '' : ' (약 ' + fmtKRW(krw) + ')');
+    // 통화 기호는 외부 입력이 될 수 있다(가져온 JSON의 currency.symbol) — escHtml 필수.
+    body = '💸 현지 ' + escHtml(fmtAmount(one.amount, currencyByCode(one.cur))) +
+      (krw === null ? '' : ' (약 ' + escHtml(fmtKRW(krw)) + ')');
   } else {
     // 환산할 수 없는 통화가 하나라도 있으면 총합이 거짓이 되므로 "+" 표시를 붙인다.
     var sum = 0, partial = false;
@@ -80,7 +81,7 @@ function summarySpend(st, lead) {
       if (k === null) partial = true; else sum += k;
     });
     body = '💸 현지 ' + totals.length + '개 통화' +
-      (sum ? ' (약 ' + fmtKRW(sum) + (partial ? '+' : '') + ')' : '');
+      (sum ? ' (약 ' + escHtml(fmtKRW(sum)) + (partial ? '+' : '') + ')' : '');
   }
   // lead면 줄의 맨 앞이므로 선행 공백도 붙이지 않는다 — 붙이면 .cost가 공백으로 시작한다.
   var dot = lead ? '' : '· ';

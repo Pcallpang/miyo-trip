@@ -1214,3 +1214,16 @@ eq('출처 표기에 링크가 있다', FX_ATTRIB_HTML.indexOf('exchangerate-api
   st.set('fxManual', {});
   eq('수동을 비우면 자동값으로', fxRates(st).JPY, 0.111682);
 })();
+
+// ---- 통화 기호 XSS ----
+// currency.symbol은 가져온 JSON에서 올 수 있는 외부 입력이다.
+(function () {
+  var H = '<img src=x onerror=alert(1)>';
+  var st = { get: function (k, fb) { return k === 'spend'
+    ? [{ id:1, date:'2026-08-08', amount:100, cur:H, cat:'식비', note:'' }] : fb; },
+    set: function () {} };
+  var el = global.__setDomTarget('summary');
+  renderSummary({ id:'t_x', title:'T', start:'2026-08-08', end:'2026-08-09',
+                  hotel:'', party:2, budgetKRW:0 }, st);
+  eq('요약: 통화 기호로 태그를 주입할 수 없다', el.innerHTML.indexOf('<img') === -1, true);
+})();

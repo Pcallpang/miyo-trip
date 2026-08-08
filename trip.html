@@ -214,6 +214,19 @@ body { margin:0; background:var(--bg); color:var(--text);
 .dayhead .daycity { display:inline-block; font-size:.78rem; font-weight:700; color:#fff;
   background:var(--accent2); border-radius:999px; padding:2px 9px; margin-top:4px; }
 
+.stotal .stot-row { font-size:1.25rem; font-weight:800; color:var(--accent); }
+.stotal .stot-row + .stot-row { margin-top:2px; }
+.stotal .stot-sum { font-size:.9rem; font-weight:700; color:var(--muted); margin-top:6px;
+  padding-top:6px; border-top:1px solid #eef2f4; }
+.spend-add .samt-in { flex:0 0 90px; }
+.spend-add .scur-in { flex:0 0 auto; background:#fff; }
+.slist .samt { flex:0 0 auto; font-weight:700; white-space:nowrap; }
+.sfx .sfx-clr { margin-left:6px; font:inherit; font-size:.75rem; padding:2px 8px;
+  border:1px solid #d5dde1; border-radius:6px; background:var(--card); color:var(--muted); cursor:pointer; }
+.fx-attrib-row { margin-top:10px; }
+.fx-attrib { font-size:.72rem; color:var(--muted); text-decoration:none; opacity:.8; }
+.fx-attrib:hover { text-decoration:underline; }
+
 </style>
 </head>
 <body>
@@ -957,6 +970,40 @@ function migrateLegacy() {
   return t.id;
 }
 
+// 구 경비 레코드는 통화 정보가 없다({jpy}만 있다) — 당시 앱이 엔화 전용이었으므로
+// 그 여행의 기본 통화(없으면 JPY)로 채운다. 이게 유일하게 옳은 추정이다.
+// 일차마다 통화가 다를 수 있어(2단계-A의 일차별 도시와 같은 사정) 금액만으로는
+// 나중에 환산할 수 없으므로 cur를 함께 저장한다.
+function migrateSpendRecord(rec, defCur) {
+  if (!rec || typeof rec !== "object") return rec;
+  if (rec.cur !== undefined || rec.amount !== undefined) return rec;
+  var out = {};
+  for (var k in rec) {
+    if (Object.prototype.hasOwnProperty.call(rec, k) && k !== "jpy") out[k] = rec[k];
+  }
+  var n = Number(rec.jpy);
+  out.amount = isFinite(n) ? n : 0;
+  out.cur = defCur || "JPY";
+  return out;
+}
+
+// 재실행해도 안전하다 — 이미 새 형식이면 아무 것도 쓰지 않는다.
+function migrateSpend() {
+  var changed = 0;
+  listTrips().forEach(function (row) {
+    var trip = loadTrip(row.id);
+    if (!trip) return;
+    var st = tripStore(row.id);
+    var list = st.get("spend", []);
+    if (!Array.isArray(list) || !list.length) return;
+    var needs = list.some(function (r) { return r && r.jpy !== undefined && r.cur === undefined; });
+    if (!needs) return;
+    var defCur = (trip.currency && trip.currency.code) || "JPY";
+    if (st.set("spend", list.map(function (r) { return migrateSpendRecord(r, defCur); }))) changed++;
+  });
+  return changed;
+}
+
 </script>
 <script>
 // Trip 스키마 헬퍼: 일차 생성, 재동기화, 기본값.
@@ -1069,7 +1116,132 @@ function dayPlace(trip, day) {
 }
 function dayCurrency(trip, day) {
   if (day && day.curCode) return { code: day.curCode };
-  return trip.currency;
+  return (trip && trip.currency) || null;
+}
+
+</script>
+<script>
+// 통화 계층: 프리셋·표기·원화 환산. 순수 함수만 있다 — DOM에도 저장소에도 손대지 않는다.
+// schema.js 다음, remote.js 앞에 로드된다.
+
+// decimals: 소수점 자릿수(JPY·KRW·VND는 0, USD·EUR는 2).
+// unit: 표시용 단위다 — "100엔 = 900원"처럼 읽기 좋게 하기 위한 것이고,
+//       계산은 언제나 1단위 기준으로 한다.
+var CURRENCIES = [
+  { code: "KRW", symbol: "₩",     decimals: 0, unit: 1,    name: "원" },
+  { code: "JPY", symbol: "¥",     decimals: 0, unit: 100,  name: "엔" },
+  { code: "USD", symbol: "$",     decimals: 2, unit: 1,    name: "달러" },
+  { code: "EUR", symbol: "€",     decimals: 2, unit: 1,    name: "유로" },
+  { code: "VND", symbol: "₫",     decimals: 0, unit: 1000, name: "동" },
+  { code: "THB", symbol: "฿",     decimals: 2, unit: 1,    name: "바트" },
+  { code: "TWD", symbol: "NT$",   decimals: 0, unit: 1,    name: "대만 달러" },
+  { code: "CNY", symbol: "¥",     decimals: 2, unit: 1,    name: "위안" },
+  { code: "HKD", symbol: "HK$",   decimals: 2, unit: 1,    name: "홍콩 달러" },
+  { code: "SGD", symbol: "S$",    decimals: 2, unit: 1,    name: "싱가포르 달러" },
+  { code: "PHP", symbol: "₱",     decimals: 2, unit: 1,    name: "페소" },
+  { code: "MYR", symbol: "RM",    decimals: 2, unit: 1,    name: "링깃" },
+  { code: "IDR", symbol: "Rp",    decimals: 0, unit: 1000, name: "루피아" },
+  { code: "MOP", symbol: "MOP$",  decimals: 2, unit: 1,    name: "파타카" },
+  { code: "KHR", symbol: "៛",     decimals: 0, unit: 1000, name: "리엘" },
+  { code: "LAK", symbol: "₭",     decimals: 0, unit: 1000, name: "킵" },
+  { code: "GBP", symbol: "£",     decimals: 2, unit: 1,    name: "파운드" },
+  { code: "AUD", symbol: "A$",    decimals: 2, unit: 1,    name: "호주 달러" },
+  { code: "CHF", symbol: "CHF",   decimals: 2, unit: 1,    name: "프랑" },
+  { code: "INR", symbol: "₹",     decimals: 2, unit: 1,    name: "루피" },
+  { code: "CZK", symbol: "Kč",    decimals: 2, unit: 1,    name: "코루나" },
+  { code: "TRY", symbol: "₺",     decimals: 2, unit: 1,    name: "리라" },
+  { code: "AED", symbol: "AED",   decimals: 2, unit: 1,    name: "디르함" }
+];
+
+// 목록에 없는 코드도 쓸 수 있게 한다 — 환율 API는 166개 통화를 주는데
+// 프리셋을 그만큼 들고 있을 이유가 없다.
+function currencyByCode(code) {
+  var c = String(code || "").toUpperCase();
+  var found = CURRENCIES.filter(function (x) { return x.code === c; })[0];
+  if (found) return found;
+  return { code: c, symbol: c, decimals: 2, unit: 1, name: c };
+}
+
+function defaultCurrency() { return currencyByCode("KRW"); }
+
+function fmtAmount(amount, cur) {
+  var c = cur || defaultCurrency();
+  var n = Number(amount);
+  if (!isFinite(n)) n = 0;
+  return c.symbol + n.toLocaleString('ko-KR', {
+    minimumFractionDigits: c.decimals, maximumFractionDigits: c.decimals
+  });
+}
+
+// rates는 1 KRW당 해당 통화다(open.er-api.com, base=KRW 실측).
+// 예: rates.JPY = 0.111682 → 1원 = 0.111682엔 → 원화 = 금액 / rates.JPY
+function toKRW(amount, code, rates) {
+  var c = String(code || "").toUpperCase();
+  var n = Number(amount);
+  if (!isFinite(n)) return null;
+  if (c === "KRW") return Math.round(n);
+  var r = rates && Number(rates[c]);
+  if (!r || !isFinite(r)) return null;
+  return Math.round(n / r);
+}
+
+function fmtKRW(krw) {
+  var n = Number(krw);
+  if (!isFinite(n)) n = 0;
+  return n.toLocaleString('ko-KR') + '원';
+}
+
+// 통화별 합계. 한 여행에 여러 통화가 섞이면 단일 합계는 의미가 없다.
+// 등장 순서를 유지한다 — 목록에서 본 순서와 어긋나면 읽기 어렵다.
+function spendTotals(list) {
+  var m = {}, order = [];
+  (list || []).forEach(function (e) {
+    if (!e) return;
+    var cur = e.cur || "KRW";
+    var n = Number(e.amount);
+    if (!isFinite(n)) n = 0;
+    if (!Object.prototype.hasOwnProperty.call(m, cur)) { m[cur] = 0; order.push(cur); }
+    m[cur] += n;
+  });
+  return order.map(function (cur) { return { cur: cur, amount: m[cur] }; });
+}
+
+var SPEND_CATS = ["식비", "교통", "쇼핑", "관광", "기타"];
+
+// 분류별 집계에 통화 축이 붙는다 — 같은 '식비'라도 엔과 달러를 더할 수 없다.
+function spendByCat(list) {
+  var m = {}, keys = [];
+  (list || []).forEach(function (e) {
+    if (!e) return;
+    var cur = e.cur || "KRW";
+    var k = e.cat + " " + cur;
+    var n = Number(e.amount);
+    if (!isFinite(n)) n = 0;
+    if (!Object.prototype.hasOwnProperty.call(m, k)) { m[k] = 0; keys.push(k); }
+    m[k] += n;
+  });
+  // 분류는 SPEND_CATS 순서로, 같은 분류 안에서는 통화 등장 순서로.
+  return keys.map(function (k) {
+    var p = k.split(" ");
+    return { cat: p[0], cur: p[1], amount: m[k] };
+  }).sort(function (a, b) {
+    var ai = SPEND_CATS.indexOf(a.cat), bi = SPEND_CATS.indexOf(b.cat);
+    if (ai !== bi) return (ai < 0 ? 99 : ai) - (bi < 0 ? 99 : bi);
+    return 0;
+  });
+}
+
+function spendByDate(list) {
+  var m = {}, dates = [];
+  (list || []).forEach(function (e) {
+    if (!e) return;
+    if (!m[e.date]) { m[e.date] = []; dates.push(e.date); }
+    m[e.date].push(e);
+  });
+  dates.sort().reverse();
+  return dates.map(function (d) {
+    return { date: d, items: m[d].slice().reverse() };
+  });
 }
 
 </script>
@@ -1247,6 +1419,72 @@ function geoSearch(q, cb) {
   });
 }
 
+// ---- 환율 ----
+
+// KRW 기준 한 번 조회로 166개 통화를 모두 얻는다(실측). 키 불요, CORS 허용.
+// rates는 "1 KRW당 해당 통화"다 — 원화 환산은 money.js의 toKRW가 뒤집어 계산한다.
+var FX_URL = "https://open.er-api.com/v6/latest/KRW";
+// 환율은 하루 한 번 갱신된다(time_next_update_utc 실측). 날씨의 30분과 달리 길게 잡는다.
+var FX_TTL_MS = 12 * 60 * 60 * 1000;
+// 무료 등급 이용 조건: "We require attribution on the pages you're using these rates".
+// 앱 톤에 맞춰 눈에 띄지 않게 둬도 되지만 링크 자체는 있어야 한다.
+var FX_ATTRIB_HTML =
+  '<a class="fx-attrib" href="https://www.exchangerate-api.com" ' +
+  'target="_blank" rel="noopener">환율 제공: Exchange Rate API</a>';
+
+// 여행 밖 전역 키 하나 — 통화가 무엇이든 같은 응답을 쓴다.
+function fxGet() {
+  var v = lsGet("fx", null);
+  return (v && v.rates) ? v : null;
+}
+
+// 사용자가 직접 넣은 환율은 "1단위당 원화"(예: 엔당 9원)로 저장된다.
+// rates는 반대 축(1원당 통화)이므로 뒤집어서 얹는다. 0이나 음수는 무시한다.
+function fxRates(st) {
+  var base = fxGet();
+  var out = {};
+  if (base && base.rates) {
+    for (var k in base.rates) {
+      if (Object.prototype.hasOwnProperty.call(base.rates, k)) out[k] = base.rates[k];
+    }
+  }
+  var manual = st ? st.get("fxManual", null) : null;
+  if (manual) {
+    for (var c in manual) {
+      if (!Object.prototype.hasOwnProperty.call(manual, c)) continue;
+      var krwPerUnit = Number(manual[c]);
+      if (isFinite(krwPerUnit) && krwPerUnit > 0) out[c] = 1 / krwPerUnit;
+    }
+  }
+  return out;
+}
+
+function fxIsFresh() {
+  var v = fxGet();
+  if (!v || !v.fetchedAt) return false;
+  return (Date.now() - v.fetchedAt) < FX_TTL_MS;
+}
+
+var fxInflight = false;
+
+// 캐시 우선. 실패해도 조용히 넘어간다 — 수동 입력이 항상 있으므로 앱은 계속 동작한다.
+function fxRefresh(onDone) {
+  if (fxIsFresh() || fxInflight) return;
+  fxInflight = true;
+  fetch(FX_URL).then(function (r) {
+    if (!r.ok) throw new Error("fx " + r.status);
+    return r.json();
+  }).then(function (api) {
+    fxInflight = false;
+    if (!api || api.result !== "success" || !api.rates) return;
+    lsSet("fx", { at: api.time_last_update_utc || new Date().toISOString(),
+                  fetchedAt: Date.now(), rates: api.rates });
+    if (onDone) onDone();
+  }).catch(function () {
+    fxInflight = false;
+  });
+}
+
 </script>
 <script>
 // 렌더 계층: DOM에 그리는 함수만 모은다.
@@ -1297,44 +1535,9 @@ function dday(todayISO, startISO, endISO) {
 
 // ---- 현지 경비 ----
 
-var SPEND_CATS = ["식비", "교통", "쇼핑", "관광", "기타"];
-
 function spendList(st) {
   var v = st.get("spend", []);
   return Array.isArray(v) ? v : [];
-}
-function spendFx(st) {
-  var n = Number(st.get("fx", 900));
-  return isFinite(n) && n > 0 ? n : 0;
-}
-function spendTotalJpy(list) {
-  return list.reduce(function (s, e) {
-    var n = Number(e.jpy);
-    return s + (isFinite(n) ? n : 0);
-  }, 0);
-}
-function jpyToKrw(jpy, fx) {
-  return Math.round(jpy * fx / 100);
-}
-function spendByCat(list) {
-  var m = {};
-  list.forEach(function (e) {
-    var n = Number(e.jpy);
-    m[e.cat] = (m[e.cat] || 0) + (isFinite(n) ? n : 0);
-  });
-  return SPEND_CATS.filter(function (c) { return m[c]; })
-    .map(function (c) { return { cat: c, jpy: m[c] }; });
-}
-function spendByDate(list) {
-  var m = {}, dates = [];
-  list.forEach(function (e) {
-    if (!m[e.date]) { m[e.date] = []; dates.push(e.date); }
-    m[e.date].push(e);
-  });
-  dates.sort().reverse();
-  return dates.map(function (d) {
-    return { date: d, items: m[d].slice().reverse() };
-  });
 }
 
 // 일차 번호(n)가 아니라 날짜로 키를 잡는다 — resyncDays가 날짜를 기준으로 일차를
@@ -1346,15 +1549,33 @@ function mealKey(date, i) { return "meal:" + String(date) + ":" + i; }
 // ---- 상단 요약 ----
 
 // lead가 true면(다른 요약 텍스트 뒤가 아니라 줄의 맨 앞이면) "· " 구분자를 붙이지 않는다.
+// 통화가 여럿이면 요약 한 줄에 다 담을 수 없으므로 원화 환산 총합만 보여준다 —
+// 통화별 내역은 경비 탭에서 본다.
 function summarySpend(st, lead) {
-  const tot = spendTotalJpy(spendList(st));
-  if (!tot) return '';
-  const fx = spendFx(st);
-  const krw = fx ? ' (약 ' + jpyToKrw(tot, fx).toLocaleString('ko-KR') + '원)' : '';
+  var totals = spendTotals(spendList(st));
+  if (!totals.length) return '';
+  var rates = fxRates(st);
+  var body;
+  if (totals.length === 1) {
+    var one = totals[0];
+    var krw = toKRW(one.amount, one.cur, rates);
+    // 통화 기호는 외부 입력이 될 수 있다(가져온 JSON의 currency.symbol) — escHtml 필수.
+    body = '💸 현지 ' + escHtml(fmtAmount(one.amount, currencyByCode(one.cur))) +
+      (krw === null ? '' : ' (약 ' + escHtml(fmtKRW(krw)) + ')');
+  } else {
+    // 환산할 수 없는 통화가 하나라도 있으면 총합이 거짓이 되므로 "+" 표시를 붙인다.
+    var sum = 0, partial = false;
+    totals.forEach(function (t) {
+      var k = toKRW(t.amount, t.cur, rates);
+      if (k === null) partial = true; else sum += k;
+    });
+    body = '💸 현지 ' + totals.length + '개 통화' +
+      (sum ? ' (약 ' + escHtml(fmtKRW(sum)) + (partial ? '+' : '') + ')' : '');
+  }
   // lead면 줄의 맨 앞이므로 선행 공백도 붙이지 않는다 — 붙이면 .cost가 공백으로 시작한다.
-  const dot = lead ? '' : '· ';
-  const gap = lead ? '' : ' ';
-  return gap + '<span class="spent">' + dot + '💸 현지 ¥' + tot.toLocaleString('ko-KR') + krw + '</span>';
+  var dot = lead ? '' : '· ';
+  var gap = lead ? '' : ' ';
+  return gap + '<span class="spent">' + dot + body + '</span>';
 }
 
 function renderSummary(trip, st) {
@@ -1680,36 +1901,86 @@ function renderTabbar(trip, tab, onSelect) {
 function renderSpend(trip, st) {
   const body = document.getElementById("spend-body");
   if (!body) return;
-  const keepAmt = (body.querySelector('.sjpy-in') || {}).value || '';
+  const keepAmt = (body.querySelector('.samt-in') || {}).value || '';
   const keepNote = (body.querySelector('.snote-in') || {}).value || '';
   const keepCat = (body.querySelector('.scat-in') || {}).value || '';
+  const keepCur = (body.querySelector('.scur-in') || {}).value || '';
   const list = spendList(st);
-  const fx = spendFx(st);
-  const tot = spendTotalJpy(list);
-  const krw = fx
-    ? ' <span class="skrw">(약 ' + jpyToKrw(tot, fx).toLocaleString('ko-KR') + '원)</span>'
+  const rates = fxRates(st);
+  const totals = spendTotals(list);
+
+  // 통화가 여럿이면 한 줄에 담을 수 없다 — 통화별로 줄을 나누고 맨 아래 원화 총합을 둔다.
+  var sum = 0, partial = false;
+  totals.forEach(function (t) {
+    var k = toKRW(t.amount, t.cur, rates);
+    if (k === null) partial = true; else sum += k;
+  });
+  const totalHtml = totals.length
+    ? '<div class="stotal">' + totals.map(function (t) {
+        var k = toKRW(t.amount, t.cur, rates);
+        return '<div class="stot-row">' + escHtml(fmtAmount(t.amount, currencyByCode(t.cur))) +
+          (k === null ? ' <span class="skrw">(환율 없음)</span>'
+                      : ' <span class="skrw">(약 ' + escHtml(fmtKRW(k)) + ')</span>') + '</div>';
+      }).join('') +
+      (totals.length > 1 && sum
+        ? '<div class="stot-sum">합계 약 ' + escHtml(fmtKRW(sum)) + (partial ? '+' : '') + '</div>'
+        : '') + '</div>'
     : '';
+
   const chips = spendByCat(list).map(function (c) {
-    return '<li>' + escHtml(c.cat) + ' <b>¥' + c.jpy.toLocaleString('ko-KR') + '</b></li>';
+    return '<li>' + escHtml(c.cat) + ' <b>' +
+      escHtml(fmtAmount(c.amount, currencyByCode(c.cur))) + '</b></li>';
   }).join('');
+
   const groups = spendByDate(list).map(function (g) {
     const rows = g.items.map(function (e) {
-      const n = Number(e.jpy);
       return '<li><span class="scat">' + escHtml(e.cat) + '</span>' +
         '<span class="snote">' + escHtml(e.note || e.cat) + '</span>' +
-        '<span class="sjpy">¥' + (isFinite(n) ? n : 0).toLocaleString('ko-KR') + '</span>' +
+        '<span class="samt">' + escHtml(fmtAmount(e.amount, currencyByCode(e.cur))) + '</span>' +
         '<button class="spend-del" type="button" data-id="' + escHtml(e.id) +
         '" aria-label="삭제">×</button></li>';
     }).join('');
     return '<div class="sgroup"><div class="sdate">' + escHtml(g.date) + '</div>' +
       '<ul class="slist">' + rows + '</ul></div>';
   }).join('');
+
+  // 기본 통화는 지금 보고 있는 일차의 통화다(없으면 여행 기본값) — 일차마다 다를 수 있다.
+  const day = (typeof CUR !== 'undefined' && CUR.dayN)
+    ? (trip.days || []).filter(function (d) { return d.n === CUR.dayN; })[0] : null;
+  const defCur = currencyByCode((dayCurrency(trip, day) || {}).code || 'KRW');
+  const defCode = defCur.code;
+  // 프리셋에 없는 통화(사용자가 직접 넣은 코드)도 목록에 넣어야 고를 수 있다.
+  const codes = CURRENCIES.map(function (c) { return c.code; });
+  if (codes.indexOf(defCode) === -1) codes.unshift(defCode);
+  const curOpts = codes.map(function (c) {
+    const on = (keepCur || defCode) === c ? ' selected' : '';
+    return '<option value="' + escHtml(c) + '"' + on + '>' + escHtml(c) + '</option>';
+  }).join('');
+
+  // 소수점 통화는 step을 0.01로 — JPY에 12.5를 넣을 수 없게, USD에는 넣을 수 있게.
+  const step = defCur.decimals > 0 ? '0.01' : '1';
+
+  // 수동 환율은 "unit당 원화"로 받는다(100엔 = ○○원). 저장은 1단위 기준으로 정규화한다.
+  const manual = st.get("fxManual", {}) || {};
+  const autoRate = rates[defCode];
+  const hasManual = manual[defCode] !== undefined && Number(manual[defCode]) > 0;
+  const shownKrw = hasManual
+    ? Math.round(Number(manual[defCode]) * defCur.unit * 100) / 100
+    : (autoRate ? Math.round(defCur.unit / autoRate) : '');
+  const fxRow = defCode === 'KRW' ? '' :
+    '<div class="sfx">' + escHtml(defCur.unit.toLocaleString('ko-KR') + defCur.name) +
+    ' = <input class="sfx-in" type="number" min="0" step="0.01" value="' +
+    escHtml(shownKrw) + '"> 원' +
+    (hasManual ? ' <button class="sfx-clr" type="button">자동</button>' : '') +
+    '</div>';
+
   body.innerHTML =
-    '<div class="stotal">¥' + tot.toLocaleString('ko-KR') + krw + '</div>' +
+    totalHtml +
     (chips ? '<ul class="scats">' + chips + '</ul>' : '') +
     '<form class="spend-add">' +
-      '<input class="sjpy-in" type="number" inputmode="numeric" min="1" step="1" ' +
-        'placeholder="금액 ¥" aria-label="금액(엔)">' +
+      '<input class="samt-in" type="number" inputmode="decimal" min="0" step="' + step + '" ' +
+        'placeholder="금액" aria-label="금액">' +
+      '<select class="scur-in" aria-label="통화">' + curOpts + '</select>' +
       '<input class="snote-in" type="text" placeholder="내용" aria-label="내용">' +
       '<select class="scat-in" aria-label="분류">' +
         SPEND_CATS.map(function (c) { return '<option>' + escHtml(c) + '</option>'; }).join('') +
@@ -1717,35 +1988,41 @@ function renderSpend(trip, st) {
       '<button type="submit">추가</button>' +
     '</form>' +
     (groups || '<div class="sempty">아직 기록이 없습니다.</div>') +
-    '<div class="sfx">100엔 = <input class="sfx-in" type="number" min="0" step="1" value="' +
-      fx + '"> 원</div>';
+    fxRow +
+    // 무료 등급 이용 조건상 출처 표기가 필수다.
+    '<div class="fx-attrib-row">' + FX_ATTRIB_HTML + '</div>';
 
   const form = body.querySelector('.spend-add');
-  if (keepAmt) form.querySelector('.sjpy-in').value = keepAmt;
+  if (keepAmt) form.querySelector('.samt-in').value = keepAmt;
   if (keepNote) form.querySelector('.snote-in').value = keepNote;
   if (keepCat) form.querySelector('.scat-in').value = keepCat;
   form.addEventListener('submit', function (e) {
     e.preventDefault();
-    const jin = form.querySelector('.sjpy-in');
-    const jpy = Math.round(Number(jin.value));
-    if (!isFinite(jpy) || jpy <= 0) { jin.focus(); return; }
+    const ain = form.querySelector('.samt-in');
+    const code = form.querySelector('.scur-in').value;
+    const c = currencyByCode(code);
+    // 소수점 자릿수에 맞춰 반올림한다 — JPY에 12.5를 넣으면 13이 된다.
+    const p = Math.pow(10, c.decimals);
+    const amount = Math.round(Number(ain.value) * p) / p;
+    if (!isFinite(amount) || amount <= 0) { ain.focus(); return; }
     const cur = spendList(st);
     let id = Date.now();
     while (cur.some(function (x) { return x.id === id; })) id++;
     cur.push({
       id: id,
       date: todayLocal(),
-      jpy: jpy,
+      amount: amount,
+      cur: code,
       cat: form.querySelector('.scat-in').value,
       note: form.querySelector('.snote-in').value.trim()
     });
     st.set("spend", cur);
     // 방금 기록한 값이 폼에 되살아나지 않도록 명시적으로 비운다.
-    jin.value = '';
+    ain.value = '';
     form.querySelector('.snote-in').value = '';
     renderSpend(trip, st);
     renderSummary(trip, st);
-    const next = body.querySelector('.sjpy-in');
+    const next = body.querySelector('.samt-in');
     if (next) next.focus();
   });
 
@@ -1758,9 +2035,32 @@ function renderSpend(trip, st) {
     });
   });
 
+  // 통화를 바꾸면 금액 입력의 step도 따라가야 한다 — 여행 기본값이 JPY(step=1)인데
+  // USD를 고르면 12.50을 넣을 수 없다(HTML5 검증에 걸려 제출 자체가 막힌다).
+  const curin = body.querySelector('.scur-in');
+  if (curin) curin.addEventListener('change', function () {
+    const c = currencyByCode(curin.value);
+    const ain = body.querySelector('.samt-in');
+    if (ain) ain.step = c.decimals > 0 ? '0.01' : '1';
+  });
+
   const fxin = body.querySelector('.sfx-in');
-  fxin.addEventListener('change', function () {
-    st.set("fx", Number(fxin.value) || 0);
+  if (fxin) fxin.addEventListener('change', function () {
+    const krwPerUnit = Number(fxin.value);
+    const m = st.get("fxManual", {}) || {};
+    // 비우거나 0을 넣으면 자동값으로 돌아간다.
+    if (isFinite(krwPerUnit) && krwPerUnit > 0) m[defCode] = krwPerUnit / defCur.unit;
+    else delete m[defCode];
+    st.set("fxManual", m);
+    renderSpend(trip, st);
+    renderSummary(trip, st);
+  });
+
+  const fxclr = body.querySelector('.sfx-clr');
+  if (fxclr) fxclr.addEventListener('click', function () {
+    const m = st.get("fxManual", {}) || {};
+    delete m[defCode];
+    st.set("fxManual", m);
     renderSpend(trip, st);
     renderSummary(trip, st);
   });
@@ -1855,6 +2155,7 @@ function applyTripForm(trip, f) {
                            party: Number(f.party), hotel: (f.hotel || '').trim() });
     // f.place가 undefined면 도시를 건드리지 않은 저장이다(기본값 null 유지).
     if (f.place !== undefined) made.place = f.place;
+    if (f.currency !== undefined) made.currency = f.currency;
     return made;
   }
   var next = {};
@@ -1866,6 +2167,7 @@ function applyTripForm(trip, f) {
   next.hotel = (f.hotel || '').trim();
   // 도시를 건드리지 않은 저장(f.place === undefined)에서는 기존 값을 그대로 둔다.
   if (f.place !== undefined) next.place = f.place;
+  if (f.currency !== undefined) next.currency = f.currency;
   next.days = resyncDays(trip.days, f.start, f.end);
   // 일차별 도시는 resyncDays 뒤에 적용한다 — 기간이 바뀌면 일차 번호가 다시 매겨지므로
   // 그 전에 적용하면 엉뚱한 날에 붙는다. {dayN: place|null} 형태다.
@@ -1914,6 +2216,14 @@ function showEdit(id) {
         'value="' + (trip ? Number(trip.party) : 2) + '"></label>' +
       '<label>숙소<textarea name="hotel" rows="2" ' +
         'placeholder="숙소명 · 체크인/아웃">' + escHtml(trip ? trip.hotel : '') + '</textarea></label>' +
+      // 현지 통화. 경비를 이 통화로 기록하고 원화 환산을 함께 보여준다.
+      '<label>현지 통화<select name="cur">' +
+        CURRENCIES.map(function (c) {
+          var on = ((trip && trip.currency && trip.currency.code) || 'KRW') === c.code ? ' selected' : '';
+          return '<option value="' + escHtml(c.code) + '"' + on + '>' +
+            escHtml(c.code + ' · ' + c.name + ' (' + c.symbol + ')') + '</option>';
+        }).join('') +
+      '</select></label>' +
       // 도시는 폼 필드가 아니라 검색으로 고른다 — 선택값은 pickedPlace에 담아두고
       // 저장할 때 함께 넘긴다(취소하면 반영되지 않는다).
       '<div class="geo-block">' +
@@ -2055,6 +2365,8 @@ function showEdit(id) {
               party: fd.get('party'), hotel: fd.get('hotel') };
     // 검색으로 고른 도시가 있을 때만 넘긴다 — undefined면 기존 값이 유지된다.
     if (pickedPlace !== undefined) f.place = pickedPlace;
+    // 통화는 프리셋에서 고른 코드로 객체를 만들어 넘긴다.
+    f.currency = currencyByCode(fd.get('cur'));
     for (var _k in pickedDayPlaces) {
       if (Object.prototype.hasOwnProperty.call(pickedDayPlaces, _k)) { f.dayPlaces = pickedDayPlaces; break; }
     }
@@ -2389,6 +2701,8 @@ document.addEventListener("DOMContentLoaded", function () {
   migrateMealKeys();
   // 내장 섹션은 하단 탭이 됐다 — 데이터에 남아 있던 항목을 걷어낸다.
   migrateSections();
+  // 경비 레코드에 통화를 붙인다(구 {jpy} → {amount, cur}).
+  migrateSpend();
 
   document.getElementById("new-trip")
     .addEventListener("click", function () { go('#/new'); });
