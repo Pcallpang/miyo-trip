@@ -343,3 +343,6 @@ body.modal-open { overflow:hidden; }
 .day-actions button { flex:1; font:inherit; font-size:.85rem; font-weight:700; padding:9px;
   border:1px solid var(--accent); border-radius:10px; background:var(--card);
   color:var(--accent); cursor:pointer; }
+
+#city-sel { font:inherit; color:var(--text); padding:11px; border:1px solid #d5dde1;
+  border-radius:10px; background:var(--card); width:100%; }

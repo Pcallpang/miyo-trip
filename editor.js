@@ -108,12 +108,13 @@ function showEdit(id) {
       '<div class="cur-line" id="cur-line"></div>' +
       // 도시는 폼 필드가 아니라 검색으로 고른다 — 선택값은 pickedPlace에 담아두고
       // 저장할 때 함께 넘긴다(취소하면 반영되지 않는다).
-      // 도시는 직접 적는다. 날씨에 쓸 좌표가 필요하면 '찾기'로 검색해 고른다 —
-      // 검색이 0건이어도 적어 둔 이름은 그대로 남는다(날씨만 안 뜬다).
+      // 나라를 고르면 그 나라 도시 목록에서 고른다(좌표가 붙어 날씨가 바로 온다).
+      // 목록에 없는 곳은 '직접 입력'으로 이름을 적고 검색해서 고르면 된다.
       '<div class="geo-block">' +
-        '<div class="geo-lbl">도시 <span class="geo-hint">(찾기를 누르면 날씨가 붙습니다)</span></div>' +
-        '<div class="geo-row">' +
-          '<input id="geo-q" name="cityname" type="text" placeholder="예: 오사카" aria-label="도시" ' +
+        '<div class="geo-lbl">도시</div>' +
+        '<select id="city-sel" aria-label="도시 선택"></select>' +
+        '<div class="geo-row" id="city-manual" hidden>' +
+          '<input id="geo-q" name="cityname" type="text" placeholder="예: 오사카" aria-label="도시 이름" ' +
             'value="' + escHtml((trip && trip.place && trip.place.name) || '') + '">' +
           '<button id="geo-go" type="button">찾기</button>' +
         '</div>' +
@@ -176,7 +177,64 @@ function showEdit(id) {
       escHtml(c.symbol + ' · ' + c.name);
   }
   paintCur();
-  if (countrySel) countrySel.addEventListener('change', paintCur);
+
+  var citySel = document.getElementById("city-sel");
+  var cityManual = document.getElementById("city-manual");
+
+  // 나라가 정해지면 그 나라 도시 목록을 채운다. 나라를 안 골랐거나 목록이 없는
+  // 나라면 직접 입력만 남긴다.
+  function paintCityOptions() {
+    if (!citySel) return;
+    var cc = countrySel ? countrySel.value : '';
+    var list = citiesOf(cc);
+    var cur = (pickedPlace !== undefined) ? pickedPlace : (trip ? trip.place : null);
+    var curName = cur ? cur.name : '';
+    var opts = ['<option value="">— 도시 선택 —</option>'];
+    list.forEach(function (c, i) {
+      var on = c.name === curName ? ' selected' : '';
+      opts.push('<option value="' + i + '"' + on + '>' + escHtml(c.name) + '</option>');
+    });
+    // 목록에 없는 도시(직접 입력했거나 검색으로 고른 것)도 지금 값으로 보여 준다.
+    var inList = list.some(function (c) { return c.name === curName; });
+    if (curName && !inList) {
+      opts.push('<option value="keep" selected>' + escHtml(curName) + '</option>');
+    }
+    opts.push('<option value="manual">직접 입력…</option>');
+    citySel.innerHTML = opts.join('');
+    // 목록이 없는 나라(또는 나라 미선택)에서는 직접 입력을 바로 연다.
+    if (!list.length && cityManual) cityManual.hidden = false;
+  }
+  paintCityOptions();
+
+  if (citySel) citySel.addEventListener('change', function () {
+    var v = citySel.value;
+    if (v === 'manual') {
+      if (cityManual) cityManual.hidden = false;
+      var qi = document.getElementById('geo-q');
+      if (qi && qi.focus) qi.focus();
+      return;
+    }
+    if (v === '' ) { pickedPlace = null; paintPickedCity(); return; }
+    if (v === 'keep') return;
+    var city = citiesOf(countrySel ? countrySel.value : '')[Number(v)];
+    if (!city) return;
+    pickedPlace = cityToPlace(city, countrySel.value);
+    if (cityManual) cityManual.hidden = true;
+    var qi2 = document.getElementById('geo-q');
+    if (qi2) qi2.value = city.name;
+    paintPickedCity();
+    showMsg('저장을 눌러야 반영됩니다.');
+  });
+
+  if (countrySel) countrySel.addEventListener('change', function () {
+    paintCur();
+    // 나라가 바뀌면 이전 나라의 도시는 더 이상 맞지 않는다 — 목록을 새로 채운다.
+    pickedPlace = null;
+    var qi = document.getElementById('geo-q');
+    if (qi) qi.value = '';
+    paintCityOptions();
+    paintPickedCity();
+  });
 
   // undefined면 "도시를 건드리지 않음" — applyTripForm이 기존 값을 유지한다.
   var pickedPlace = undefined;
@@ -220,9 +278,19 @@ function showEdit(id) {
     goEl.disabled = true;
     listEl.hidden = true;
     showMsg('검색 중…');
-    geoSearch(q, function (list, err) {
+    geoSearch(q, function (all, err) {
       goEl.disabled = false;
       if (err) { showMsg(err); return; }
+      // 나라를 골랐으면 그 나라 결과만 남긴다 — 안 그러면 베트남 여행에서 '사파'가
+      // 북한 지명으로 잡히는 식으로 엉뚱한 곳이 섞인다.
+      // 일차별 도시를 고르는 중(geoTarget !== null)에는 거르지 않는다: 경유지는
+      // 여행 기본 나라와 다른 나라일 수 있다.
+      var cc = (geoTarget === null && countrySel) ? countrySel.value : '';
+      var list = cc ? all.filter(function (p) { return p.cc === cc; }) : all;
+      if (!list.length && all.length && cc) {
+        showMsg('선택한 나라에서 찾지 못했습니다. 나라를 바꾸거나 다른 이름으로 검색해 보세요.');
+        return;
+      }
       if (!list.length) {
         // 한국어 도시명은 대부분 그대로 찾힌다(다낭·호이안·타이베이 모두 O).
         // 그래도 안 나오면 철자나 더 큰 지명을 권한다.
@@ -248,6 +316,7 @@ function showEdit(id) {
           // (일차별 도시를 고르는 중이면 여행 기본 도시 칸은 건드리지 않는다.)
           if (forDay === null) qEl.value = chosen.name;
           paintPickedCity();
+          if (forDay === null) paintCityOptions();
           paintDays();
           // 여행 기본 도시를 고르면 나라 선택도 그 나라로 맞춘다(통화가 따라온다).
           // 일차별 도시(forDay !== null)에서는 건드리지 않는다 — 그건 경유지일 뿐이고

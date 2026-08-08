@@ -1482,3 +1482,24 @@ eq('모든 나라에 통화가 있다',
 eq('나라 목록은 가나다순',
   COUNTRIES.map(function (c) { return c.name; }).join('|') ===
   COUNTRIES.map(function (c) { return c.name; }).slice().sort(function(a,b){return a.localeCompare(b,'ko');}).join('|'), true);
+
+// ---- 나라별 도시 목록 ----
+eq('도시 목록이 있다', typeof CITIES === 'object' && CITIES !== null, true);
+eq('일본 도시가 여럿', citiesOf('JP').length > 3, true);
+eq('도시 항목 모양', Object.keys(citiesOf('JP')[0]).sort().join(','), 'lat,lon,name,tz');
+eq('소문자 나라코드도 받는다', citiesOf('jp').length > 0, true);
+eq('모르는 나라는 빈 배열', citiesOf('ZZ'), []);
+eq('빈 값도 빈 배열', citiesOf(''), []);
+// 목록에서 고른 도시는 곧바로 place로 쓸 수 있어야 한다(좌표·시간대가 있어야 날씨가 온다).
+eq('모든 도시에 좌표와 시간대',
+  Object.keys(CITIES).every(function (cc) {
+    return CITIES[cc].every(function (c) {
+      return typeof c.name === 'string' && isFinite(c.lat) && isFinite(c.lon) && !!c.tz;
+    });
+  }), true);
+// 도시를 고르면 나라 코드가 함께 붙어야 통화 자동 선택이 이어진다.
+eq('cityToPlace가 나라 코드를 붙인다',
+  cityToPlace({ name:'오사카 시', lat:34.69, lon:135.5, tz:'Asia/Tokyo' }, 'JP').cc, 'JP');
+eq('cityToPlace 좌표 보존', cityToPlace({ name:'a', lat:1, lon:2, tz:'X' }, 'JP').lat, 1);
+eq('cityToPlace 국가명도 붙인다', cityToPlace({ name:'a', lat:1, lon:2, tz:'X' }, 'JP').country, '일본');
+eq('cityToPlace null 안전', cityToPlace(null, 'JP'), null);
