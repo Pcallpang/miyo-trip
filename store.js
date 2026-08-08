@@ -344,3 +344,18 @@ function migrateMeals() {
   });
   return changed;
 }
+
+// 구 결제 내역에는 id가 없다(엑셀에서 온 그대로였다). 편집·삭제하려면 항목을
+// 가리킬 수단이 있어야 하므로 부여한다. 재실행해도 안전하다.
+function migrateExpenseIds() {
+  var changed = 0;
+  listTrips().forEach(function (row) {
+    var trip = loadTrip(row.id);
+    if (!trip || !Array.isArray(trip.expenses) || !trip.expenses.length) return;
+    var needs = trip.expenses.some(function (e) { return e && !e.id; });
+    if (!needs) return;
+    trip.expenses.forEach(function (e) { if (e && !e.id) e.id = newExpenseId(); });
+    if (saveTripBody(trip)) changed++;
+  });
+  return changed;
+}

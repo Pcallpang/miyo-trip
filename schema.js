@@ -20,6 +20,7 @@ var _seq = 0;
 function newItemId() { return "i_" + Date.now().toString(36) + (_seq++).toString(36); }
 function newSectionId() { return "s_" + Date.now().toString(36) + (_seq++).toString(36); }
 function newNoteId() { return "n_" + Date.now().toString(36) + (_seq++).toString(36); }
+function newExpenseId() { return "e_" + Date.now().toString(36) + (_seq++).toString(36); }
 
 function blankDay(n, iso) {
   return { n: n, date: iso, theme: "", place: null, curCode: null,

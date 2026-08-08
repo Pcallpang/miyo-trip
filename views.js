@@ -473,14 +473,55 @@ function sectionBodyHtml(trip, sec) {
 function expensesTableHtml(trip) {
   const rows = trip.expenses.map(function (e) {
     return '<tr><td>' + escHtml(e.cat) + '</td><td>' + escHtml(e.detail) + '</td>' +
-      '<td class="num">' + Number(e.krw).toLocaleString('ko-KR') + '</td></tr>';
+      '<td class="num">' + Number(e.krw).toLocaleString('ko-KR') + '</td>' +
+      (EXP_EDIT
+        ? '<td class="num exp-tools">' +
+          '<button class="exp-ed" type="button" data-id="' + escHtml(e.id) + '">수정</button>' +
+          '<button class="exp-rm" type="button" data-id="' + escHtml(e.id) + '">삭제</button></td>'
+        : '') +
+      '</tr>';
   }).join('');
   const total = trip.expenses.reduce(function (s, e) { return s + Number(e.krw || 0); }, 0);
   return '<div class="tblwrap"><table>' +
-    '<thead><tr><th>항목</th><th>상세</th><th class="num">금액(원)</th></tr></thead>' +
+    '<thead><tr><th>항목</th><th>상세</th><th class="num">금액(원)</th>' +
+      (EXP_EDIT ? '<th></th>' : '') + '</tr></thead>' +
     '<tbody>' + rows + '</tbody>' +
     '<tfoot><tr><td colspan="2">합계</td><td class="num">' +
-      total.toLocaleString('ko-KR') + '</td></tr></tfoot></table></div>';
+      total.toLocaleString('ko-KR') + '</td>' + (EXP_EDIT ? '<td></td>' : '') +
+      '</tr></tfoot></table></div>';
+}
+
+// 경비 탭의 '출발 전 결제 내역' 편집 모드. EDIT_MODE·SECT_EDIT와 같은 성격의
+// 세션 상태다 — trip 데이터가 아니므로 저장소에 넣지 않는다.
+var EXP_EDIT = false;
+var EXP_TARGET = null;
+
+function expenseEditorHtml(trip) {
+  var has = Array.isArray(trip.expenses) && trip.expenses.length;
+  if (!EXP_EDIT) {
+    return '<div class="exp-actions">' +
+      '<button class="exp-mode" type="button">✏️ 내역 편집</button></div>';
+  }
+  return '<div class="exp-actions">' +
+      '<button class="exp-mode" type="button" data-on="1">완료</button>' +
+      '<button class="exp-new" type="button">+ 내역 추가</button>' +
+    '</div>' +
+    '<form class="exp-form" hidden>' +
+      '<div class="exp-row">' +
+        '<input class="exp-cat" type="text" placeholder="항목 (예: 항공권)" aria-label="항목">' +
+        '<input class="exp-krw" type="number" min="1" step="1" placeholder="금액(원)" aria-label="금액">' +
+      '</div>' +
+      '<input class="exp-detail" type="text" placeholder="상세 (예: 왕복 2인)" aria-label="상세">' +
+      '<div class="exp-row">' +
+        '<input class="exp-date" type="date" aria-label="결제일">' +
+        '<input class="exp-pay" type="text" placeholder="결제수단" aria-label="결제수단">' +
+      '</div>' +
+      '<div class="exp-err" hidden></div>' +
+      '<div class="exp-row">' +
+        '<button type="submit">저장</button>' +
+        '<button class="exp-cancel" type="button">취소</button>' +
+      '</div>' +
+    '</form>';
 }
 
 // 정보 탭의 섹션 편집 모드. EDIT_MODE와 같은 성격의 세션 상태다 —
@@ -527,10 +568,12 @@ function panelHtml(trip, tab) {
     return '<div class="panel-card" id="packing-body"></div>';
   }
   if (tab === "money") {
-    var exp = (trip.expenses && trip.expenses.length)
-      ? '<div class="panel-card"><h2 class="panel-h">💰 출발 전 결제 내역</h2>' +
-        expensesTableHtml(trip) + '</div>'
-      : '';
+    // 내역이 없어도 편집기는 보여야 한다 — 그래야 첫 항목을 넣을 수 있다.
+    var exp = '<div class="panel-card"><h2 class="panel-h">💰 출발 전 결제 내역</h2>' +
+      ((trip.expenses && trip.expenses.length)
+        ? expensesTableHtml(trip)
+        : '<p class="sempty">아직 내역이 없습니다.</p>') +
+      expenseEditorHtml(trip) + '</div>';
     return '<div class="panel-card" id="spend-body"></div>' + exp;
   }
   if (tab === "info") {
@@ -565,6 +608,7 @@ function renderPanel(trip, st, tab) {
   if (tab === "packing") renderPacking(trip, st);
   if (tab === "money") renderSpend(trip, st);
   if (tab === "info") bindSectionEditor(trip, st, el);
+  if (tab === "money") bindExpenseEditor(trip, st, el);
 }
 
 // 섹션을 고쳐 저장하고 정보 탭만 다시 그린다. saveTripBody의 성공 여부를 확인한다 —
@@ -577,6 +621,83 @@ function saveSections(trip, st, el) {
     alert('저장에 실패했습니다. 기기 저장 공간을 확인해 주세요.');
   }
   renderPanel(trip, st, "info");
+}
+
+function bindExpenseEditor(trip, st, el) {
+  var form = el.querySelector('.exp-form');
+
+  function save() {
+    if (!saveTripBody(trip)) {
+      var fresh = loadTrip(trip.id);
+      if (fresh) trip.expenses = fresh.expenses;
+      alert('저장에 실패했습니다. 기기 저장 공간을 확인해 주세요.');
+    }
+    renderPanel(trip, st, "money");
+  }
+
+  var modeBtn = el.querySelector('.exp-mode');
+  if (modeBtn) modeBtn.addEventListener('click', function () {
+    EXP_EDIT = !EXP_EDIT;
+    EXP_TARGET = null;
+    renderPanel(trip, st, "money");
+  });
+
+  function openForm(e) {
+    if (!form) return;
+    EXP_TARGET = e ? e.id : null;
+    form.querySelector('.exp-cat').value = e ? e.cat : '';
+    form.querySelector('.exp-krw').value = e ? Number(e.krw) : '';
+    form.querySelector('.exp-detail').value = e ? (e.detail || '') : '';
+    form.querySelector('.exp-date').value = e ? (e.date || '') : '';
+    form.querySelector('.exp-pay').value = e ? (e.pay || '') : '';
+    form.querySelector('.exp-err').hidden = true;
+    form.hidden = false;
+    form.querySelector('.exp-cat').focus();
+  }
+
+  var newBtn = el.querySelector('.exp-new');
+  if (newBtn) newBtn.addEventListener('click', function () { openForm(null); });
+
+  el.querySelectorAll('.exp-ed').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var e = (trip.expenses || []).filter(function (x) { return x.id === b.dataset.id; })[0];
+      if (e) openForm(e);
+    });
+  });
+  el.querySelectorAll('.exp-rm').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var e = (trip.expenses || []).filter(function (x) { return x.id === b.dataset.id; })[0];
+      if (!e) return;
+      if (!confirm('"' + e.cat + '" 내역을 삭제할까요?')) return;
+      removeExpense(trip, b.dataset.id);
+      save();
+    });
+  });
+
+  if (form) {
+    form.querySelector('.exp-cancel').addEventListener('click', function () {
+      form.hidden = true;
+      EXP_TARGET = null;
+    });
+    form.addEventListener('submit', function (ev) {
+      ev.preventDefault();
+      var f = {
+        cat: form.querySelector('.exp-cat').value,
+        krw: form.querySelector('.exp-krw').value,
+        detail: form.querySelector('.exp-detail').value,
+        date: form.querySelector('.exp-date').value,
+        pay: form.querySelector('.exp-pay').value,
+        note: ''
+      };
+      var err = validateExpenseForm(f);
+      var box = form.querySelector('.exp-err');
+      if (err) { box.textContent = err; box.hidden = false; return; }
+      if (EXP_TARGET) updateExpense(trip, EXP_TARGET, f);
+      else addExpense(trip, f);
+      EXP_TARGET = null;
+      save();
+    });
+  }
 }
 
 function bindSectionEditor(trip, st, el) {

@@ -289,6 +289,28 @@ body { margin:0; background:var(--bg); color:var(--text);
 .note-add button { font:inherit; font-weight:700; padding:9px 16px; border:0; border-radius:10px;
   background:var(--accent2); color:#fff; cursor:pointer; }
 
+.exp-actions { display:flex; gap:8px; margin-top:10px; }
+.exp-actions button { flex:1; font:inherit; font-size:.85rem; padding:10px; border:1px solid #d5dde1;
+  border-radius:10px; background:var(--card); color:var(--text); cursor:pointer; }
+.exp-actions .exp-mode[data-on] { background:var(--accent); color:#fff; border-color:var(--accent);
+  font-weight:700; }
+.exp-actions .exp-new { background:var(--accent); color:#fff; border-color:var(--accent); font-weight:700; }
+.exp-tools { white-space:nowrap; }
+.exp-tools button { font:inherit; font-size:.72rem; padding:3px 8px; border:1px solid #d5dde1;
+  border-radius:6px; background:var(--card); color:var(--muted); cursor:pointer; margin-left:4px; }
+.exp-tools .exp-rm { color:#c92a2a; border-color:#ffc9c9; }
+.exp-form { display:flex; flex-direction:column; gap:8px; margin-top:10px; }
+.exp-form input { font:inherit; color:var(--text); padding:10px; border:1px solid #d5dde1;
+  border-radius:10px; background:var(--card); min-width:0; }
+.exp-row { display:flex; gap:8px; }
+.exp-row > * { flex:1; min-width:0; }
+.exp-row button { font:inherit; font-weight:700; padding:11px; border:0; border-radius:10px;
+  background:var(--accent); color:#fff; cursor:pointer; }
+.exp-row .exp-cancel { background:var(--card); color:var(--muted); border:1px solid #d5dde1;
+  font-weight:400; }
+.exp-err { background:#fff0f0; color:#c92a2a; border-left:4px solid #e03131;
+  padding:9px 12px; border-radius:8px; font-size:.85rem; }
+
 </style>
 </head>
 <body>
@@ -1200,6 +1222,21 @@ function migrateMeals() {
   return changed;
 }
 
+// 구 결제 내역에는 id가 없다(엑셀에서 온 그대로였다). 편집·삭제하려면 항목을
+// 가리킬 수단이 있어야 하므로 부여한다. 재실행해도 안전하다.
+function migrateExpenseIds() {
+  var changed = 0;
+  listTrips().forEach(function (row) {
+    var trip = loadTrip(row.id);
+    if (!trip || !Array.isArray(trip.expenses) || !trip.expenses.length) return;
+    var needs = trip.expenses.some(function (e) { return e && !e.id; });
+    if (!needs) return;
+    trip.expenses.forEach(function (e) { if (e && !e.id) e.id = newExpenseId(); });
+    if (saveTripBody(trip)) changed++;
+  });
+  return changed;
+}
+
 </script>
 <script>
 // Trip 스키마 헬퍼: 일차 생성, 재동기화, 기본값.
@@ -1224,6 +1261,7 @@ var _seq = 0;
 function newItemId() { return "i_" + Date.now().toString(36) + (_seq++).toString(36); }
 function newSectionId() { return "s_" + Date.now().toString(36) + (_seq++).toString(36); }
 function newNoteId() { return "n_" + Date.now().toString(36) + (_seq++).toString(36); }
+function newExpenseId() { return "e_" + Date.now().toString(36) + (_seq++).toString(36); }
 
 function blankDay(n, iso) {
   return { n: n, date: iso, theme: "", place: null, curCode: null,
@@ -2344,14 +2382,55 @@ function sectionBodyHtml(trip, sec) {
 function expensesTableHtml(trip) {
   const rows = trip.expenses.map(function (e) {
     return '<tr><td>' + escHtml(e.cat) + '</td><td>' + escHtml(e.detail) + '</td>' +
-      '<td class="num">' + Number(e.krw).toLocaleString('ko-KR') + '</td></tr>';
+      '<td class="num">' + Number(e.krw).toLocaleString('ko-KR') + '</td>' +
+      (EXP_EDIT
+        ? '<td class="num exp-tools">' +
+          '<button class="exp-ed" type="button" data-id="' + escHtml(e.id) + '">수정</button>' +
+          '<button class="exp-rm" type="button" data-id="' + escHtml(e.id) + '">삭제</button></td>'
+        : '') +
+      '</tr>';
   }).join('');
   const total = trip.expenses.reduce(function (s, e) { return s + Number(e.krw || 0); }, 0);
   return '<div class="tblwrap"><table>' +
-    '<thead><tr><th>항목</th><th>상세</th><th class="num">금액(원)</th></tr></thead>' +
+    '<thead><tr><th>항목</th><th>상세</th><th class="num">금액(원)</th>' +
+      (EXP_EDIT ? '<th></th>' : '') + '</tr></thead>' +
     '<tbody>' + rows + '</tbody>' +
     '<tfoot><tr><td colspan="2">합계</td><td class="num">' +
-      total.toLocaleString('ko-KR') + '</td></tr></tfoot></table></div>';
+      total.toLocaleString('ko-KR') + '</td>' + (EXP_EDIT ? '<td></td>' : '') +
+      '</tr></tfoot></table></div>';
+}
+
+// 경비 탭의 '출발 전 결제 내역' 편집 모드. EDIT_MODE·SECT_EDIT와 같은 성격의
+// 세션 상태다 — trip 데이터가 아니므로 저장소에 넣지 않는다.
+var EXP_EDIT = false;
+var EXP_TARGET = null;
+
+function expenseEditorHtml(trip) {
+  var has = Array.isArray(trip.expenses) && trip.expenses.length;
+  if (!EXP_EDIT) {
+    return '<div class="exp-actions">' +
+      '<button class="exp-mode" type="button">✏️ 내역 편집</button></div>';
+  }
+  return '<div class="exp-actions">' +
+      '<button class="exp-mode" type="button" data-on="1">완료</button>' +
+      '<button class="exp-new" type="button">+ 내역 추가</button>' +
+    '</div>' +
+    '<form class="exp-form" hidden>' +
+      '<div class="exp-row">' +
+        '<input class="exp-cat" type="text" placeholder="항목 (예: 항공권)" aria-label="항목">' +
+        '<input class="exp-krw" type="number" min="1" step="1" placeholder="금액(원)" aria-label="금액">' +
+      '</div>' +
+      '<input class="exp-detail" type="text" placeholder="상세 (예: 왕복 2인)" aria-label="상세">' +
+      '<div class="exp-row">' +
+        '<input class="exp-date" type="date" aria-label="결제일">' +
+        '<input class="exp-pay" type="text" placeholder="결제수단" aria-label="결제수단">' +
+      '</div>' +
+      '<div class="exp-err" hidden></div>' +
+      '<div class="exp-row">' +
+        '<button type="submit">저장</button>' +
+        '<button class="exp-cancel" type="button">취소</button>' +
+      '</div>' +
+    '</form>';
 }
 
 // 정보 탭의 섹션 편집 모드. EDIT_MODE와 같은 성격의 세션 상태다 —
@@ -2398,10 +2477,12 @@ function panelHtml(trip, tab) {
     return '<div class="panel-card" id="packing-body"></div>';
   }
   if (tab === "money") {
-    var exp = (trip.expenses && trip.expenses.length)
-      ? '<div class="panel-card"><h2 class="panel-h">💰 출발 전 결제 내역</h2>' +
-        expensesTableHtml(trip) + '</div>'
-      : '';
+    // 내역이 없어도 편집기는 보여야 한다 — 그래야 첫 항목을 넣을 수 있다.
+    var exp = '<div class="panel-card"><h2 class="panel-h">💰 출발 전 결제 내역</h2>' +
+      ((trip.expenses && trip.expenses.length)
+        ? expensesTableHtml(trip)
+        : '<p class="sempty">아직 내역이 없습니다.</p>') +
+      expenseEditorHtml(trip) + '</div>';
     return '<div class="panel-card" id="spend-body"></div>' + exp;
   }
   if (tab === "info") {
@@ -2436,6 +2517,7 @@ function renderPanel(trip, st, tab) {
   if (tab === "packing") renderPacking(trip, st);
   if (tab === "money") renderSpend(trip, st);
   if (tab === "info") bindSectionEditor(trip, st, el);
+  if (tab === "money") bindExpenseEditor(trip, st, el);
 }
 
 // 섹션을 고쳐 저장하고 정보 탭만 다시 그린다. saveTripBody의 성공 여부를 확인한다 —
@@ -2448,6 +2530,83 @@ function saveSections(trip, st, el) {
     alert('저장에 실패했습니다. 기기 저장 공간을 확인해 주세요.');
   }
   renderPanel(trip, st, "info");
+}
+
+function bindExpenseEditor(trip, st, el) {
+  var form = el.querySelector('.exp-form');
+
+  function save() {
+    if (!saveTripBody(trip)) {
+      var fresh = loadTrip(trip.id);
+      if (fresh) trip.expenses = fresh.expenses;
+      alert('저장에 실패했습니다. 기기 저장 공간을 확인해 주세요.');
+    }
+    renderPanel(trip, st, "money");
+  }
+
+  var modeBtn = el.querySelector('.exp-mode');
+  if (modeBtn) modeBtn.addEventListener('click', function () {
+    EXP_EDIT = !EXP_EDIT;
+    EXP_TARGET = null;
+    renderPanel(trip, st, "money");
+  });
+
+  function openForm(e) {
+    if (!form) return;
+    EXP_TARGET = e ? e.id : null;
+    form.querySelector('.exp-cat').value = e ? e.cat : '';
+    form.querySelector('.exp-krw').value = e ? Number(e.krw) : '';
+    form.querySelector('.exp-detail').value = e ? (e.detail || '') : '';
+    form.querySelector('.exp-date').value = e ? (e.date || '') : '';
+    form.querySelector('.exp-pay').value = e ? (e.pay || '') : '';
+    form.querySelector('.exp-err').hidden = true;
+    form.hidden = false;
+    form.querySelector('.exp-cat').focus();
+  }
+
+  var newBtn = el.querySelector('.exp-new');
+  if (newBtn) newBtn.addEventListener('click', function () { openForm(null); });
+
+  el.querySelectorAll('.exp-ed').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var e = (trip.expenses || []).filter(function (x) { return x.id === b.dataset.id; })[0];
+      if (e) openForm(e);
+    });
+  });
+  el.querySelectorAll('.exp-rm').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var e = (trip.expenses || []).filter(function (x) { return x.id === b.dataset.id; })[0];
+      if (!e) return;
+      if (!confirm('"' + e.cat + '" 내역을 삭제할까요?')) return;
+      removeExpense(trip, b.dataset.id);
+      save();
+    });
+  });
+
+  if (form) {
+    form.querySelector('.exp-cancel').addEventListener('click', function () {
+      form.hidden = true;
+      EXP_TARGET = null;
+    });
+    form.addEventListener('submit', function (ev) {
+      ev.preventDefault();
+      var f = {
+        cat: form.querySelector('.exp-cat').value,
+        krw: form.querySelector('.exp-krw').value,
+        detail: form.querySelector('.exp-detail').value,
+        date: form.querySelector('.exp-date').value,
+        pay: form.querySelector('.exp-pay').value,
+        note: ''
+      };
+      var err = validateExpenseForm(f);
+      var box = form.querySelector('.exp-err');
+      if (err) { box.textContent = err; box.hidden = false; return; }
+      if (EXP_TARGET) updateExpense(trip, EXP_TARGET, f);
+      else addExpense(trip, f);
+      EXP_TARGET = null;
+      save();
+    });
+  }
 }
 
 function bindSectionEditor(trip, st, el) {
@@ -3284,6 +3443,52 @@ function removeNote(day, id) {
   return day;
 }
 
+// ---- 출발 전 결제 내역 편집 ----
+// 항공·숙소처럼 떠나기 전에 결제한 것들. 현지 경비(spend)와 달리 원화로만 적는다.
+function validateExpenseForm(f) {
+  if (!f || !f.cat || !String(f.cat).trim()) return '항목을 입력하세요.';
+  var n = Number(f.krw);
+  if (!isFinite(n) || n <= 0) return '금액을 입력하세요.';
+  return null;
+}
+
+function expenseFromForm(f) {
+  return {
+    date: String(f.date || '').trim(),
+    cat: String(f.cat).trim(),
+    detail: String(f.detail || '').trim(),
+    pay: String(f.pay || '').trim(),
+    krw: Math.round(Number(f.krw)),
+    note: String(f.note || '').trim()
+  };
+}
+
+function addExpense(trip, f) {
+  if (!trip) return trip;
+  if (!Array.isArray(trip.expenses)) trip.expenses = [];
+  var e = expenseFromForm(f);
+  e.id = newExpenseId();
+  trip.expenses.push(e);
+  return trip;
+}
+
+function updateExpense(trip, id, f) {
+  if (!trip || !Array.isArray(trip.expenses)) return trip;
+  trip.expenses.forEach(function (e, i) {
+    if (e.id !== id) return;
+    var next = expenseFromForm(f);
+    next.id = id;
+    trip.expenses[i] = next;
+  });
+  return trip;
+}
+
+function removeExpense(trip, id) {
+  if (!trip || !Array.isArray(trip.expenses)) return trip;
+  trip.expenses = trip.expenses.filter(function (e) { return e.id !== id; });
+  return trip;
+}
+
 </script>
 <script>
 // 해시 라우터와 부팅. 렌더는 views.js, 외부 조회는 remote.js에 있다.
@@ -3520,6 +3725,8 @@ document.addEventListener("DOMContentLoaded", function () {
   migrateSpend();
   // 뭐먹지(meals)를 자유 메모(notes)로 옮긴다.
   migrateMeals();
+  // 구 결제 내역에 id를 부여한다(편집하려면 항목을 가리킬 수단이 필요하다).
+  migrateExpenseIds();
 
   document.getElementById("new-trip")
     .addEventListener("click", function () { go('#/new'); });

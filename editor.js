@@ -512,3 +512,49 @@ function removeNote(day, id) {
   day.notes = day.notes.filter(function (n) { return n.id !== id; });
   return day;
 }
+
+// ---- 출발 전 결제 내역 편집 ----
+// 항공·숙소처럼 떠나기 전에 결제한 것들. 현지 경비(spend)와 달리 원화로만 적는다.
+function validateExpenseForm(f) {
+  if (!f || !f.cat || !String(f.cat).trim()) return '항목을 입력하세요.';
+  var n = Number(f.krw);
+  if (!isFinite(n) || n <= 0) return '금액을 입력하세요.';
+  return null;
+}
+
+function expenseFromForm(f) {
+  return {
+    date: String(f.date || '').trim(),
+    cat: String(f.cat).trim(),
+    detail: String(f.detail || '').trim(),
+    pay: String(f.pay || '').trim(),
+    krw: Math.round(Number(f.krw)),
+    note: String(f.note || '').trim()
+  };
+}
+
+function addExpense(trip, f) {
+  if (!trip) return trip;
+  if (!Array.isArray(trip.expenses)) trip.expenses = [];
+  var e = expenseFromForm(f);
+  e.id = newExpenseId();
+  trip.expenses.push(e);
+  return trip;
+}
+
+function updateExpense(trip, id, f) {
+  if (!trip || !Array.isArray(trip.expenses)) return trip;
+  trip.expenses.forEach(function (e, i) {
+    if (e.id !== id) return;
+    var next = expenseFromForm(f);
+    next.id = id;
+    trip.expenses[i] = next;
+  });
+  return trip;
+}
+
+function removeExpense(trip, id) {
+  if (!trip || !Array.isArray(trip.expenses)) return trip;
+  trip.expenses = trip.expenses.filter(function (e) { return e.id !== id; });
+  return trip;
+}

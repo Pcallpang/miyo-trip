@@ -279,3 +279,25 @@ body { margin:0; background:var(--bg); color:var(--text);
   border-radius:10px; background:#fff; color:var(--text); }
 .note-add button { font:inherit; font-weight:700; padding:9px 16px; border:0; border-radius:10px;
   background:var(--accent2); color:#fff; cursor:pointer; }
+
+.exp-actions { display:flex; gap:8px; margin-top:10px; }
+.exp-actions button { flex:1; font:inherit; font-size:.85rem; padding:10px; border:1px solid #d5dde1;
+  border-radius:10px; background:var(--card); color:var(--text); cursor:pointer; }
+.exp-actions .exp-mode[data-on] { background:var(--accent); color:#fff; border-color:var(--accent);
+  font-weight:700; }
+.exp-actions .exp-new { background:var(--accent); color:#fff; border-color:var(--accent); font-weight:700; }
+.exp-tools { white-space:nowrap; }
+.exp-tools button { font:inherit; font-size:.72rem; padding:3px 8px; border:1px solid #d5dde1;
+  border-radius:6px; background:var(--card); color:var(--muted); cursor:pointer; margin-left:4px; }
+.exp-tools .exp-rm { color:#c92a2a; border-color:#ffc9c9; }
+.exp-form { display:flex; flex-direction:column; gap:8px; margin-top:10px; }
+.exp-form input { font:inherit; color:var(--text); padding:10px; border:1px solid #d5dde1;
+  border-radius:10px; background:var(--card); min-width:0; }
+.exp-row { display:flex; gap:8px; }
+.exp-row > * { flex:1; min-width:0; }
+.exp-row button { font:inherit; font-weight:700; padding:11px; border:0; border-radius:10px;
+  background:var(--accent); color:#fff; cursor:pointer; }
+.exp-row .exp-cancel { background:var(--card); color:var(--muted); border:1px solid #d5dde1;
+  font-weight:400; }
+.exp-err { background:#fff0f0; color:#c92a2a; border-left:4px solid #e03131;
+  padding:9px 12px; border-radius:8px; font-size:.85rem; }

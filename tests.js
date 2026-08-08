@@ -1417,3 +1417,47 @@ eq('가져올 때마다 새 id',
   eq('구 메모 키 제거', lsGet(tripKey(t.id, 'meal:2026-09-01:0'), 'gone'), 'gone');
   eq('두 번째 실행은 0건', migrateMeals(), 0);
 })();
+
+// ---- 출발 전 결제 내역 편집 ----
+(function () {
+  var trip = { expenses: [] };
+  addExpense(trip, { date:'2026-08-01', cat:'항공', detail:'왕복 2인', pay:'신한카드', krw:'640000', note:'' });
+  eq('내역 추가', trip.expenses.length, 1);
+  eq('금액은 숫자로', trip.expenses[0].krw, 640000);
+  eq('id 부여', trip.expenses[0].id.slice(0,2), 'e_');
+
+  addExpense(trip, { date:'2026-08-02', cat:'숙소', detail:'6박', pay:'', krw:'900000' });
+  eq('두 건', trip.expenses.length, 2);
+
+  updateExpense(trip, trip.expenses[0].id, { date:'2026-08-01', cat:'항공권', detail:'왕복 2인',
+    pay:'신한카드', krw:'650000', note:'마일리지' });
+  eq('수정된 분류', trip.expenses[0].cat, '항공권');
+  eq('수정된 금액', trip.expenses[0].krw, 650000);
+  eq('수정된 메모', trip.expenses[0].note, '마일리지');
+
+  removeExpense(trip, trip.expenses[0].id);
+  eq('삭제', trip.expenses.map(function (e) { return e.cat; }), ['숙소']);
+  eq('없는 id 삭제는 무해', removeExpense(trip, 'nope').expenses.length, 1);
+
+  // expenses가 없거나 배열이 아닌 손상된 trip도 안전
+  eq('expenses 없어도 추가됨', addExpense({}, { cat:'x', krw:'1' }).expenses.length, 1);
+  eq('배열 아니어도 보정', addExpense({ expenses:'x' }, { cat:'y', krw:'1' }).expenses.length, 1);
+})();
+
+eq('내역 폼 검증 통과', validateExpenseForm({ cat:'항공', krw:'1000' }), null);
+eq('분류 없으면 거부', validateExpenseForm({ cat:' ', krw:'1000' }), '항목을 입력하세요.');
+eq('금액 0은 거부', validateExpenseForm({ cat:'항공', krw:'0' }), '금액을 입력하세요.');
+eq('금액이 숫자가 아니면 거부', validateExpenseForm({ cat:'항공', krw:'abc' }), '금액을 입력하세요.');
+eq('음수 거부', validateExpenseForm({ cat:'항공', krw:'-5' }), '금액을 입력하세요.');
+
+// 구 레코드에는 id가 없다 — 편집하려면 id가 있어야 하므로 부여한다
+(function () {
+  __resetStorage();
+  var t = emptyTrip({ title:'x', start:'2026-09-01', end:'2026-09-02' });
+  t.expenses = [{ date:'2026-08-01', cat:'항공', detail:'', pay:'', krw:640000, note:'' }];
+  saveTrip(t);
+  eq('id 마이그레이션 1건', migrateExpenseIds(), 1);
+  eq('id가 생김', loadTrip(t.id).expenses[0].id.slice(0,2), 'e_');
+  eq('금액은 그대로', loadTrip(t.id).expenses[0].krw, 640000);
+  eq('두 번째 실행은 0건', migrateExpenseIds(), 0);
+})();
