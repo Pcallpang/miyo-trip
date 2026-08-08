@@ -215,6 +215,8 @@ document.addEventListener("DOMContentLoaded", function () {
   migrateMealKeys();
   // 내장 섹션은 하단 탭이 됐다 — 데이터에 남아 있던 항목을 걷어낸다.
   migrateSections();
+  // 경비 레코드에 통화를 붙인다(구 {jpy} → {amount, cur}).
+  migrateSpend();
 
   document.getElementById("new-trip")
     .addEventListener("click", function () { go('#/new'); });

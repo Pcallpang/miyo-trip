@@ -1130,3 +1130,29 @@ eq('placeLabel 없으면 빈 문자열', placeLabel(null), '');
 
   eq('없는 일차는 무해', setDayPlace(trip, 99, P).days.length, 2);
 })();
+
+// ---- 경비 레코드 마이그레이션 ----
+eq('구 레코드 변환', migrateSpendRecord({ id:1, date:'2026-07-29', jpy:1200, cat:'식비', note:'이치란' }, 'JPY'),
+  { id:1, date:'2026-07-29', cat:'식비', note:'이치란', amount:1200, cur:'JPY' });
+eq('이미 새 형식이면 그대로',
+  migrateSpendRecord({ id:2, date:'2026-07-29', amount:500, cur:'USD', cat:'교통', note:'' }, 'JPY').cur, 'USD');
+eq('기본 통화를 따른다',
+  migrateSpendRecord({ id:3, date:'2026-07-29', jpy:900, cat:'기타', note:'' }, 'VND').cur, 'VND');
+eq('금액이 숫자가 아니면 0', migrateSpendRecord({ id:4, jpy:'abc' }, 'JPY').amount, 0);
+
+(function () {
+  __resetStorage();
+  var t = emptyTrip({ title:'테스트', start:'2026-09-01', end:'2026-09-02' });
+  t.currency = { code:'JPY', symbol:'¥', decimals:0, unit:100 };
+  saveTrip(t);
+  tripStore(t.id).set('spend', [
+    { id:1, date:'2026-09-01', jpy:1200, cat:'식비', note:'라멘' },
+    { id:2, date:'2026-09-01', jpy:800,  cat:'교통', note:'' }
+  ]);
+  eq('마이그레이션이 한 여행을 고침', migrateSpend(), 1);
+  var got = tripStore(t.id).get('spend', []);
+  eq('금액 보존', got[0].amount, 1200);
+  eq('통화 부여', got[0].cur, 'JPY');
+  eq('구 필드 제거', got[0].jpy, undefined);
+  eq('두 번째 실행은 0건', migrateSpend(), 0);
+})();
