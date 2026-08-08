@@ -1058,3 +1058,75 @@ eq('샘플 여행에 builtin 섹션 없음',
 eq('샘플 여행의 사용자 섹션은 둘',
   window.SAMPLE_TRIP.sections.map(function (s) { return s.title; }),
   ['라피트 시간표', '팁']);
+
+// ---- 좌표별 날씨 캐시 ----
+var OSAKA = { name: '오사카', lat: 34.69379, lon: 135.50107, tz: 'Asia/Tokyo' };
+var DANANG = { name: '다낭', lat: 16.06778, lon: 108.22083, tz: 'Asia/Ho_Chi_Minh' };
+
+eq('wxKey 좌표 조합', wxKey(OSAKA), '34.694,135.501');
+eq('wxKey 반올림', wxKey({ lat: 1.23456, lon: 2.99999 }), '1.235,3');
+eq('wxKey place 없으면 빈 문자열', wxKey(null), '');
+
+eq('wxUrl에 좌표가 들어간다', wxUrl(DANANG).indexOf('latitude=16.06778') >= 0, true);
+eq('wxUrl에 시간대가 들어간다',
+  wxUrl(DANANG).indexOf('timezone=Asia%2FHo_Chi_Minh') >= 0, true);
+eq('wxUrl은 16일 예보', wxUrl(OSAKA).indexOf('forecast_days=16') >= 0, true);
+
+// 좌표가 다르면 캐시가 섞이지 않는다
+(function () {
+  __resetStorage();
+  wxResetAll();
+  var st = tripStore('t_w');
+  var apiO = { daily: { time: ['2026-09-01'], weather_code: [0],
+    temperature_2m_max: [30], temperature_2m_min: [20], precipitation_probability_max: [10] } };
+  var apiD = { daily: { time: ['2026-09-01'], weather_code: [61],
+    temperature_2m_max: [33], temperature_2m_min: [26], precipitation_probability_max: [80] } };
+  st.set('wx:' + wxKey(OSAKA), { at: '2026-09-01T00:00:00Z', api: apiO });
+  st.set('wx:' + wxKey(DANANG), { at: '2026-09-01T00:00:00Z', api: apiD });
+
+  eq('오사카 캐시를 읽는다', wxLine(wxGet(st, OSAKA).map, '2026-09-01'), '☀️ 30° / 20° · 비 10%');
+  eq('다낭 캐시를 읽는다', wxLine(wxGet(st, DANANG).map, '2026-09-01'), '🌧️ 33° / 26° · 비 80%');
+  eq('캐시 없는 좌표는 빈 맵', wxGet(st, { lat: 1, lon: 1 }).map, {});
+})();
+
+// ---- 도시 검색 ----
+eq('geoUrl 질의 인코딩', geoUrl('Da Nang', 5).indexOf('name=Da%20Nang') >= 0, true);
+eq('geoUrl은 한국어 표시', geoUrl('Da Nang', 5).indexOf('language=ko') >= 0, true);
+// language=en 폴백은 쓰지 않는다 — language는 검색 색인을 고르므로, en으로 바꾸면
+// 한국어 질의가 오히려 전부 0건이 된다(2026-08-06 브라우저 실측).
+eq('geoUrl에 en 폴백 흔적 없음', geoUrl('x', 5).indexOf('language=en') === -1, true);
+
+var GEOAPI = { results: [
+  { name: '다낭', country: '베트남', latitude: 16.06778, longitude: 108.22083,
+    timezone: 'Asia/Ho_Chi_Minh', admin1: 'Da Nang City' },
+  { name: '다낭 국제공항', country: '베트남', latitude: 16.04392, longitude: 108.19937,
+    timezone: 'Asia/Ho_Chi_Minh', admin1: 'Da Nang City' }
+] };
+eq('geoParse 변환', geoParse(GEOAPI)[0],
+  { name: '다낭', country: '베트남', lat: 16.06778, lon: 108.22083, tz: 'Asia/Ho_Chi_Minh' });
+eq('geoParse 개수', geoParse(GEOAPI).length, 2);
+// 0건일 때 응답에는 results 키 자체가 없다(실측) — 빈 배열로 받아야 한다.
+eq('geoParse 0건 응답', geoParse({ generationtime_ms: 0.1 }), []);
+eq('geoParse null 응답', geoParse(null), []);
+
+eq('placeLabel 조합', placeLabel({ name: '다낭', country: '베트남' }), '다낭 · 베트남');
+eq('placeLabel 국가 없으면 이름만', placeLabel({ name: '다낭' }), '다낭');
+eq('placeLabel 없으면 빈 문자열', placeLabel(null), '');
+
+// ---- 일차별 도시 ----
+(function () {
+  var trip = { place: { name: '하노이', lat: 21, lon: 105, tz: 'Asia/Bangkok' },
+    days: [{ n: 1, place: null }, { n: 2, place: null }] };
+  var P = { name: '다낭', country: '베트남', lat: 16.06778, lon: 108.22083, tz: 'Asia/Ho_Chi_Minh' };
+
+  setDayPlace(trip, 2, P);
+  eq('일차 도시 지정', trip.days[1].place.name, '다낭');
+  eq('지정 안 한 일차는 여행 기본값 상속', dayPlace(trip, trip.days[0]).name, '하노이');
+  eq('지정한 일차는 그 도시', dayPlace(trip, trip.days[1]).name, '다낭');
+
+  setDayPlace(trip, 2, null);
+  eq('null이면 상속으로 되돌아감', trip.days[1].place, null);
+  eq('되돌린 뒤 상속 확인', dayPlace(trip, trip.days[1]).name, '하노이');
+
+  eq('없는 일차는 무해', setDayPlace(trip, 99, P).days.length, 2);
+})();

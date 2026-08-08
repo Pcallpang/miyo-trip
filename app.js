@@ -1,89 +1,10 @@
-// 날씨 조회 + 해시 라우터. 렌더는 views.js에 있다.
+// 해시 라우터와 부팅. 렌더는 views.js, 외부 조회는 remote.js에 있다.
 
 function todayLocal() {
   var d = new Date();
   return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
 }
 
-var WX_URL = "https://api.open-meteo.com/v1/forecast?latitude=34.69&longitude=135.5" +
-  "&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max" +
-  "&timezone=Asia%2FTokyo&forecast_days=7";
-
-function wxIcon(code) {
-  if (code === 0) return { e: "☀️", t: "맑음" };
-  if (code === 1 || code === 2) return { e: "🌤️", t: "구름 조금" };
-  if (code === 3) return { e: "☁️", t: "흐림" };
-  if (code === 45 || code === 48) return { e: "🌫️", t: "안개" };
-  if (code >= 51 && code <= 57) return { e: "🌦️", t: "이슬비" };
-  if (code >= 61 && code <= 67) return { e: "🌧️", t: "비" };
-  if ((code >= 71 && code <= 77) || code === 85 || code === 86) return { e: "🌨️", t: "눈" };
-  if (code >= 80 && code <= 82) return { e: "🌧️", t: "소나기" };
-  if (code >= 95) return { e: "⛈️", t: "뇌우" };
-  return { e: "🌡️", t: "" };
-}
-function wxDailyMap(api) {
-  var m = {};
-  if (!api || !api.daily || !api.daily.time) return m;
-  api.daily.time.forEach(function (d, i) {
-    var rain = api.daily.precipitation_probability_max[i];
-    m[d] = {
-      code: api.daily.weather_code[i],
-      tmax: Math.round(api.daily.temperature_2m_max[i]),
-      tmin: Math.round(api.daily.temperature_2m_min[i]),
-      rain: (rain === null || rain === undefined) ? null : rain
-    };
-  });
-  return m;
-}
-function wxLine(map, date) {
-  var w = map[date];
-  if (!w) return "";
-  var rain = w.rain === null ? "" : " · 비 " + w.rain + "%";
-  return wxIcon(w.code).e + " " + w.tmax + "° / " + w.tmin + "°" + rain;
-}
-
-var wxState = { map: {}, at: null, live: false, fetchedAt: 0 };
-// 여행이 바뀌면 이전 여행의 날씨가 남아 첫 페인트에 엉뚱한 도시가 보인다(지금은
-// WX_URL이 좌표를 고정하고 있어 안 보이지만, 좌표가 여행별이 되는 순간 버그가 된다).
-function wxReset() {
-  wxState = { map: {}, at: null, live: false, fetchedAt: 0 };
-}
-// 같은 세션에서 방금 받아온 예보는 다시 받지 않는다(일 단위 예보라 30분이면 충분).
-var WX_TTL_MS = 30 * 60 * 1000;
-function wxIsFresh() {
-  return wxState.live && (Date.now() - wxState.fetchedAt) < WX_TTL_MS;
-}
-
-function wxStamp() {
-  if (wxState.live || !wxState.at) return "";
-  var d = new Date(wxState.at);
-  var hh = ("0" + d.getHours()).slice(-2);
-  var mm = ("0" + d.getMinutes()).slice(-2);
-  return ' <span class="wxstamp">(' + (d.getMonth() + 1) + "/" + d.getDate() +
-    " " + hh + ":" + mm + " 기준)</span>";
-}
-function wxRefresh(st) {
-  if (wxIsFresh()) return;
-  var cached = st.get("weather", null);
-  if (cached && cached.api) {
-    wxState.map = wxDailyMap(cached.api);
-    wxState.at = cached.at;
-  }
-  fetch(WX_URL).then(function (r) {
-    if (!r.ok) throw new Error("wx " + r.status);
-    return r.json();
-  }).then(function (api) {
-    var map = wxDailyMap(api);
-    st.set("weather", { at: new Date().toISOString(), api: api });
-    wxState.map = map;
-    wxState.at = null;
-    wxState.live = true;
-    wxState.fetchedAt = Date.now();
-    wxRepaint();
-  }).catch(function () {
-    if (wxState.at) wxRepaint();
-  });
-}
 // dayN에 해당하는 day를 찾아 타임라인만 다시 그린다. renderTabs(따라서 tab strip의
 // scrollIntoView)는 건드리지 않는다 — 탭 목록이나 선택된 탭이 바뀌지 않은 상황(날씨 갱신,
 // 편집 모드 토글)에서 renderTabs까지 다시 부르면 스크롤이 제자리서 튄다.
@@ -183,6 +104,10 @@ function showDay(trip, dayN) {
   if (day) {
     renderTabs(trip, day.n, function (n) { go('#/t/' + trip.id + '/d/' + n); });
     renderTimeline(trip, day, CUR.st);
+    // 그 일차만 다른 도시일 수 있다 — 여행을 열 때 받아 둔 좌표와 다르면 여기서 받는다.
+    // wxRefresh는 이미 받아 둔 좌표면 곧바로 반환하므로 일차를 오갈 때 요청이 늘지 않는다.
+    var dp = dayPlace(trip, day);
+    if (dp) wxRefresh(CUR.st, dp, wxRepaint);
   } else {
     document.getElementById("daytabs").innerHTML = '';
     document.getElementById("timeline").innerHTML =
@@ -214,13 +139,18 @@ function showTrip(id, tab, dayN) {
   // 다른 여행으로 전환하면서 편집 모드가 그대로 넘어가면, A에서 편집 모드를 켠 채 목록으로
   // 돌아가 B를 열었을 때 B가 편집 모드로 열려버린다. 새로고침은 전역 변수 자체가 초기화되며
   // 자연히 꺼지므로 여기서는 "여행이 바뀌는" 경우만 챙기면 된다.
-  if (switched) { wxReset(); EDIT_MODE = false; }
+  if (switched) { wxResetAll(); EDIT_MODE = false; }
   showScreen("trip");
 
   if (opening) renderSummary(trip, CUR.st);
   showPanelTab(trip, tab || "day", dayN);
   // 날씨 요청은 여행을 열 때만, 그것도 최근에 받아온 게 없을 때만 보낸다.
-  if (opening) wxRefresh(CUR.st);
+  // 좌표는 지금 보고 있는 일차 기준이다(일차마다 도시가 다를 수 있다).
+  if (opening) {
+    var d0 = pickDay(trip, CUR.dayN);
+    var p0 = d0 ? dayPlace(trip, d0) : trip.place;
+    if (p0) wxRefresh(CUR.st, p0, wxRepaint);
+  }
 }
 
 // 탭 전환: 본문과 내비만 다시 그린다. 요약 헤더는 탭이 실제로 바뀔 때만 —
