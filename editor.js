@@ -485,3 +485,30 @@ function moveSection(trip, id, dir) {
   trip.sections[j] = tmp;
   return trip;
 }
+
+// ---- 일차 메모 ----
+// 예전에는 day.meals(엑셀에서 온 "뭐먹지" 문구)와, 그 답을 따로 저장한
+// meal:<date>:<i> 키가 짝을 이뤘다. 자유 메모로 바꾸면서 둘을 notes 하나로 합쳤다.
+// addItem 계열과 같은 계약 — 인자로 받은 day를 그 자리에서 고친다.
+function addNote(day, text) {
+  if (!day) return day;
+  if (!Array.isArray(day.notes)) day.notes = [];
+  var t = String(text == null ? '' : text).trim();
+  if (!t) return day;
+  day.notes.push({ id: newNoteId(), text: t });
+  return day;
+}
+
+function updateNote(day, id, text) {
+  if (!day || !Array.isArray(day.notes)) return day;
+  var t = String(text == null ? '' : text).trim();
+  if (!t) return day;
+  day.notes.forEach(function (n) { if (n.id === id) n.text = t; });
+  return day;
+}
+
+function removeNote(day, id) {
+  if (!day || !Array.isArray(day.notes)) return day;
+  day.notes = day.notes.filter(function (n) { return n.id !== id; });
+  return day;
+}

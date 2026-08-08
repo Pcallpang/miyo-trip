@@ -263,3 +263,19 @@ body { margin:0; background:var(--bg); color:var(--text);
 .eshare button { font:inherit; padding:12px; border:1px solid #d5dde1; border-radius:10px;
   background:var(--card); color:var(--text); cursor:pointer; }
 .eshare .geo-msg { margin:0; }
+
+.notes { padding:12px 16px; border-top:1px solid #eef2f4; background:#fff9f2; }
+.notes-h { font-weight:700; color:var(--accent2); margin-bottom:8px; }
+.notes-empty { margin:0; color:var(--muted); font-size:.85rem; }
+.note { padding:8px 0; border-bottom:1px solid #ffe9d0; }
+.note:last-of-type { border-bottom:0; }
+.note-text .line { font-size:.9rem; }
+.note-btns { display:flex; gap:6px; margin-top:6px; }
+.note-btns button { font:inherit; font-size:.75rem; padding:4px 10px; border-radius:8px;
+  border:1px solid #ffd8a8; background:#fff; color:var(--muted); cursor:pointer; }
+.note-btns .nt-del { color:#c92a2a; border-color:#ffc9c9; }
+.note-add { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+.note-add .nt-text { flex:1 1 100%; font:inherit; padding:9px; border:1px solid #ffd8a8;
+  border-radius:10px; background:#fff; color:var(--text); }
+.note-add button { font:inherit; font-weight:700; padding:9px 16px; border:0; border-radius:10px;
+  background:var(--accent2); color:#fff; cursor:pointer; }

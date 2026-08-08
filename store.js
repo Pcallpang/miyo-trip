@@ -312,3 +312,35 @@ function normalizeImport(o) {
   }
   return t;
 }
+
+// day.meals("뭐먹지" 문구)와 그 답을 담던 meal:<date>:<i> 키를 자유 메모(notes)로 옮긴다.
+// 사용자가 실제로 써 둔 답이 있으면 그것을 메모로 삼고, 비어 있으면 원래 문구를 남긴다 —
+// 문구도 그 여행에서 온 데이터이므로 버리지 않고, 필요 없으면 화면에서 지우면 된다.
+// 재실행해도 안전하다(meals가 비면 아무 것도 하지 않는다).
+function migrateMeals() {
+  var changed = 0;
+  listTrips().forEach(function (row) {
+    var trip = loadTrip(row.id);
+    if (!trip || !Array.isArray(trip.days)) return;
+    var needs = trip.days.some(function (d) { return d && Array.isArray(d.meals) && d.meals.length; });
+    if (!needs) return;
+    var st = tripStore(row.id);
+    var doomed = [];
+    trip.days.forEach(function (d) {
+      if (!d || !Array.isArray(d.meals) || !d.meals.length) return;
+      if (!Array.isArray(d.notes)) d.notes = [];
+      d.meals.forEach(function (prompt, i) {
+        var key = "meal:" + String(d.date) + ":" + i;
+        var answer = String(st.get(key, "") || "").trim();
+        var text = answer || String(prompt == null ? "" : prompt).trim();
+        if (text) d.notes.push({ id: newNoteId(), text: text });
+        doomed.push(tripKey(row.id, key));
+      });
+      d.meals = [];
+    });
+    if (!saveTripBody(trip)) return;   // 저장이 실패하면 구 키를 지우지 않는다
+    doomed.forEach(lsDel);
+    changed++;
+  });
+  return changed;
+}

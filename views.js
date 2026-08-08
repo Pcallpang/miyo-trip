@@ -303,15 +303,29 @@ function renderTimeline(trip, day, st) {
   const rows = slots || (EDIT_MODE
     ? ''
     : '<p class="empty">아직 일정이 없습니다. 편집을 눌러 추가해 보세요.</p>');
-  const meals = (day.meals && day.meals.length)
-    ? '<div class="meals"><div class="meals-h">🍽 뭐먹지</div>' +
-      day.meals.map(function (m, i) {
-        const key = mealKey(day.date, i);
-        const val = escHtml(st.get(key, ""));
-        return '<div class="meal"><div class="meal-note">' + itemLinesHtml(m) + '</div>' +
-          '<input class="memo" data-key="' + escHtml(key) +
-          '" placeholder="식당/메모 입력" value="' + val + '"></div>';
-      }).join('') + '</div>'
+  // 자유 메모. 예전의 "뭐먹지"(엑셀에서 온 문구 + 답 입력칸)를 대체한다 —
+  // 그 틀에 맞지 않는 메모(예약 번호, 챙길 것)를 적을 곳이 없었다.
+  const noteList = Array.isArray(day.notes) ? day.notes : [];
+  const notes = (noteList.length || EDIT_MODE)
+    ? '<div class="notes"><div class="notes-h">📝 메모</div>' +
+      (noteList.length
+        ? noteList.map(function (n) {
+            return '<div class="note"><div class="note-text">' + itemLinesHtml(n.text) + '</div>' +
+              (EDIT_MODE
+                ? '<div class="note-btns">' +
+                  '<button class="nt-edit" type="button" data-id="' + escHtml(n.id) + '">수정</button>' +
+                  '<button class="nt-del" type="button" data-id="' + escHtml(n.id) + '">삭제</button>' +
+                  '</div>'
+                : '') + '</div>';
+          }).join('')
+        : '<p class="notes-empty">아직 메모가 없습니다.</p>') +
+      (EDIT_MODE
+        ? '<form class="note-add">' +
+          '<textarea class="nt-text" rows="2" placeholder="메모 (예: 스시야 19시 예약)" ' +
+            'required aria-label="메모"></textarea>' +
+          '<button type="submit">메모 추가</button></form>'
+        : '') +
+      '</div>'
     : '';
   main.innerHTML =
     '<div class="daycard"><div class="dayhead">' +
@@ -338,8 +352,39 @@ function renderTimeline(trip, day, st) {
             'aria-label="일정 내용"></textarea>' +
           '<button type="submit">일정 추가</button></form>'
         : '') +
-      meals + '</div>';
+      notes + '</div>';
   bindDayImages(trip, day, st, main);
+
+  if (EDIT_MODE) {
+    main.querySelectorAll('.nt-del').forEach(function (b) {
+      b.addEventListener('click', function () {
+        if (!confirm('이 메모를 삭제할까요?')) return;
+        removeNote(day, b.dataset.id);
+        afterItemEdit(trip, day, st, saveTripBody(trip));
+      });
+    });
+    main.querySelectorAll('.nt-edit').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var n = (day.notes || []).filter(function (x) { return x.id === b.dataset.id; })[0];
+        if (!n) return;
+        var text = prompt('메모', n.text);
+        if (text === null) return;
+        if (!String(text).trim()) { alert(MSG_EMPTY_TEXT); return; }
+        updateNote(day, n.id, text);
+        afterItemEdit(trip, day, st, saveTripBody(trip));
+      });
+    });
+    var nf = main.querySelector('.note-add');
+    if (nf) nf.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var ta = nf.querySelector('.nt-text');
+      var text = ta.value.trim();
+      if (!text) { alert(MSG_EMPTY_TEXT); return; }
+      addNote(day, text);
+      ta.value = '';
+      afterItemEdit(trip, day, st, saveTripBody(trip));
+    });
+  }
 
   main.querySelectorAll('.memo').forEach(function (inp) {
     inp.addEventListener('input', function () { st.set(inp.dataset.key, inp.value); });

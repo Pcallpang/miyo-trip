@@ -273,6 +273,22 @@ body { margin:0; background:var(--bg); color:var(--text);
   background:var(--card); color:var(--text); cursor:pointer; }
 .eshare .geo-msg { margin:0; }
 
+.notes { padding:12px 16px; border-top:1px solid #eef2f4; background:#fff9f2; }
+.notes-h { font-weight:700; color:var(--accent2); margin-bottom:8px; }
+.notes-empty { margin:0; color:var(--muted); font-size:.85rem; }
+.note { padding:8px 0; border-bottom:1px solid #ffe9d0; }
+.note:last-of-type { border-bottom:0; }
+.note-text .line { font-size:.9rem; }
+.note-btns { display:flex; gap:6px; margin-top:6px; }
+.note-btns button { font:inherit; font-size:.75rem; padding:4px 10px; border-radius:8px;
+  border:1px solid #ffd8a8; background:#fff; color:var(--muted); cursor:pointer; }
+.note-btns .nt-del { color:#c92a2a; border-color:#ffc9c9; }
+.note-add { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+.note-add .nt-text { flex:1 1 100%; font:inherit; padding:9px; border:1px solid #ffd8a8;
+  border-radius:10px; background:#fff; color:var(--text); }
+.note-add button { font:inherit; font-weight:700; padding:9px 16px; border:0; border-radius:10px;
+  background:var(--accent2); color:#fff; cursor:pointer; }
+
 </style>
 </head>
 <body>
@@ -356,7 +372,8 @@ window.SAMPLE_TRIP = {
         }
       ],
       "meals": [],
-      "images": []
+      "images": [],
+      "notes": []
     },
     {
       "n": 2,
@@ -416,10 +433,14 @@ window.SAMPLE_TRIP = {
           "text": "귀가"
         }
       ],
-      "meals": [
-        "유니버셜 시티워크 저녁 뭐먹지"
-      ],
-      "images": []
+      "meals": [],
+      "images": [],
+      "notes": [
+        {
+          "id": "n_s1",
+          "text": "유니버셜 시티워크 저녁 뭐먹지"
+        }
+      ]
     },
     {
       "n": 3,
@@ -454,11 +475,18 @@ window.SAMPLE_TRIP = {
           "text": "18:50 닛폰바시 도착 후 해산"
         }
       ],
-      "meals": [
-        "아리마 온천 점심 뭐먹지",
-        "도톤보리 저녁 뭐먹지"
-      ],
-      "images": []
+      "meals": [],
+      "images": [],
+      "notes": [
+        {
+          "id": "n_s2",
+          "text": "아리마 온천 점심 뭐먹지"
+        },
+        {
+          "id": "n_s3",
+          "text": "도톤보리 저녁 뭐먹지"
+        }
+      ]
     },
     {
       "n": 4,
@@ -498,11 +526,18 @@ window.SAMPLE_TRIP = {
           "text": "19:00 저녁식사 규카츠 모토무라 도톤보리점 예약 완료"
         }
       ],
-      "meals": [
-        "아라시야마 점심 뭐먹지",
-        "도톤보리 저녁 뭐먹지"
-      ],
-      "images": []
+      "meals": [],
+      "images": [],
+      "notes": [
+        {
+          "id": "n_s4",
+          "text": "아라시야마 점심 뭐먹지"
+        },
+        {
+          "id": "n_s5",
+          "text": "도톤보리 저녁 뭐먹지"
+        }
+      ]
     },
     {
       "n": 5,
@@ -537,11 +572,18 @@ window.SAMPLE_TRIP = {
           "text": "도톤보리 리버 크루즈 탑승 2000엔(패스) & 비어타임"
         }
       ],
-      "meals": [
-        "도톤보리?\n오사카성?\n우메다?",
-        "우메다 저녁 뭐먹지"
-      ],
-      "images": []
+      "meals": [],
+      "images": [],
+      "notes": [
+        {
+          "id": "n_s6",
+          "text": "도톤보리?\n오사카성?\n우메다?"
+        },
+        {
+          "id": "n_s7",
+          "text": "우메다 저녁 뭐먹지"
+        }
+      ]
     },
     {
       "n": 6,
@@ -571,11 +613,18 @@ window.SAMPLE_TRIP = {
           "text": "-쿠시카츠 거리 저녁 식사"
         }
       ],
-      "meals": [
-        "덴포자 점심 뭐먹지",
-        "신세카이 쿠시카츠 거리 뭐먹지"
-      ],
-      "images": []
+      "meals": [],
+      "images": [],
+      "notes": [
+        {
+          "id": "n_s8",
+          "text": "덴포자 점심 뭐먹지"
+        },
+        {
+          "id": "n_s9",
+          "text": "신세카이 쿠시카츠 거리 뭐먹지"
+        }
+      ]
     },
     {
       "n": 7,
@@ -605,10 +654,14 @@ window.SAMPLE_TRIP = {
           "text": "13:40 간사이 공항 출발\n15:30 청주 공항 도착"
         }
       ],
-      "meals": [
-        "점심 뭐먹지"
-      ],
-      "images": []
+      "meals": [],
+      "images": [],
+      "notes": [
+        {
+          "id": "n_s10",
+          "text": "점심 뭐먹지"
+        }
+      ]
     }
   ],
   "sections": [
@@ -1115,6 +1168,38 @@ function normalizeImport(o) {
   return t;
 }
 
+// day.meals("뭐먹지" 문구)와 그 답을 담던 meal:<date>:<i> 키를 자유 메모(notes)로 옮긴다.
+// 사용자가 실제로 써 둔 답이 있으면 그것을 메모로 삼고, 비어 있으면 원래 문구를 남긴다 —
+// 문구도 그 여행에서 온 데이터이므로 버리지 않고, 필요 없으면 화면에서 지우면 된다.
+// 재실행해도 안전하다(meals가 비면 아무 것도 하지 않는다).
+function migrateMeals() {
+  var changed = 0;
+  listTrips().forEach(function (row) {
+    var trip = loadTrip(row.id);
+    if (!trip || !Array.isArray(trip.days)) return;
+    var needs = trip.days.some(function (d) { return d && Array.isArray(d.meals) && d.meals.length; });
+    if (!needs) return;
+    var st = tripStore(row.id);
+    var doomed = [];
+    trip.days.forEach(function (d) {
+      if (!d || !Array.isArray(d.meals) || !d.meals.length) return;
+      if (!Array.isArray(d.notes)) d.notes = [];
+      d.meals.forEach(function (prompt, i) {
+        var key = "meal:" + String(d.date) + ":" + i;
+        var answer = String(st.get(key, "") || "").trim();
+        var text = answer || String(prompt == null ? "" : prompt).trim();
+        if (text) d.notes.push({ id: newNoteId(), text: text });
+        doomed.push(tripKey(row.id, key));
+      });
+      d.meals = [];
+    });
+    if (!saveTripBody(trip)) return;   // 저장이 실패하면 구 키를 지우지 않는다
+    doomed.forEach(lsDel);
+    changed++;
+  });
+  return changed;
+}
+
 </script>
 <script>
 // Trip 스키마 헬퍼: 일차 생성, 재동기화, 기본값.
@@ -1138,10 +1223,11 @@ function daysBetween(a, b) { return Math.round((dateMs(b) - dateMs(a)) / DAY_MS)
 var _seq = 0;
 function newItemId() { return "i_" + Date.now().toString(36) + (_seq++).toString(36); }
 function newSectionId() { return "s_" + Date.now().toString(36) + (_seq++).toString(36); }
+function newNoteId() { return "n_" + Date.now().toString(36) + (_seq++).toString(36); }
 
 function blankDay(n, iso) {
   return { n: n, date: iso, theme: "", place: null, curCode: null,
-           items: [], meals: [], images: [] };
+           items: [], meals: [], notes: [], images: [] };
 }
 
 // 손상된 저장값(검증 없이 가져온 JSON, 손으로 고친 localStorage)이 렌더에서 예외를
@@ -1166,6 +1252,12 @@ function normalizeDay(day) {
   if (!Array.isArray(day.meals)) {
     console.warn('normalizeDay: day.meals가 배열이 아니어서 빈 배열로 보정함', day.meals);
     day.meals = [];
+  }
+  if (!Array.isArray(day.notes)) {
+    if (day.notes !== undefined) {
+      console.warn('normalizeDay: day.notes가 배열이 아니어서 빈 배열로 보정함', day.notes);
+    }
+    day.notes = [];
   }
   day.items = day.items.filter(function (it) { return it && typeof it === 'object'; });
   day.items.forEach(function (it) {
@@ -2082,15 +2174,29 @@ function renderTimeline(trip, day, st) {
   const rows = slots || (EDIT_MODE
     ? ''
     : '<p class="empty">아직 일정이 없습니다. 편집을 눌러 추가해 보세요.</p>');
-  const meals = (day.meals && day.meals.length)
-    ? '<div class="meals"><div class="meals-h">🍽 뭐먹지</div>' +
-      day.meals.map(function (m, i) {
-        const key = mealKey(day.date, i);
-        const val = escHtml(st.get(key, ""));
-        return '<div class="meal"><div class="meal-note">' + itemLinesHtml(m) + '</div>' +
-          '<input class="memo" data-key="' + escHtml(key) +
-          '" placeholder="식당/메모 입력" value="' + val + '"></div>';
-      }).join('') + '</div>'
+  // 자유 메모. 예전의 "뭐먹지"(엑셀에서 온 문구 + 답 입력칸)를 대체한다 —
+  // 그 틀에 맞지 않는 메모(예약 번호, 챙길 것)를 적을 곳이 없었다.
+  const noteList = Array.isArray(day.notes) ? day.notes : [];
+  const notes = (noteList.length || EDIT_MODE)
+    ? '<div class="notes"><div class="notes-h">📝 메모</div>' +
+      (noteList.length
+        ? noteList.map(function (n) {
+            return '<div class="note"><div class="note-text">' + itemLinesHtml(n.text) + '</div>' +
+              (EDIT_MODE
+                ? '<div class="note-btns">' +
+                  '<button class="nt-edit" type="button" data-id="' + escHtml(n.id) + '">수정</button>' +
+                  '<button class="nt-del" type="button" data-id="' + escHtml(n.id) + '">삭제</button>' +
+                  '</div>'
+                : '') + '</div>';
+          }).join('')
+        : '<p class="notes-empty">아직 메모가 없습니다.</p>') +
+      (EDIT_MODE
+        ? '<form class="note-add">' +
+          '<textarea class="nt-text" rows="2" placeholder="메모 (예: 스시야 19시 예약)" ' +
+            'required aria-label="메모"></textarea>' +
+          '<button type="submit">메모 추가</button></form>'
+        : '') +
+      '</div>'
     : '';
   main.innerHTML =
     '<div class="daycard"><div class="dayhead">' +
@@ -2117,8 +2223,39 @@ function renderTimeline(trip, day, st) {
             'aria-label="일정 내용"></textarea>' +
           '<button type="submit">일정 추가</button></form>'
         : '') +
-      meals + '</div>';
+      notes + '</div>';
   bindDayImages(trip, day, st, main);
+
+  if (EDIT_MODE) {
+    main.querySelectorAll('.nt-del').forEach(function (b) {
+      b.addEventListener('click', function () {
+        if (!confirm('이 메모를 삭제할까요?')) return;
+        removeNote(day, b.dataset.id);
+        afterItemEdit(trip, day, st, saveTripBody(trip));
+      });
+    });
+    main.querySelectorAll('.nt-edit').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var n = (day.notes || []).filter(function (x) { return x.id === b.dataset.id; })[0];
+        if (!n) return;
+        var text = prompt('메모', n.text);
+        if (text === null) return;
+        if (!String(text).trim()) { alert(MSG_EMPTY_TEXT); return; }
+        updateNote(day, n.id, text);
+        afterItemEdit(trip, day, st, saveTripBody(trip));
+      });
+    });
+    var nf = main.querySelector('.note-add');
+    if (nf) nf.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var ta = nf.querySelector('.nt-text');
+      var text = ta.value.trim();
+      if (!text) { alert(MSG_EMPTY_TEXT); return; }
+      addNote(day, text);
+      ta.value = '';
+      afterItemEdit(trip, day, st, saveTripBody(trip));
+    });
+  }
 
   main.querySelectorAll('.memo').forEach(function (inp) {
     inp.addEventListener('input', function () { st.set(inp.dataset.key, inp.value); });
@@ -3120,6 +3257,33 @@ function moveSection(trip, id, dir) {
   return trip;
 }
 
+// ---- 일차 메모 ----
+// 예전에는 day.meals(엑셀에서 온 "뭐먹지" 문구)와, 그 답을 따로 저장한
+// meal:<date>:<i> 키가 짝을 이뤘다. 자유 메모로 바꾸면서 둘을 notes 하나로 합쳤다.
+// addItem 계열과 같은 계약 — 인자로 받은 day를 그 자리에서 고친다.
+function addNote(day, text) {
+  if (!day) return day;
+  if (!Array.isArray(day.notes)) day.notes = [];
+  var t = String(text == null ? '' : text).trim();
+  if (!t) return day;
+  day.notes.push({ id: newNoteId(), text: t });
+  return day;
+}
+
+function updateNote(day, id, text) {
+  if (!day || !Array.isArray(day.notes)) return day;
+  var t = String(text == null ? '' : text).trim();
+  if (!t) return day;
+  day.notes.forEach(function (n) { if (n.id === id) n.text = t; });
+  return day;
+}
+
+function removeNote(day, id) {
+  if (!day || !Array.isArray(day.notes)) return day;
+  day.notes = day.notes.filter(function (n) { return n.id !== id; });
+  return day;
+}
+
 </script>
 <script>
 // 해시 라우터와 부팅. 렌더는 views.js, 외부 조회는 remote.js에 있다.
@@ -3354,6 +3518,8 @@ document.addEventListener("DOMContentLoaded", function () {
   migrateSections();
   // 경비 레코드에 통화를 붙인다(구 {jpy} → {amount, cur}).
   migrateSpend();
+  // 뭐먹지(meals)를 자유 메모(notes)로 옮긴다.
+  migrateMeals();
 
   document.getElementById("new-trip")
     .addEventListener("click", function () { go('#/new'); });
