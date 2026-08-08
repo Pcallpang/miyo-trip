@@ -184,7 +184,7 @@ git -c user.name="Pcallpang" -c user.email="ljh6479z@naver.com" \
   - `defaultCurrency(): obj` — KRW
   - `fmtAmount(amount, cur): string` — `"¥1,200"`, `"$12.50"`, `"₫120,000"`
   - `toKRW(amount, code, rates): number|null` — 환율이 없으면 `null`
-  - `fmtKRW(krw): string` — `"10,744원"`
+  - `fmtKRW(krw): string` — `"10,745원"`
   - `spendTotals(list): Array<{cur, amount}>` — 통화별 합계
   - `spendByCat(list)` / `spendByDate(list)` — **views.js에서 이곳으로 옮긴다**(통화 축이 붙는다)
 
