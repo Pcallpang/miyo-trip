@@ -44,6 +44,19 @@ function showScreen(which) {
   });
 }
 
+// 가져온 JSON을 검증해 저장한다. 결과 메시지를 돌려준다(성공이면 null).
+// 파일 하나가 잘못돼도 앱은 그대로 동작해야 하므로 던지지 않는다.
+function importTripJson(text) {
+  var o;
+  try { o = JSON.parse(text); }
+  catch (e) { return '파일을 읽을 수 없습니다. 여행 파일이 맞는지 확인해 주세요.'; }
+  var err = validateImport(o);
+  if (err) return err;
+  var trip = normalizeImport(o);
+  if (!saveTrip(trip)) return '저장에 실패했습니다. 기기 저장 공간을 확인해 주세요.';
+  return null;
+}
+
 function showList() {
   showScreen("list");
   var trips = listTrips();
@@ -220,6 +233,28 @@ document.addEventListener("DOMContentLoaded", function () {
 
   document.getElementById("new-trip")
     .addEventListener("click", function () { go('#/new'); });
+
+  var imp = document.getElementById("import-trip");
+  var impInput = document.getElementById("import-file");
+  if (imp && impInput) {
+    imp.addEventListener("click", function () { impInput.click(); });
+    impInput.addEventListener("change", function () {
+      var file = (impInput.files || [])[0];
+      if (!file) return;
+      var reader = new FileReader();
+      reader.onload = function () {
+        var err = importTripJson(String(reader.result));
+        impInput.value = '';
+        if (err) { alert(err); return; }
+        showList();
+      };
+      reader.onerror = function () {
+        impInput.value = '';
+        alert('파일을 읽을 수 없습니다.');
+      };
+      reader.readAsText(file);
+    });
+  }
   document.getElementById("add-sample")
     .addEventListener("click", function () {
       // installSample은 저장 실패 시 null을 돌려준다 — 그대로 이동하면 showTrip이

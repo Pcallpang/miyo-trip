@@ -120,10 +120,33 @@ function showEdit(id) {
         '<ul class="daycity-list" id="daycity-list"></ul></div>' : '') +
       '<div class="eerr" id="e-err" hidden></div>' +
       '<button type="submit">' + (trip ? '저장' : '만들기') + '</button>' +
-    '</form>';
+    '</form>' +
+    // 내보내기는 기존 여행에서만 — 새 여행은 아직 저장된 게 없다.
+    (trip ? '<div class="eshare">' +
+      '<div class="geo-lbl">내보내기</div>' +
+      '<button id="e-export" type="button">📤 이 여행을 파일로 저장</button>' +
+      '<p class="geo-msg">사진은 파일에 담기지 않습니다. 일정·경비·준비물만 저장됩니다.</p>' +
+      '</div>' : '');
 
   document.getElementById("e-back").addEventListener("click", function () {
     go(trip ? '#/t/' + trip.id : '#/');
+  });
+
+  var exportBtn = document.getElementById("e-export");
+  if (exportBtn) exportBtn.addEventListener('click', function () {
+    // 사진(IndexedDB의 blob)은 담지 않는다 — base64로 인라인하면 파일이 수십 MB가
+    // 되고, 받는 쪽에서 다시 IndexedDB에 넣어야 해 실패 지점이 늘어난다.
+    // day.images의 id는 남지만 그 blob이 없으므로 렌더가 조용히 건너뛴다.
+    var data = JSON.stringify(trip, null, 2);
+    var blob = new Blob([data], { type: 'application/json' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = exportFilename(trip);
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
   });
 
   // undefined면 "도시를 건드리지 않음" — applyTripForm이 기존 값을 유지한다.

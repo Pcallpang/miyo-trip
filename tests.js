@@ -1316,3 +1316,57 @@ eq('사용 중인 이미지 수집', usedImageIds({ days: [
 ]}), ['a','b','c']);
 eq('빈 여행', usedImageIds({ days: [] }), []);
 eq('days 없어도 안전', usedImageIds({}), []);
+
+// ---- 내보내기·가져오기 (3단계) ----
+eq('내보내기 파일명', exportFilename({ title:'오사카 여행', start:'2026-07-28' }),
+  '오사카 여행-2026-07-28.json');
+eq('파일명에서 경로문자 제거',
+  exportFilename({ title:'a/b' + String.fromCharCode(92) + 'c:d*e?f"g<h>i|j', start:'2026-01-01' }), 'a-b-c-d-e-f-g-h-i-j-2026-01-01.json');
+eq('제목 없으면 기본값', exportFilename({ start:'2026-01-01' }), '여행-2026-01-01.json');
+
+// 검증: 정상
+var GOOD = { schema:1, title:'다낭', start:'2026-09-01', end:'2026-09-03', party:2,
+  place:null, currency:{code:'VND',symbol:'₫',decimals:0,unit:1000}, hotel:'', budgetKRW:0,
+  days:[{n:1,date:'2026-09-01',theme:'',place:null,curCode:null,items:[],meals:[],images:[]}],
+  sections:[], packing:[], expenses:[] };
+eq('정상 데이터는 통과', validateImport(GOOD), null);
+
+eq('객체가 아니면 거부', validateImport(null), '여행 파일이 아닙니다.');
+eq('배열도 거부', validateImport([]), '여행 파일이 아닙니다.');
+eq('제목 없으면 거부', validateImport(Object.assign({}, GOOD, { title:'' })),
+  '제목이 없습니다.');
+eq('날짜 형식 거부', validateImport(Object.assign({}, GOOD, { start:'2026/09/01' })),
+  '날짜 형식이 올바르지 않습니다.');
+eq('종료가 시작보다 빠르면 거부', validateImport(Object.assign({}, GOOD, { end:'2026-08-01' })),
+  '종료일이 시작일보다 빠릅니다.');
+eq('days가 배열이 아니면 거부', validateImport(Object.assign({}, GOOD, { days:'x' })),
+  '일정 데이터가 올바르지 않습니다.');
+eq('일차가 너무 많으면 거부',
+  validateImport(Object.assign({}, GOOD, { days: new Array(400).fill({n:1,date:'2026-09-01'}) })),
+  '일정이 너무 많습니다.');
+eq('스키마 버전이 미래면 거부', validateImport(Object.assign({}, GOOD, { schema: 99 })),
+  '더 새로운 버전에서 만든 파일입니다.');
+
+// 정규화: 빠진 필드를 채우고 새 id를 준다
+(function () {
+  var t = normalizeImport({ schema:1, title:'다낭', start:'2026-09-01', end:'2026-09-02' });
+  eq('새 id 부여', t.id.slice(0,2), 't_');
+  eq('일차 자동 생성', t.days.length, 2);
+  eq('빠진 배열 채움', [t.sections, t.packing, t.expenses], [[], [], []]);
+  eq('통화 기본값', t.currency.code, 'KRW');
+  eq('스키마 버전', t.schema, 1);
+
+  // 악의적인 값이 있어도 구조만 받아들인다 — 렌더는 escHtml이 막지만
+  // 저장 단계에서도 타입을 맞춰 둔다.
+  var bad = normalizeImport({ schema:1, title:'x', start:'2026-09-01', end:'2026-09-01',
+    party:'많이', budgetKRW:'무한', days:[{ n:1, date:'2026-09-01', items:'x', images:'y' }] });
+  eq('인원은 숫자로', bad.party, 2);
+  eq('예산은 숫자로', bad.budgetKRW, 0);
+  eq('items는 배열로', bad.days[0].items, []);
+  eq('images는 배열로', bad.days[0].images, []);
+})();
+
+// 같은 파일을 두 번 가져와도 id가 겹치지 않는다
+eq('가져올 때마다 새 id',
+  normalizeImport({ schema:1, title:'a', start:'2026-09-01', end:'2026-09-01' }).id ===
+  normalizeImport({ schema:1, title:'a', start:'2026-09-01', end:'2026-09-01' }).id, false);
