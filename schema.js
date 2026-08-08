@@ -19,10 +19,12 @@ function daysBetween(a, b) { return Math.round((dateMs(b) - dateMs(a)) / DAY_MS)
 var _seq = 0;
 function newItemId() { return "i_" + Date.now().toString(36) + (_seq++).toString(36); }
 function newSectionId() { return "s_" + Date.now().toString(36) + (_seq++).toString(36); }
+function newNoteId() { return "n_" + Date.now().toString(36) + (_seq++).toString(36); }
+function newExpenseId() { return "e_" + Date.now().toString(36) + (_seq++).toString(36); }
 
 function blankDay(n, iso) {
   return { n: n, date: iso, theme: "", place: null, curCode: null,
-           items: [], meals: [], images: [] };
+           items: [], meals: [], notes: [], images: [] };
 }
 
 // 손상된 저장값(검증 없이 가져온 JSON, 손으로 고친 localStorage)이 렌더에서 예외를
@@ -47,6 +49,12 @@ function normalizeDay(day) {
   if (!Array.isArray(day.meals)) {
     console.warn('normalizeDay: day.meals가 배열이 아니어서 빈 배열로 보정함', day.meals);
     day.meals = [];
+  }
+  if (!Array.isArray(day.notes)) {
+    if (day.notes !== undefined) {
+      console.warn('normalizeDay: day.notes가 배열이 아니어서 빈 배열로 보정함', day.notes);
+    }
+    day.notes = [];
   }
   day.items = day.items.filter(function (it) { return it && typeof it === 'object'; });
   day.items.forEach(function (it) {

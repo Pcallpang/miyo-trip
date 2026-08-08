@@ -273,6 +273,48 @@ body { margin:0; background:var(--bg); color:var(--text);
   background:var(--card); color:var(--text); cursor:pointer; }
 .eshare .geo-msg { margin:0; }
 
+.notes { padding:12px 16px; border-top:1px solid #eef2f4; background:#fff9f2; }
+.notes-h { font-weight:700; color:var(--accent2); margin-bottom:8px; }
+.notes-empty { margin:0; color:var(--muted); font-size:.85rem; }
+.note { padding:8px 0; border-bottom:1px solid #ffe9d0; }
+.note:last-of-type { border-bottom:0; }
+.note-text .line { font-size:.9rem; }
+.note-btns { display:flex; gap:6px; margin-top:6px; }
+.note-btns button { font:inherit; font-size:.75rem; padding:4px 10px; border-radius:8px;
+  border:1px solid #ffd8a8; background:#fff; color:var(--muted); cursor:pointer; }
+.note-btns .nt-del { color:#c92a2a; border-color:#ffc9c9; }
+.note-add { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+.note-add .nt-text { flex:1 1 100%; font:inherit; padding:9px; border:1px solid #ffd8a8;
+  border-radius:10px; background:#fff; color:var(--text); }
+.note-add button { font:inherit; font-weight:700; padding:9px 16px; border:0; border-radius:10px;
+  background:var(--accent2); color:#fff; cursor:pointer; }
+
+.exp-actions { display:flex; gap:8px; margin-top:10px; }
+.exp-actions button { flex:1; font:inherit; font-size:.85rem; padding:10px; border:1px solid #d5dde1;
+  border-radius:10px; background:var(--card); color:var(--text); cursor:pointer; }
+.exp-actions .exp-mode[data-on] { background:var(--accent); color:#fff; border-color:var(--accent);
+  font-weight:700; }
+.exp-actions .exp-new { background:var(--accent); color:#fff; border-color:var(--accent); font-weight:700; }
+.exp-tools { white-space:nowrap; }
+.exp-tools button { font:inherit; font-size:.72rem; padding:3px 8px; border:1px solid #d5dde1;
+  border-radius:6px; background:var(--card); color:var(--muted); cursor:pointer; margin-left:4px; }
+.exp-tools .exp-rm { color:#c92a2a; border-color:#ffc9c9; }
+.exp-form { display:flex; flex-direction:column; gap:8px; margin-top:10px; }
+.exp-form input { font:inherit; color:var(--text); padding:10px; border:1px solid #d5dde1;
+  border-radius:10px; background:var(--card); min-width:0; }
+.exp-row { display:flex; gap:8px; }
+.exp-row > * { flex:1; min-width:0; }
+.exp-row button { font:inherit; font-weight:700; padding:11px; border:0; border-radius:10px;
+  background:var(--accent); color:#fff; cursor:pointer; }
+.exp-row .exp-cancel { background:var(--card); color:var(--muted); border:1px solid #d5dde1;
+  font-weight:400; }
+.exp-err { background:#fff0f0; color:#c92a2a; border-left:4px solid #e03131;
+  padding:9px 12px; border-radius:8px; font-size:.85rem; }
+
+.cur-line { font-size:.9rem; color:var(--muted); margin-top:-6px; }
+.cur-line b { color:var(--text); }
+.geo-cur .geo-hint { color:var(--muted); }
+
 </style>
 </head>
 <body>
@@ -356,7 +398,8 @@ window.SAMPLE_TRIP = {
         }
       ],
       "meals": [],
-      "images": []
+      "images": [],
+      "notes": []
     },
     {
       "n": 2,
@@ -416,10 +459,14 @@ window.SAMPLE_TRIP = {
           "text": "귀가"
         }
       ],
-      "meals": [
-        "유니버셜 시티워크 저녁 뭐먹지"
-      ],
-      "images": []
+      "meals": [],
+      "images": [],
+      "notes": [
+        {
+          "id": "n_s1",
+          "text": "유니버셜 시티워크 저녁 뭐먹지"
+        }
+      ]
     },
     {
       "n": 3,
@@ -454,11 +501,18 @@ window.SAMPLE_TRIP = {
           "text": "18:50 닛폰바시 도착 후 해산"
         }
       ],
-      "meals": [
-        "아리마 온천 점심 뭐먹지",
-        "도톤보리 저녁 뭐먹지"
-      ],
-      "images": []
+      "meals": [],
+      "images": [],
+      "notes": [
+        {
+          "id": "n_s2",
+          "text": "아리마 온천 점심 뭐먹지"
+        },
+        {
+          "id": "n_s3",
+          "text": "도톤보리 저녁 뭐먹지"
+        }
+      ]
     },
     {
       "n": 4,
@@ -498,11 +552,18 @@ window.SAMPLE_TRIP = {
           "text": "19:00 저녁식사 규카츠 모토무라 도톤보리점 예약 완료"
         }
       ],
-      "meals": [
-        "아라시야마 점심 뭐먹지",
-        "도톤보리 저녁 뭐먹지"
-      ],
-      "images": []
+      "meals": [],
+      "images": [],
+      "notes": [
+        {
+          "id": "n_s4",
+          "text": "아라시야마 점심 뭐먹지"
+        },
+        {
+          "id": "n_s5",
+          "text": "도톤보리 저녁 뭐먹지"
+        }
+      ]
     },
     {
       "n": 5,
@@ -537,11 +598,18 @@ window.SAMPLE_TRIP = {
           "text": "도톤보리 리버 크루즈 탑승 2000엔(패스) & 비어타임"
         }
       ],
-      "meals": [
-        "도톤보리?\n오사카성?\n우메다?",
-        "우메다 저녁 뭐먹지"
-      ],
-      "images": []
+      "meals": [],
+      "images": [],
+      "notes": [
+        {
+          "id": "n_s6",
+          "text": "도톤보리?\n오사카성?\n우메다?"
+        },
+        {
+          "id": "n_s7",
+          "text": "우메다 저녁 뭐먹지"
+        }
+      ]
     },
     {
       "n": 6,
@@ -571,11 +639,18 @@ window.SAMPLE_TRIP = {
           "text": "-쿠시카츠 거리 저녁 식사"
         }
       ],
-      "meals": [
-        "덴포자 점심 뭐먹지",
-        "신세카이 쿠시카츠 거리 뭐먹지"
-      ],
-      "images": []
+      "meals": [],
+      "images": [],
+      "notes": [
+        {
+          "id": "n_s8",
+          "text": "덴포자 점심 뭐먹지"
+        },
+        {
+          "id": "n_s9",
+          "text": "신세카이 쿠시카츠 거리 뭐먹지"
+        }
+      ]
     },
     {
       "n": 7,
@@ -605,10 +680,14 @@ window.SAMPLE_TRIP = {
           "text": "13:40 간사이 공항 출발\n15:30 청주 공항 도착"
         }
       ],
-      "meals": [
-        "점심 뭐먹지"
-      ],
-      "images": []
+      "meals": [],
+      "images": [],
+      "notes": [
+        {
+          "id": "n_s10",
+          "text": "점심 뭐먹지"
+        }
+      ]
     }
   ],
   "sections": [
@@ -1115,6 +1194,53 @@ function normalizeImport(o) {
   return t;
 }
 
+// day.meals("뭐먹지" 문구)와 그 답을 담던 meal:<date>:<i> 키를 자유 메모(notes)로 옮긴다.
+// 사용자가 실제로 써 둔 답이 있으면 그것을 메모로 삼고, 비어 있으면 원래 문구를 남긴다 —
+// 문구도 그 여행에서 온 데이터이므로 버리지 않고, 필요 없으면 화면에서 지우면 된다.
+// 재실행해도 안전하다(meals가 비면 아무 것도 하지 않는다).
+function migrateMeals() {
+  var changed = 0;
+  listTrips().forEach(function (row) {
+    var trip = loadTrip(row.id);
+    if (!trip || !Array.isArray(trip.days)) return;
+    var needs = trip.days.some(function (d) { return d && Array.isArray(d.meals) && d.meals.length; });
+    if (!needs) return;
+    var st = tripStore(row.id);
+    var doomed = [];
+    trip.days.forEach(function (d) {
+      if (!d || !Array.isArray(d.meals) || !d.meals.length) return;
+      if (!Array.isArray(d.notes)) d.notes = [];
+      d.meals.forEach(function (prompt, i) {
+        var key = "meal:" + String(d.date) + ":" + i;
+        var answer = String(st.get(key, "") || "").trim();
+        var text = answer || String(prompt == null ? "" : prompt).trim();
+        if (text) d.notes.push({ id: newNoteId(), text: text });
+        doomed.push(tripKey(row.id, key));
+      });
+      d.meals = [];
+    });
+    if (!saveTripBody(trip)) return;   // 저장이 실패하면 구 키를 지우지 않는다
+    doomed.forEach(lsDel);
+    changed++;
+  });
+  return changed;
+}
+
+// 구 결제 내역에는 id가 없다(엑셀에서 온 그대로였다). 편집·삭제하려면 항목을
+// 가리킬 수단이 있어야 하므로 부여한다. 재실행해도 안전하다.
+function migrateExpenseIds() {
+  var changed = 0;
+  listTrips().forEach(function (row) {
+    var trip = loadTrip(row.id);
+    if (!trip || !Array.isArray(trip.expenses) || !trip.expenses.length) return;
+    var needs = trip.expenses.some(function (e) { return e && !e.id; });
+    if (!needs) return;
+    trip.expenses.forEach(function (e) { if (e && !e.id) e.id = newExpenseId(); });
+    if (saveTripBody(trip)) changed++;
+  });
+  return changed;
+}
+
 </script>
 <script>
 // Trip 스키마 헬퍼: 일차 생성, 재동기화, 기본값.
@@ -1138,10 +1264,12 @@ function daysBetween(a, b) { return Math.round((dateMs(b) - dateMs(a)) / DAY_MS)
 var _seq = 0;
 function newItemId() { return "i_" + Date.now().toString(36) + (_seq++).toString(36); }
 function newSectionId() { return "s_" + Date.now().toString(36) + (_seq++).toString(36); }
+function newNoteId() { return "n_" + Date.now().toString(36) + (_seq++).toString(36); }
+function newExpenseId() { return "e_" + Date.now().toString(36) + (_seq++).toString(36); }
 
 function blankDay(n, iso) {
   return { n: n, date: iso, theme: "", place: null, curCode: null,
-           items: [], meals: [], images: [] };
+           items: [], meals: [], notes: [], images: [] };
 }
 
 // 손상된 저장값(검증 없이 가져온 JSON, 손으로 고친 localStorage)이 렌더에서 예외를
@@ -1166,6 +1294,12 @@ function normalizeDay(day) {
   if (!Array.isArray(day.meals)) {
     console.warn('normalizeDay: day.meals가 배열이 아니어서 빈 배열로 보정함', day.meals);
     day.meals = [];
+  }
+  if (!Array.isArray(day.notes)) {
+    if (day.notes !== undefined) {
+      console.warn('normalizeDay: day.notes가 배열이 아니어서 빈 배열로 보정함', day.notes);
+    }
+    day.notes = [];
   }
   day.items = day.items.filter(function (it) { return it && typeof it === 'object'; });
   day.items.forEach(function (it) {
@@ -1530,6 +1664,87 @@ function currencyForCountry(cc) {
   var k = String(cc || "").toUpperCase();
   var code = COUNTRY_CURRENCY[k];
   return code ? currencyByCode(code) : null;
+}
+
+// 새 여행에서 나라를 먼저 고르면 통화가 따라온다 — 통화 코드를 외우는 것보다
+// 나라를 고르는 편이 자연스럽다. 통화는 COUNTRY_CURRENCY가 결정하므로 여기에는
+// 코드와 이름만 둔다(둘이 어긋나지 않게 하려고 통화를 중복해 적지 않는다).
+// 한국인이 실제로 가는 여행지를 중심으로 추렸고, 가나다순이다.
+var COUNTRIES = [
+  { cc: "GU", name: "괌" },
+  { cc: "GR", name: "그리스" },
+  { cc: "ZA", name: "남아프리카공화국" },
+  { cc: "NL", name: "네덜란드" },
+  { cc: "NP", name: "네팔" },
+  { cc: "NO", name: "노르웨이" },
+  { cc: "NZ", name: "뉴질랜드" },
+  { cc: "TW", name: "대만" },
+  { cc: "KR", name: "대한민국" },
+  { cc: "DK", name: "덴마크" },
+  { cc: "DE", name: "독일" },
+  { cc: "LA", name: "라오스" },
+  { cc: "RU", name: "러시아" },
+  { cc: "MO", name: "마카오" },
+  { cc: "MY", name: "말레이시아" },
+  { cc: "MX", name: "멕시코" },
+  { cc: "MA", name: "모로코" },
+  { cc: "MV", name: "몰디브" },
+  { cc: "MN", name: "몽골" },
+  { cc: "US", name: "미국" },
+  { cc: "MM", name: "미얀마" },
+  { cc: "VN", name: "베트남" },
+  { cc: "BE", name: "벨기에" },
+  { cc: "BR", name: "브라질" },
+  { cc: "BN", name: "브루나이" },
+  { cc: "SA", name: "사우디아라비아" },
+  { cc: "LK", name: "스리랑카" },
+  { cc: "SE", name: "스웨덴" },
+  { cc: "CH", name: "스위스" },
+  { cc: "ES", name: "스페인" },
+  { cc: "SG", name: "싱가포르" },
+  { cc: "AE", name: "아랍에미리트" },
+  { cc: "AR", name: "아르헨티나" },
+  { cc: "IS", name: "아이슬란드" },
+  { cc: "IE", name: "아일랜드" },
+  { cc: "GB", name: "영국" },
+  { cc: "AT", name: "오스트리아" },
+  { cc: "JO", name: "요르단" },
+  { cc: "UZ", name: "우즈베키스탄" },
+  { cc: "IL", name: "이스라엘" },
+  { cc: "EG", name: "이집트" },
+  { cc: "IT", name: "이탈리아" },
+  { cc: "IN", name: "인도" },
+  { cc: "ID", name: "인도네시아" },
+  { cc: "JP", name: "일본" },
+  { cc: "CN", name: "중국" },
+  { cc: "CZ", name: "체코" },
+  { cc: "CL", name: "칠레" },
+  { cc: "KZ", name: "카자흐스탄" },
+  { cc: "QA", name: "카타르" },
+  { cc: "KH", name: "캄보디아" },
+  { cc: "CA", name: "캐나다" },
+  { cc: "KE", name: "케냐" },
+  { cc: "HR", name: "크로아티아" },
+  { cc: "TH", name: "태국" },
+  { cc: "TR", name: "터키" },
+  { cc: "PE", name: "페루" },
+  { cc: "PT", name: "포르투갈" },
+  { cc: "PL", name: "폴란드" },
+  { cc: "FR", name: "프랑스" },
+  { cc: "FJ", name: "피지" },
+  { cc: "FI", name: "핀란드" },
+  { cc: "PH", name: "필리핀" },
+  { cc: "HU", name: "헝가리" },
+  { cc: "AU", name: "호주" },
+  { cc: "HK", name: "홍콩" }
+];
+
+// COUNTRY_CURRENCY에서 통화를 끌어와 합쳐 준다.
+function countryByCode(cc) {
+  var k = String(cc || "").toUpperCase();
+  var row = COUNTRIES.filter(function (c) { return c.cc === k; })[0];
+  if (!row) return null;
+  return { cc: row.cc, name: row.name, cur: COUNTRY_CURRENCY[row.cc] };
 }
 
 </script>
@@ -2082,15 +2297,29 @@ function renderTimeline(trip, day, st) {
   const rows = slots || (EDIT_MODE
     ? ''
     : '<p class="empty">아직 일정이 없습니다. 편집을 눌러 추가해 보세요.</p>');
-  const meals = (day.meals && day.meals.length)
-    ? '<div class="meals"><div class="meals-h">🍽 뭐먹지</div>' +
-      day.meals.map(function (m, i) {
-        const key = mealKey(day.date, i);
-        const val = escHtml(st.get(key, ""));
-        return '<div class="meal"><div class="meal-note">' + itemLinesHtml(m) + '</div>' +
-          '<input class="memo" data-key="' + escHtml(key) +
-          '" placeholder="식당/메모 입력" value="' + val + '"></div>';
-      }).join('') + '</div>'
+  // 자유 메모. 예전의 "뭐먹지"(엑셀에서 온 문구 + 답 입력칸)를 대체한다 —
+  // 그 틀에 맞지 않는 메모(예약 번호, 챙길 것)를 적을 곳이 없었다.
+  const noteList = Array.isArray(day.notes) ? day.notes : [];
+  const notes = (noteList.length || EDIT_MODE)
+    ? '<div class="notes"><div class="notes-h">📝 메모</div>' +
+      (noteList.length
+        ? noteList.map(function (n) {
+            return '<div class="note"><div class="note-text">' + itemLinesHtml(n.text) + '</div>' +
+              (EDIT_MODE
+                ? '<div class="note-btns">' +
+                  '<button class="nt-edit" type="button" data-id="' + escHtml(n.id) + '">수정</button>' +
+                  '<button class="nt-del" type="button" data-id="' + escHtml(n.id) + '">삭제</button>' +
+                  '</div>'
+                : '') + '</div>';
+          }).join('')
+        : '<p class="notes-empty">아직 메모가 없습니다.</p>') +
+      (EDIT_MODE
+        ? '<form class="note-add">' +
+          '<textarea class="nt-text" rows="2" placeholder="메모 (예: 스시야 19시 예약)" ' +
+            'required aria-label="메모"></textarea>' +
+          '<button type="submit">메모 추가</button></form>'
+        : '') +
+      '</div>'
     : '';
   main.innerHTML =
     '<div class="daycard"><div class="dayhead">' +
@@ -2117,8 +2346,39 @@ function renderTimeline(trip, day, st) {
             'aria-label="일정 내용"></textarea>' +
           '<button type="submit">일정 추가</button></form>'
         : '') +
-      meals + '</div>';
+      notes + '</div>';
   bindDayImages(trip, day, st, main);
+
+  if (EDIT_MODE) {
+    main.querySelectorAll('.nt-del').forEach(function (b) {
+      b.addEventListener('click', function () {
+        if (!confirm('이 메모를 삭제할까요?')) return;
+        removeNote(day, b.dataset.id);
+        afterItemEdit(trip, day, st, saveTripBody(trip));
+      });
+    });
+    main.querySelectorAll('.nt-edit').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var n = (day.notes || []).filter(function (x) { return x.id === b.dataset.id; })[0];
+        if (!n) return;
+        var text = prompt('메모', n.text);
+        if (text === null) return;
+        if (!String(text).trim()) { alert(MSG_EMPTY_TEXT); return; }
+        updateNote(day, n.id, text);
+        afterItemEdit(trip, day, st, saveTripBody(trip));
+      });
+    });
+    var nf = main.querySelector('.note-add');
+    if (nf) nf.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var ta = nf.querySelector('.nt-text');
+      var text = ta.value.trim();
+      if (!text) { alert(MSG_EMPTY_TEXT); return; }
+      addNote(day, text);
+      ta.value = '';
+      afterItemEdit(trip, day, st, saveTripBody(trip));
+    });
+  }
 
   main.querySelectorAll('.memo').forEach(function (inp) {
     inp.addEventListener('input', function () { st.set(inp.dataset.key, inp.value); });
@@ -2207,14 +2467,55 @@ function sectionBodyHtml(trip, sec) {
 function expensesTableHtml(trip) {
   const rows = trip.expenses.map(function (e) {
     return '<tr><td>' + escHtml(e.cat) + '</td><td>' + escHtml(e.detail) + '</td>' +
-      '<td class="num">' + Number(e.krw).toLocaleString('ko-KR') + '</td></tr>';
+      '<td class="num">' + Number(e.krw).toLocaleString('ko-KR') + '</td>' +
+      (EXP_EDIT
+        ? '<td class="num exp-tools">' +
+          '<button class="exp-ed" type="button" data-id="' + escHtml(e.id) + '">수정</button>' +
+          '<button class="exp-rm" type="button" data-id="' + escHtml(e.id) + '">삭제</button></td>'
+        : '') +
+      '</tr>';
   }).join('');
   const total = trip.expenses.reduce(function (s, e) { return s + Number(e.krw || 0); }, 0);
   return '<div class="tblwrap"><table>' +
-    '<thead><tr><th>항목</th><th>상세</th><th class="num">금액(원)</th></tr></thead>' +
+    '<thead><tr><th>항목</th><th>상세</th><th class="num">금액(원)</th>' +
+      (EXP_EDIT ? '<th></th>' : '') + '</tr></thead>' +
     '<tbody>' + rows + '</tbody>' +
     '<tfoot><tr><td colspan="2">합계</td><td class="num">' +
-      total.toLocaleString('ko-KR') + '</td></tr></tfoot></table></div>';
+      total.toLocaleString('ko-KR') + '</td>' + (EXP_EDIT ? '<td></td>' : '') +
+      '</tr></tfoot></table></div>';
+}
+
+// 경비 탭의 '출발 전 결제 내역' 편집 모드. EDIT_MODE·SECT_EDIT와 같은 성격의
+// 세션 상태다 — trip 데이터가 아니므로 저장소에 넣지 않는다.
+var EXP_EDIT = false;
+var EXP_TARGET = null;
+
+function expenseEditorHtml(trip) {
+  var has = Array.isArray(trip.expenses) && trip.expenses.length;
+  if (!EXP_EDIT) {
+    return '<div class="exp-actions">' +
+      '<button class="exp-mode" type="button">✏️ 내역 편집</button></div>';
+  }
+  return '<div class="exp-actions">' +
+      '<button class="exp-mode" type="button" data-on="1">완료</button>' +
+      '<button class="exp-new" type="button">+ 내역 추가</button>' +
+    '</div>' +
+    '<form class="exp-form" hidden>' +
+      '<div class="exp-row">' +
+        '<input class="exp-cat" type="text" placeholder="항목 (예: 항공권)" aria-label="항목">' +
+        '<input class="exp-krw" type="number" min="1" step="1" placeholder="금액(원)" aria-label="금액">' +
+      '</div>' +
+      '<input class="exp-detail" type="text" placeholder="상세 (예: 왕복 2인)" aria-label="상세">' +
+      '<div class="exp-row">' +
+        '<input class="exp-date" type="date" aria-label="결제일">' +
+        '<input class="exp-pay" type="text" placeholder="결제수단" aria-label="결제수단">' +
+      '</div>' +
+      '<div class="exp-err" hidden></div>' +
+      '<div class="exp-row">' +
+        '<button type="submit">저장</button>' +
+        '<button class="exp-cancel" type="button">취소</button>' +
+      '</div>' +
+    '</form>';
 }
 
 // 정보 탭의 섹션 편집 모드. EDIT_MODE와 같은 성격의 세션 상태다 —
@@ -2261,10 +2562,12 @@ function panelHtml(trip, tab) {
     return '<div class="panel-card" id="packing-body"></div>';
   }
   if (tab === "money") {
-    var exp = (trip.expenses && trip.expenses.length)
-      ? '<div class="panel-card"><h2 class="panel-h">💰 출발 전 결제 내역</h2>' +
-        expensesTableHtml(trip) + '</div>'
-      : '';
+    // 내역이 없어도 편집기는 보여야 한다 — 그래야 첫 항목을 넣을 수 있다.
+    var exp = '<div class="panel-card"><h2 class="panel-h">💰 출발 전 결제 내역</h2>' +
+      ((trip.expenses && trip.expenses.length)
+        ? expensesTableHtml(trip)
+        : '<p class="sempty">아직 내역이 없습니다.</p>') +
+      expenseEditorHtml(trip) + '</div>';
     return '<div class="panel-card" id="spend-body"></div>' + exp;
   }
   if (tab === "info") {
@@ -2299,6 +2602,7 @@ function renderPanel(trip, st, tab) {
   if (tab === "packing") renderPacking(trip, st);
   if (tab === "money") renderSpend(trip, st);
   if (tab === "info") bindSectionEditor(trip, st, el);
+  if (tab === "money") bindExpenseEditor(trip, st, el);
 }
 
 // 섹션을 고쳐 저장하고 정보 탭만 다시 그린다. saveTripBody의 성공 여부를 확인한다 —
@@ -2311,6 +2615,83 @@ function saveSections(trip, st, el) {
     alert('저장에 실패했습니다. 기기 저장 공간을 확인해 주세요.');
   }
   renderPanel(trip, st, "info");
+}
+
+function bindExpenseEditor(trip, st, el) {
+  var form = el.querySelector('.exp-form');
+
+  function save() {
+    if (!saveTripBody(trip)) {
+      var fresh = loadTrip(trip.id);
+      if (fresh) trip.expenses = fresh.expenses;
+      alert('저장에 실패했습니다. 기기 저장 공간을 확인해 주세요.');
+    }
+    renderPanel(trip, st, "money");
+  }
+
+  var modeBtn = el.querySelector('.exp-mode');
+  if (modeBtn) modeBtn.addEventListener('click', function () {
+    EXP_EDIT = !EXP_EDIT;
+    EXP_TARGET = null;
+    renderPanel(trip, st, "money");
+  });
+
+  function openForm(e) {
+    if (!form) return;
+    EXP_TARGET = e ? e.id : null;
+    form.querySelector('.exp-cat').value = e ? e.cat : '';
+    form.querySelector('.exp-krw').value = e ? Number(e.krw) : '';
+    form.querySelector('.exp-detail').value = e ? (e.detail || '') : '';
+    form.querySelector('.exp-date').value = e ? (e.date || '') : '';
+    form.querySelector('.exp-pay').value = e ? (e.pay || '') : '';
+    form.querySelector('.exp-err').hidden = true;
+    form.hidden = false;
+    form.querySelector('.exp-cat').focus();
+  }
+
+  var newBtn = el.querySelector('.exp-new');
+  if (newBtn) newBtn.addEventListener('click', function () { openForm(null); });
+
+  el.querySelectorAll('.exp-ed').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var e = (trip.expenses || []).filter(function (x) { return x.id === b.dataset.id; })[0];
+      if (e) openForm(e);
+    });
+  });
+  el.querySelectorAll('.exp-rm').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var e = (trip.expenses || []).filter(function (x) { return x.id === b.dataset.id; })[0];
+      if (!e) return;
+      if (!confirm('"' + e.cat + '" 내역을 삭제할까요?')) return;
+      removeExpense(trip, b.dataset.id);
+      save();
+    });
+  });
+
+  if (form) {
+    form.querySelector('.exp-cancel').addEventListener('click', function () {
+      form.hidden = true;
+      EXP_TARGET = null;
+    });
+    form.addEventListener('submit', function (ev) {
+      ev.preventDefault();
+      var f = {
+        cat: form.querySelector('.exp-cat').value,
+        krw: form.querySelector('.exp-krw').value,
+        detail: form.querySelector('.exp-detail').value,
+        date: form.querySelector('.exp-date').value,
+        pay: form.querySelector('.exp-pay').value,
+        note: ''
+      };
+      var err = validateExpenseForm(f);
+      var box = form.querySelector('.exp-err');
+      if (err) { box.textContent = err; box.hidden = false; return; }
+      if (EXP_TARGET) updateExpense(trip, EXP_TARGET, f);
+      else addExpense(trip, f);
+      EXP_TARGET = null;
+      save();
+    });
+  }
 }
 
 function bindSectionEditor(trip, st, el) {
@@ -2668,6 +3049,7 @@ function applyTripForm(trip, f) {
     // f.place가 undefined면 도시를 건드리지 않은 저장이다(기본값 null 유지).
     if (f.place !== undefined) made.place = f.place;
     if (f.currency !== undefined) made.currency = f.currency;
+    if (f.countryCode !== undefined) made.countryCode = f.countryCode;
     return made;
   }
   var next = {};
@@ -2680,6 +3062,7 @@ function applyTripForm(trip, f) {
   // 도시를 건드리지 않은 저장(f.place === undefined)에서는 기존 값을 그대로 둔다.
   if (f.place !== undefined) next.place = f.place;
   if (f.currency !== undefined) next.currency = f.currency;
+  if (f.countryCode !== undefined) next.countryCode = f.countryCode;
   next.days = resyncDays(trip.days, f.start, f.end);
   // 일차별 도시는 resyncDays 뒤에 적용한다 — 기간이 바뀌면 일차 번호가 다시 매겨지므로
   // 그 전에 적용하면 엉뚱한 날에 붙는다. {dayN: place|null} 형태다.
@@ -2728,23 +3111,28 @@ function showEdit(id) {
         'value="' + (trip ? Number(trip.party) : 2) + '"></label>' +
       '<label>숙소<textarea name="hotel" rows="2" ' +
         'placeholder="숙소명 · 체크인/아웃">' + escHtml(trip ? trip.hotel : '') + '</textarea></label>' +
-      // 현지 통화. 경비를 이 통화로 기록하고 원화 환산을 함께 보여준다.
-      '<label>현지 통화<select name="cur">' +
-        CURRENCIES.map(function (c) {
-          var on = ((trip && trip.currency && trip.currency.code) || 'KRW') === c.code ? ' selected' : '';
-          return '<option value="' + escHtml(c.code) + '"' + on + '>' +
-            escHtml(c.code + ' · ' + c.name + ' (' + c.symbol + ')') + '</option>';
+      // 나라를 고르면 통화가 따라온다 — 통화 코드를 외우는 것보다 자연스럽다.
+      // 통화는 표시만 하고 값은 나라에서 끌어온다(둘이 어긋날 수 없다).
+      '<label>나라<select name="country">' +
+        '<option value="">— 선택 —</option>' +
+        COUNTRIES.map(function (c) {
+          var on = (trip && trip.countryCode) === c.cc ? ' selected' : '';
+          return '<option value="' + escHtml(c.cc) + '"' + on + '>' + escHtml(c.name) + '</option>';
         }).join('') +
       '</select></label>' +
+      '<div class="cur-line" id="cur-line"></div>' +
       // 도시는 폼 필드가 아니라 검색으로 고른다 — 선택값은 pickedPlace에 담아두고
       // 저장할 때 함께 넘긴다(취소하면 반영되지 않는다).
+      // 도시는 직접 적는다. 날씨에 쓸 좌표가 필요하면 '찾기'로 검색해 고른다 —
+      // 검색이 0건이어도 적어 둔 이름은 그대로 남는다(날씨만 안 뜬다).
       '<div class="geo-block">' +
-        '<div class="geo-lbl">도시 <span class="geo-hint">(날씨에 쓰입니다)</span></div>' +
-        '<div class="geo-cur" id="geo-cur"></div>' +
+        '<div class="geo-lbl">도시 <span class="geo-hint">(찾기를 누르면 날씨가 붙습니다)</span></div>' +
         '<div class="geo-row">' +
-          '<input id="geo-q" type="text" placeholder="예: 오사카, Da Nang" aria-label="도시 검색">' +
+          '<input id="geo-q" name="cityname" type="text" placeholder="예: 오사카" aria-label="도시" ' +
+            'value="' + escHtml((trip && trip.place && trip.place.name) || '') + '">' +
           '<button id="geo-go" type="button">찾기</button>' +
         '</div>' +
+        '<div class="geo-cur" id="geo-cur"></div>' +
         '<div class="geo-msg" id="geo-msg" hidden></div>' +
         '<ul class="geo-list" id="geo-list" hidden></ul>' +
       '</div>' +
@@ -2783,6 +3171,28 @@ function showEdit(id) {
     setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
   });
 
+  var countrySel = document.querySelector('#trip-form [name=country]');
+  var curLine = document.getElementById("cur-line");
+
+  // 고른 나라의 통화를 보여준다. 나라를 안 고르면 원화로 둔다 — 국내 여행도 있고,
+  // 통화를 못 정한 채로도 여행을 만들 수 있어야 한다.
+  function currentCurrency() {
+    var c = countrySel && countrySel.value ? countryByCode(countrySel.value) : null;
+    if (c && c.cur) return currencyByCode(c.cur);
+    // 나라를 안 골랐다면 기존 통화를 유지한다(설정을 다시 열어 저장할 때 초기화되면 안 된다).
+    if (trip && trip.currency && trip.currency.code) return currencyByCode(trip.currency.code);
+    return defaultCurrency();
+  }
+
+  function paintCur() {
+    if (!curLine) return;
+    var c = currentCurrency();
+    curLine.innerHTML = '통화 <b>' + escHtml(c.code) + '</b> ' +
+      escHtml(c.symbol + ' · ' + c.name);
+  }
+  paintCur();
+  if (countrySel) countrySel.addEventListener('change', paintCur);
+
   // undefined면 "도시를 건드리지 않음" — applyTripForm이 기존 값을 유지한다.
   var pickedPlace = undefined;
   // 일차별 오버라이드 {dayN: place|null}. 저장할 때만 반영된다.
@@ -2795,36 +3205,28 @@ function showEdit(id) {
   var qEl = document.getElementById("geo-q");
   var goEl = document.getElementById("geo-go");
 
-  function paintCur() {
+  function paintPickedCity() {
     var p = (pickedPlace !== undefined) ? pickedPlace : (trip ? trip.place : null);
-    curEl.innerHTML = p
-      ? '📍 ' + escHtml(placeLabel(p))
-      : '<span class="geo-none">도시가 지정되지 않았습니다</span>';
+    curEl.innerHTML = p && p.lat !== undefined
+      ? '📍 ' + escHtml(placeLabel(p)) + ' <span class="geo-hint">(날씨 연결됨)</span>'
+      : '<span class="geo-none">좌표 없음 — 날씨는 표시되지 않습니다</span>';
   }
-  paintCur();
+  paintPickedCity();
 
   function showMsg(text) {
     msgEl.textContent = text;
     msgEl.hidden = !text;
   }
 
-  // 고른 도시의 나라 통화를 통화 <select>에 반영한다. 반영했으면 통화 코드를,
-  // 아니면 null을 돌려준다(모르는 나라이거나 이미 같은 통화인 경우).
-  // 프리셋에 없는 통화(캐나다 달러 등)는 목록에 없으므로 항목을 만들어 넣는다.
-  function applyCountryCurrency(place) {
-    var sel = document.querySelector('#trip-form [name=cur]');
-    if (!sel || !place) return null;
-    var c = currencyForCountry(place.cc);
-    if (!c || sel.value === c.code) return null;
-    var has = Array.prototype.some.call(sel.options, function (o) { return o.value === c.code; });
-    if (!has) {
-      var opt = document.createElement('option');
-      opt.value = c.code;
-      opt.textContent = c.code + ' · ' + c.name + ' (' + c.symbol + ')';
-      sel.insertBefore(opt, sel.firstChild);
-    }
-    sel.value = c.code;
-    return c.code;
+  // 고른 도시의 나라를 나라 <select>에 반영한다(통화는 거기서 따라온다).
+  // 반영했으면 나라 이름을, 아니면 null을 돌려준다.
+  function applyCountryFromPlace(place) {
+    if (!countrySel || !place || !place.cc) return null;
+    var c = countryByCode(place.cc);
+    if (!c || countrySel.value === c.cc) return null;
+    countrySel.value = c.cc;
+    paintCur();
+    return c.name;
   }
 
   function runSearch() {
@@ -2856,16 +3258,18 @@ function showEdit(id) {
           else pickedDayPlaces[geoTarget] = chosen;
           geoTarget = null;
           listEl.hidden = true;
-          qEl.value = '';
-          paintCur();
+          // 이 입력칸은 이제 검색창이 아니라 도시 이름 자체다 — 비우면 저장 시
+          // 이름이 사라져 place가 null이 된다. 고른 이름으로 채운다.
+          // (일차별 도시를 고르는 중이면 여행 기본 도시 칸은 건드리지 않는다.)
+          if (forDay === null) qEl.value = chosen.name;
+          paintPickedCity();
           paintDays();
-          // 여행 기본 도시를 고르면 그 나라 통화도 함께 맞춘다. 고른 뒤에도 통화
-          // 선택은 그대로 열려 있으므로 원하면 바꿀 수 있다(면세점만 달러로 계산하는
-          // 경우 등). 일차별 도시(forDay !== null)에서는 건드리지 않는다 — 그건
-          // 경유지일 뿐이고 여행 기본 통화를 바꿀 이유가 없다.
-          var picked = (forDay === null) ? applyCountryCurrency(chosen) : null;
+          // 여행 기본 도시를 고르면 나라 선택도 그 나라로 맞춘다(통화가 따라온다).
+          // 일차별 도시(forDay !== null)에서는 건드리지 않는다 — 그건 경유지일 뿐이고
+          // 여행 기본 통화를 바꿀 이유가 없다.
+          var picked = (forDay === null) ? applyCountryFromPlace(chosen) : null;
           showMsg(picked
-            ? '통화를 ' + picked + '(으)로 맞췄습니다. 저장을 눌러야 반영됩니다.'
+            ? '나라를 ' + picked + '(으)로 맞췄습니다. 저장을 눌러야 반영됩니다.'
             : '저장을 눌러야 반영됩니다.');
         });
       });
@@ -2925,10 +3329,21 @@ function showEdit(id) {
     var fd = new FormData(e.target);
     var f = { title: fd.get('title'), start: fd.get('start'), end: fd.get('end'),
               party: fd.get('party'), hotel: fd.get('hotel') };
-    // 검색으로 고른 도시가 있을 때만 넘긴다 — undefined면 기존 값이 유지된다.
-    if (pickedPlace !== undefined) f.place = pickedPlace;
-    // 통화는 프리셋에서 고른 코드로 객체를 만들어 넘긴다.
-    f.currency = currencyByCode(fd.get('cur'));
+    // 도시는 직접 적은 이름을 쓰고, 좌표는 '찾기'로 고른 것이 있으면 얹는다 —
+    // 검색이 0건이어도 이름은 남아야 한다(날씨만 안 뜬다).
+    var cityName = String(fd.get('cityname') || '').trim();
+    var base = (pickedPlace !== undefined) ? pickedPlace : (trip ? trip.place : null);
+    if (cityName) {
+      // 이름만 바꿨는데 예전 좌표가 남아 엉뚱한 날씨가 뜨는 것을 막는다.
+      var sameCity = base && base.name === cityName;
+      f.place = sameCity ? base : (pickedPlace || { name: cityName });
+      if (f.place && f.place.name !== cityName) f.place = { name: cityName };
+    } else {
+      f.place = null;
+    }
+    // 통화는 고른 나라에서 끌어온다(폼에 통화 입력란이 따로 없다).
+    f.currency = currentCurrency();
+    f.countryCode = countrySel && countrySel.value ? countrySel.value : null;
     for (var _k in pickedDayPlaces) {
       if (Object.prototype.hasOwnProperty.call(pickedDayPlaces, _k)) { f.dayPlaces = pickedDayPlaces; break; }
     }
@@ -3117,6 +3532,79 @@ function moveSection(trip, id, dir) {
   var tmp = trip.sections[i];
   trip.sections[i] = trip.sections[j];
   trip.sections[j] = tmp;
+  return trip;
+}
+
+// ---- 일차 메모 ----
+// 예전에는 day.meals(엑셀에서 온 "뭐먹지" 문구)와, 그 답을 따로 저장한
+// meal:<date>:<i> 키가 짝을 이뤘다. 자유 메모로 바꾸면서 둘을 notes 하나로 합쳤다.
+// addItem 계열과 같은 계약 — 인자로 받은 day를 그 자리에서 고친다.
+function addNote(day, text) {
+  if (!day) return day;
+  if (!Array.isArray(day.notes)) day.notes = [];
+  var t = String(text == null ? '' : text).trim();
+  if (!t) return day;
+  day.notes.push({ id: newNoteId(), text: t });
+  return day;
+}
+
+function updateNote(day, id, text) {
+  if (!day || !Array.isArray(day.notes)) return day;
+  var t = String(text == null ? '' : text).trim();
+  if (!t) return day;
+  day.notes.forEach(function (n) { if (n.id === id) n.text = t; });
+  return day;
+}
+
+function removeNote(day, id) {
+  if (!day || !Array.isArray(day.notes)) return day;
+  day.notes = day.notes.filter(function (n) { return n.id !== id; });
+  return day;
+}
+
+// ---- 출발 전 결제 내역 편집 ----
+// 항공·숙소처럼 떠나기 전에 결제한 것들. 현지 경비(spend)와 달리 원화로만 적는다.
+function validateExpenseForm(f) {
+  if (!f || !f.cat || !String(f.cat).trim()) return '항목을 입력하세요.';
+  var n = Number(f.krw);
+  if (!isFinite(n) || n <= 0) return '금액을 입력하세요.';
+  return null;
+}
+
+function expenseFromForm(f) {
+  return {
+    date: String(f.date || '').trim(),
+    cat: String(f.cat).trim(),
+    detail: String(f.detail || '').trim(),
+    pay: String(f.pay || '').trim(),
+    krw: Math.round(Number(f.krw)),
+    note: String(f.note || '').trim()
+  };
+}
+
+function addExpense(trip, f) {
+  if (!trip) return trip;
+  if (!Array.isArray(trip.expenses)) trip.expenses = [];
+  var e = expenseFromForm(f);
+  e.id = newExpenseId();
+  trip.expenses.push(e);
+  return trip;
+}
+
+function updateExpense(trip, id, f) {
+  if (!trip || !Array.isArray(trip.expenses)) return trip;
+  trip.expenses.forEach(function (e, i) {
+    if (e.id !== id) return;
+    var next = expenseFromForm(f);
+    next.id = id;
+    trip.expenses[i] = next;
+  });
+  return trip;
+}
+
+function removeExpense(trip, id) {
+  if (!trip || !Array.isArray(trip.expenses)) return trip;
+  trip.expenses = trip.expenses.filter(function (e) { return e.id !== id; });
   return trip;
 }
 
@@ -3354,6 +3842,10 @@ document.addEventListener("DOMContentLoaded", function () {
   migrateSections();
   // 경비 레코드에 통화를 붙인다(구 {jpy} → {amount, cur}).
   migrateSpend();
+  // 뭐먹지(meals)를 자유 메모(notes)로 옮긴다.
+  migrateMeals();
+  // 구 결제 내역에 id를 부여한다(편집하려면 항목을 가리킬 수단이 필요하다).
+  migrateExpenseIds();
 
   document.getElementById("new-trip")
     .addEventListener("click", function () { go('#/new'); });

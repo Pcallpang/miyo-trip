@@ -303,15 +303,29 @@ function renderTimeline(trip, day, st) {
   const rows = slots || (EDIT_MODE
     ? ''
     : '<p class="empty">아직 일정이 없습니다. 편집을 눌러 추가해 보세요.</p>');
-  const meals = (day.meals && day.meals.length)
-    ? '<div class="meals"><div class="meals-h">🍽 뭐먹지</div>' +
-      day.meals.map(function (m, i) {
-        const key = mealKey(day.date, i);
-        const val = escHtml(st.get(key, ""));
-        return '<div class="meal"><div class="meal-note">' + itemLinesHtml(m) + '</div>' +
-          '<input class="memo" data-key="' + escHtml(key) +
-          '" placeholder="식당/메모 입력" value="' + val + '"></div>';
-      }).join('') + '</div>'
+  // 자유 메모. 예전의 "뭐먹지"(엑셀에서 온 문구 + 답 입력칸)를 대체한다 —
+  // 그 틀에 맞지 않는 메모(예약 번호, 챙길 것)를 적을 곳이 없었다.
+  const noteList = Array.isArray(day.notes) ? day.notes : [];
+  const notes = (noteList.length || EDIT_MODE)
+    ? '<div class="notes"><div class="notes-h">📝 메모</div>' +
+      (noteList.length
+        ? noteList.map(function (n) {
+            return '<div class="note"><div class="note-text">' + itemLinesHtml(n.text) + '</div>' +
+              (EDIT_MODE
+                ? '<div class="note-btns">' +
+                  '<button class="nt-edit" type="button" data-id="' + escHtml(n.id) + '">수정</button>' +
+                  '<button class="nt-del" type="button" data-id="' + escHtml(n.id) + '">삭제</button>' +
+                  '</div>'
+                : '') + '</div>';
+          }).join('')
+        : '<p class="notes-empty">아직 메모가 없습니다.</p>') +
+      (EDIT_MODE
+        ? '<form class="note-add">' +
+          '<textarea class="nt-text" rows="2" placeholder="메모 (예: 스시야 19시 예약)" ' +
+            'required aria-label="메모"></textarea>' +
+          '<button type="submit">메모 추가</button></form>'
+        : '') +
+      '</div>'
     : '';
   main.innerHTML =
     '<div class="daycard"><div class="dayhead">' +
@@ -338,8 +352,39 @@ function renderTimeline(trip, day, st) {
             'aria-label="일정 내용"></textarea>' +
           '<button type="submit">일정 추가</button></form>'
         : '') +
-      meals + '</div>';
+      notes + '</div>';
   bindDayImages(trip, day, st, main);
+
+  if (EDIT_MODE) {
+    main.querySelectorAll('.nt-del').forEach(function (b) {
+      b.addEventListener('click', function () {
+        if (!confirm('이 메모를 삭제할까요?')) return;
+        removeNote(day, b.dataset.id);
+        afterItemEdit(trip, day, st, saveTripBody(trip));
+      });
+    });
+    main.querySelectorAll('.nt-edit').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var n = (day.notes || []).filter(function (x) { return x.id === b.dataset.id; })[0];
+        if (!n) return;
+        var text = prompt('메모', n.text);
+        if (text === null) return;
+        if (!String(text).trim()) { alert(MSG_EMPTY_TEXT); return; }
+        updateNote(day, n.id, text);
+        afterItemEdit(trip, day, st, saveTripBody(trip));
+      });
+    });
+    var nf = main.querySelector('.note-add');
+    if (nf) nf.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var ta = nf.querySelector('.nt-text');
+      var text = ta.value.trim();
+      if (!text) { alert(MSG_EMPTY_TEXT); return; }
+      addNote(day, text);
+      ta.value = '';
+      afterItemEdit(trip, day, st, saveTripBody(trip));
+    });
+  }
 
   main.querySelectorAll('.memo').forEach(function (inp) {
     inp.addEventListener('input', function () { st.set(inp.dataset.key, inp.value); });
@@ -428,14 +473,55 @@ function sectionBodyHtml(trip, sec) {
 function expensesTableHtml(trip) {
   const rows = trip.expenses.map(function (e) {
     return '<tr><td>' + escHtml(e.cat) + '</td><td>' + escHtml(e.detail) + '</td>' +
-      '<td class="num">' + Number(e.krw).toLocaleString('ko-KR') + '</td></tr>';
+      '<td class="num">' + Number(e.krw).toLocaleString('ko-KR') + '</td>' +
+      (EXP_EDIT
+        ? '<td class="num exp-tools">' +
+          '<button class="exp-ed" type="button" data-id="' + escHtml(e.id) + '">수정</button>' +
+          '<button class="exp-rm" type="button" data-id="' + escHtml(e.id) + '">삭제</button></td>'
+        : '') +
+      '</tr>';
   }).join('');
   const total = trip.expenses.reduce(function (s, e) { return s + Number(e.krw || 0); }, 0);
   return '<div class="tblwrap"><table>' +
-    '<thead><tr><th>항목</th><th>상세</th><th class="num">금액(원)</th></tr></thead>' +
+    '<thead><tr><th>항목</th><th>상세</th><th class="num">금액(원)</th>' +
+      (EXP_EDIT ? '<th></th>' : '') + '</tr></thead>' +
     '<tbody>' + rows + '</tbody>' +
     '<tfoot><tr><td colspan="2">합계</td><td class="num">' +
-      total.toLocaleString('ko-KR') + '</td></tr></tfoot></table></div>';
+      total.toLocaleString('ko-KR') + '</td>' + (EXP_EDIT ? '<td></td>' : '') +
+      '</tr></tfoot></table></div>';
+}
+
+// 경비 탭의 '출발 전 결제 내역' 편집 모드. EDIT_MODE·SECT_EDIT와 같은 성격의
+// 세션 상태다 — trip 데이터가 아니므로 저장소에 넣지 않는다.
+var EXP_EDIT = false;
+var EXP_TARGET = null;
+
+function expenseEditorHtml(trip) {
+  var has = Array.isArray(trip.expenses) && trip.expenses.length;
+  if (!EXP_EDIT) {
+    return '<div class="exp-actions">' +
+      '<button class="exp-mode" type="button">✏️ 내역 편집</button></div>';
+  }
+  return '<div class="exp-actions">' +
+      '<button class="exp-mode" type="button" data-on="1">완료</button>' +
+      '<button class="exp-new" type="button">+ 내역 추가</button>' +
+    '</div>' +
+    '<form class="exp-form" hidden>' +
+      '<div class="exp-row">' +
+        '<input class="exp-cat" type="text" placeholder="항목 (예: 항공권)" aria-label="항목">' +
+        '<input class="exp-krw" type="number" min="1" step="1" placeholder="금액(원)" aria-label="금액">' +
+      '</div>' +
+      '<input class="exp-detail" type="text" placeholder="상세 (예: 왕복 2인)" aria-label="상세">' +
+      '<div class="exp-row">' +
+        '<input class="exp-date" type="date" aria-label="결제일">' +
+        '<input class="exp-pay" type="text" placeholder="결제수단" aria-label="결제수단">' +
+      '</div>' +
+      '<div class="exp-err" hidden></div>' +
+      '<div class="exp-row">' +
+        '<button type="submit">저장</button>' +
+        '<button class="exp-cancel" type="button">취소</button>' +
+      '</div>' +
+    '</form>';
 }
 
 // 정보 탭의 섹션 편집 모드. EDIT_MODE와 같은 성격의 세션 상태다 —
@@ -482,10 +568,12 @@ function panelHtml(trip, tab) {
     return '<div class="panel-card" id="packing-body"></div>';
   }
   if (tab === "money") {
-    var exp = (trip.expenses && trip.expenses.length)
-      ? '<div class="panel-card"><h2 class="panel-h">💰 출발 전 결제 내역</h2>' +
-        expensesTableHtml(trip) + '</div>'
-      : '';
+    // 내역이 없어도 편집기는 보여야 한다 — 그래야 첫 항목을 넣을 수 있다.
+    var exp = '<div class="panel-card"><h2 class="panel-h">💰 출발 전 결제 내역</h2>' +
+      ((trip.expenses && trip.expenses.length)
+        ? expensesTableHtml(trip)
+        : '<p class="sempty">아직 내역이 없습니다.</p>') +
+      expenseEditorHtml(trip) + '</div>';
     return '<div class="panel-card" id="spend-body"></div>' + exp;
   }
   if (tab === "info") {
@@ -520,6 +608,7 @@ function renderPanel(trip, st, tab) {
   if (tab === "packing") renderPacking(trip, st);
   if (tab === "money") renderSpend(trip, st);
   if (tab === "info") bindSectionEditor(trip, st, el);
+  if (tab === "money") bindExpenseEditor(trip, st, el);
 }
 
 // 섹션을 고쳐 저장하고 정보 탭만 다시 그린다. saveTripBody의 성공 여부를 확인한다 —
@@ -532,6 +621,83 @@ function saveSections(trip, st, el) {
     alert('저장에 실패했습니다. 기기 저장 공간을 확인해 주세요.');
   }
   renderPanel(trip, st, "info");
+}
+
+function bindExpenseEditor(trip, st, el) {
+  var form = el.querySelector('.exp-form');
+
+  function save() {
+    if (!saveTripBody(trip)) {
+      var fresh = loadTrip(trip.id);
+      if (fresh) trip.expenses = fresh.expenses;
+      alert('저장에 실패했습니다. 기기 저장 공간을 확인해 주세요.');
+    }
+    renderPanel(trip, st, "money");
+  }
+
+  var modeBtn = el.querySelector('.exp-mode');
+  if (modeBtn) modeBtn.addEventListener('click', function () {
+    EXP_EDIT = !EXP_EDIT;
+    EXP_TARGET = null;
+    renderPanel(trip, st, "money");
+  });
+
+  function openForm(e) {
+    if (!form) return;
+    EXP_TARGET = e ? e.id : null;
+    form.querySelector('.exp-cat').value = e ? e.cat : '';
+    form.querySelector('.exp-krw').value = e ? Number(e.krw) : '';
+    form.querySelector('.exp-detail').value = e ? (e.detail || '') : '';
+    form.querySelector('.exp-date').value = e ? (e.date || '') : '';
+    form.querySelector('.exp-pay').value = e ? (e.pay || '') : '';
+    form.querySelector('.exp-err').hidden = true;
+    form.hidden = false;
+    form.querySelector('.exp-cat').focus();
+  }
+
+  var newBtn = el.querySelector('.exp-new');
+  if (newBtn) newBtn.addEventListener('click', function () { openForm(null); });
+
+  el.querySelectorAll('.exp-ed').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var e = (trip.expenses || []).filter(function (x) { return x.id === b.dataset.id; })[0];
+      if (e) openForm(e);
+    });
+  });
+  el.querySelectorAll('.exp-rm').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var e = (trip.expenses || []).filter(function (x) { return x.id === b.dataset.id; })[0];
+      if (!e) return;
+      if (!confirm('"' + e.cat + '" 내역을 삭제할까요?')) return;
+      removeExpense(trip, b.dataset.id);
+      save();
+    });
+  });
+
+  if (form) {
+    form.querySelector('.exp-cancel').addEventListener('click', function () {
+      form.hidden = true;
+      EXP_TARGET = null;
+    });
+    form.addEventListener('submit', function (ev) {
+      ev.preventDefault();
+      var f = {
+        cat: form.querySelector('.exp-cat').value,
+        krw: form.querySelector('.exp-krw').value,
+        detail: form.querySelector('.exp-detail').value,
+        date: form.querySelector('.exp-date').value,
+        pay: form.querySelector('.exp-pay').value,
+        note: ''
+      };
+      var err = validateExpenseForm(f);
+      var box = form.querySelector('.exp-err');
+      if (err) { box.textContent = err; box.hidden = false; return; }
+      if (EXP_TARGET) updateExpense(trip, EXP_TARGET, f);
+      else addExpense(trip, f);
+      EXP_TARGET = null;
+      save();
+    });
+  }
 }
 
 function bindSectionEditor(trip, st, el) {

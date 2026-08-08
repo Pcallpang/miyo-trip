@@ -106,7 +106,7 @@ eq('일차 번호와 날짜', D.map(function (d) { return d.n + ':' + d.date; })
   ['1:2026-07-28', '2:2026-07-29', '3:2026-07-30']);
 eq('빈 일차 형태', D[0],
   { n: 1, date: '2026-07-28', theme: '', place: null, curCode: null,
-    items: [], meals: [], images: [] });
+    items: [], meals: [], notes: [], images: [] });
 
 // 재동기화: 앞을 하루 자르고 뒤를 하루 늘려도 남는 날짜의 일정은 보존된다
 D[1].items.push({ id: 'i_x', time: '09:00', text: '유니버셜' });
@@ -271,25 +271,28 @@ eq('D-day 이후', dday('2026-08-05', '2026-07-28', '2026-08-03'), '여행 종�
       date: HOSTILE,
       theme: "",
       items: [{ id: HOSTILE, time: "09:00", text: "테스트 일정" }],
-      meals: ["저녁"]
+      notes: [{ id: HOSTILE, text: HOSTILE }]
     };
     var trip = { days: [day] };
     var st = makeSt();
-    st.set(mealKey(day.date, 0), HOSTILE);
 
+    // 메모의 수정·삭제 버튼(data-id)은 편집 모드에서만 나온다.
+    var prevEdit = EDIT_MODE;
+    EDIT_MODE = true;
     var el = global.__setDomTarget("timeline");
     renderTimeline(trip, day, st);
     var html = el.innerHTML;
+    EDIT_MODE = prevEdit;
 
     eq('renderTimeline: raw <img> 태그가 어디에도 없음', html.indexOf('<img') === -1, true);
     eq('renderTimeline: 문자열이 와야 할 data-item 속성은 이스케이프됨',
       html.indexOf('data-item="' + escHostile + '"') !== -1, true);
-    eq('renderTimeline: 악의적인 meal memo 저장값은 value 속성에서 이스케이프됨',
-      html.indexOf('value="' + escHostile + '"') !== -1, true);
-    // meal 키는 이제 날짜(문자열) 기준이다 — 숫자 강제 변환으로는 막을 수 없으므로
-    // data-key 속성에 넣을 때 escHtml을 거쳐야 한다.
-    eq('renderTimeline: 날짜 기준 meal 키는 data-key 속성에서 이스케이프됨',
-      html.indexOf('data-key="meal:' + escHostile + ':0"') !== -1, true);
+    // 뭐먹지(meals)는 자유 메모(notes)로 바뀌었다 — 메모 본문과 그 id 모두
+    // 외부에서 올 수 있으므로(가져온 JSON) 같은 계약으로 이스케이프해야 한다.
+    eq('renderTimeline: 악의적인 메모 본문은 이스케이프됨',
+      html.indexOf(escHostile) !== -1, true);
+    eq('renderTimeline: 악의적인 메모 id는 data-id 속성에서 이스케이프됨',
+      html.indexOf('data-id="' + escHostile + '"') !== -1, true);
     // day.n은 숫자 필드 — 문자열이 들어오면 이스케이프 대신 숫자로 강제 변환한다.
     eq('renderTimeline: 숫자 필드 day.n은 표시 라벨에서 NaN으로 강제 변환됨',
       html.indexOf('<span class="dnum">NaN일차</span>') !== -1, true);
@@ -1370,3 +1373,107 @@ eq('스키마 버전이 미래면 거부', validateImport(Object.assign({}, GOOD
 eq('가져올 때마다 새 id',
   normalizeImport({ schema:1, title:'a', start:'2026-09-01', end:'2026-09-01' }).id ===
   normalizeImport({ schema:1, title:'a', start:'2026-09-01', end:'2026-09-01' }).id, false);
+
+// ---- 일차 메모 (뭐먹지 대체) ----
+(function () {
+  var day = { n: 1, date: '2026-09-01', notes: [] };
+  addNote(day, '스시 맛집 예약함');
+  addNote(day, '우산 챙기기');
+  eq('메모 추가', day.notes.map(function (n) { return n.text; }), ['스시 맛집 예약함', '우산 챙기기']);
+  eq('메모에 id 부여', day.notes[0].id.slice(0,2), 'n_');
+  eq('빈 메모는 안 들어감', addNote(day, '   ').notes.length, 2);
+
+  updateNote(day, day.notes[0].id, '스시 맛집 취소');
+  eq('메모 수정', day.notes[0].text, '스시 맛집 취소');
+  eq('빈 값으로는 안 바뀜', updateNote(day, day.notes[0].id, ' ').notes[0].text, '스시 맛집 취소');
+
+  removeNote(day, day.notes[0].id);
+  eq('메모 삭제', day.notes.map(function (n) { return n.text; }), ['우산 챙기기']);
+  eq('없는 id 삭제는 무해', removeNote(day, 'nope').notes.length, 1);
+
+  // notes가 없거나 배열이 아닌 손상된 day도 던지지 않는다
+  eq('notes 없어도 추가됨', addNote({ n: 2 }, 'a').notes.length, 1);
+  eq('배열 아니어도 보정', addNote({ n: 3, notes: 'x' }, 'a').notes.length, 1);
+})();
+
+// 마이그레이션: meals(뭐먹지) + 저장된 메모 텍스트 → notes
+(function () {
+  __resetStorage();
+  var t = emptyTrip({ title:'테스트', start:'2026-09-01', end:'2026-09-02' });
+  t.days[0].meals = ['점심 뭐먹지', '저녁 뭐먹지'];
+  t.days[1].meals = ['아침 뭐먹지'];
+  saveTrip(t);
+  var st = tripStore(t.id);
+  // 사용자가 실제로 써 둔 답 — 이게 유실되면 안 된다
+  st.set('meal:2026-09-01:0', '이치란 라멘');
+  st.set('meal:2026-09-02:0', '');
+
+  eq('마이그레이션이 한 여행을 고침', migrateMeals(), 1);
+  var d = loadTrip(t.id).days;
+  eq('사용자가 쓴 메모가 살아남음', d[0].notes[0].text, '이치란 라멘');
+  eq('안 쓴 항목은 원래 문구가 메모로', d[0].notes[1].text, '저녁 뭐먹지');
+  eq('빈 답이면 원래 문구', d[1].notes[0].text, '아침 뭐먹지');
+  eq('meals는 비워짐', d[0].meals, []);
+  eq('구 메모 키 제거', lsGet(tripKey(t.id, 'meal:2026-09-01:0'), 'gone'), 'gone');
+  eq('두 번째 실행은 0건', migrateMeals(), 0);
+})();
+
+// ---- 출발 전 결제 내역 편집 ----
+(function () {
+  var trip = { expenses: [] };
+  addExpense(trip, { date:'2026-08-01', cat:'항공', detail:'왕복 2인', pay:'신한카드', krw:'640000', note:'' });
+  eq('내역 추가', trip.expenses.length, 1);
+  eq('금액은 숫자로', trip.expenses[0].krw, 640000);
+  eq('id 부여', trip.expenses[0].id.slice(0,2), 'e_');
+
+  addExpense(trip, { date:'2026-08-02', cat:'숙소', detail:'6박', pay:'', krw:'900000' });
+  eq('두 건', trip.expenses.length, 2);
+
+  updateExpense(trip, trip.expenses[0].id, { date:'2026-08-01', cat:'항공권', detail:'왕복 2인',
+    pay:'신한카드', krw:'650000', note:'마일리지' });
+  eq('수정된 분류', trip.expenses[0].cat, '항공권');
+  eq('수정된 금액', trip.expenses[0].krw, 650000);
+  eq('수정된 메모', trip.expenses[0].note, '마일리지');
+
+  removeExpense(trip, trip.expenses[0].id);
+  eq('삭제', trip.expenses.map(function (e) { return e.cat; }), ['숙소']);
+  eq('없는 id 삭제는 무해', removeExpense(trip, 'nope').expenses.length, 1);
+
+  // expenses가 없거나 배열이 아닌 손상된 trip도 안전
+  eq('expenses 없어도 추가됨', addExpense({}, { cat:'x', krw:'1' }).expenses.length, 1);
+  eq('배열 아니어도 보정', addExpense({ expenses:'x' }, { cat:'y', krw:'1' }).expenses.length, 1);
+})();
+
+eq('내역 폼 검증 통과', validateExpenseForm({ cat:'항공', krw:'1000' }), null);
+eq('분류 없으면 거부', validateExpenseForm({ cat:' ', krw:'1000' }), '항목을 입력하세요.');
+eq('금액 0은 거부', validateExpenseForm({ cat:'항공', krw:'0' }), '금액을 입력하세요.');
+eq('금액이 숫자가 아니면 거부', validateExpenseForm({ cat:'항공', krw:'abc' }), '금액을 입력하세요.');
+eq('음수 거부', validateExpenseForm({ cat:'항공', krw:'-5' }), '금액을 입력하세요.');
+
+// 구 레코드에는 id가 없다 — 편집하려면 id가 있어야 하므로 부여한다
+(function () {
+  __resetStorage();
+  var t = emptyTrip({ title:'x', start:'2026-09-01', end:'2026-09-02' });
+  t.expenses = [{ date:'2026-08-01', cat:'항공', detail:'', pay:'', krw:640000, note:'' }];
+  saveTrip(t);
+  eq('id 마이그레이션 1건', migrateExpenseIds(), 1);
+  eq('id가 생김', loadTrip(t.id).expenses[0].id.slice(0,2), 'e_');
+  eq('금액은 그대로', loadTrip(t.id).expenses[0].krw, 640000);
+  eq('두 번째 실행은 0건', migrateExpenseIds(), 0);
+})();
+
+// ---- 나라 목록 (새 여행에서 나라 → 통화) ----
+eq('나라 목록이 비어있지 않음', COUNTRIES.length > 30, true);
+eq('나라 항목 모양', Object.keys(countryByCode('JP')).sort().join(','), 'cc,cur,name');
+eq('일본', countryByCode('JP').name, '일본');
+eq('일본 통화', countryByCode('JP').cur, 'JPY');
+eq('베트남 통화', countryByCode('VN').cur, 'VND');
+eq('프랑스는 유로', countryByCode('FR').cur, 'EUR');
+eq('소문자도 받음', countryByCode('jp').name, '일본');
+eq('모르는 코드는 null', countryByCode('ZZ'), null);
+// 목록의 모든 나라는 통화 표에 있어야 한다 — 고르면 통화가 반드시 따라와야 하므로.
+eq('모든 나라에 통화가 있다',
+  COUNTRIES.filter(function (c) { return !COUNTRY_CURRENCY[c.cc]; }).length, 0);
+eq('나라 목록은 가나다순',
+  COUNTRIES.map(function (c) { return c.name; }).join('|') ===
+  COUNTRIES.map(function (c) { return c.name; }).slice().sort(function(a,b){return a.localeCompare(b,'ko');}).join('|'), true);

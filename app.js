@@ -230,6 +230,10 @@ document.addEventListener("DOMContentLoaded", function () {
   migrateSections();
   // 경비 레코드에 통화를 붙인다(구 {jpy} → {amount, cur}).
   migrateSpend();
+  // 뭐먹지(meals)를 자유 메모(notes)로 옮긴다.
+  migrateMeals();
+  // 구 결제 내역에 id를 부여한다(편집하려면 항목을 가리킬 수단이 필요하다).
+  migrateExpenseIds();
 
   document.getElementById("new-trip")
     .addEventListener("click", function () { go('#/new'); });
