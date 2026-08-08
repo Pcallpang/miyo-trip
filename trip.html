@@ -256,6 +256,23 @@ body { margin:0; background:var(--bg); color:var(--text);
 .sec-err { background:#fff0f0; color:#c92a2a; border-left:4px solid #e03131;
   padding:9px 12px; border-radius:8px; font-size:.85rem; }
 
+.dayimgs { display:flex; flex-wrap:wrap; gap:8px; padding:12px 16px; border-bottom:1px solid #eef2f4; }
+.dayimg { position:relative; margin:0; flex:0 0 auto; }
+.dayimg img { display:block; width:104px; height:104px; object-fit:cover; border-radius:10px;
+  background:#eef2f4; }
+.dayimg .img-del { position:absolute; top:4px; right:4px; border:0; border-radius:50%;
+  width:24px; height:24px; line-height:1; font-size:1rem; cursor:pointer;
+  background:rgba(0,0,0,.55); color:#fff; }
+.img-add { display:flex; align-items:center; justify-content:center; width:104px; height:104px;
+  border:1px dashed #c3ced4; border-radius:10px; color:var(--muted); font-size:.82rem;
+  cursor:pointer; text-align:center; padding:6px; }
+.img-add.busy { opacity:.5; pointer-events:none; }
+
+.eshare { display:flex; flex-direction:column; gap:6px; padding:0 16px 20px; }
+.eshare button { font:inherit; padding:12px; border:1px solid #d5dde1; border-radius:10px;
+  background:var(--card); color:var(--text); cursor:pointer; }
+.eshare .geo-msg { margin:0; }
+
 </style>
 </head>
 <body>
@@ -1033,6 +1050,71 @@ function migrateSpend() {
   return changed;
 }
 
+// ---- 내보내기·가져오기 (3단계) ----
+
+var MAX_IMPORT_DAYS = 366;
+
+// 파일명에 쓸 수 없는 문자를 지운다. 여행 제목은 사용자가 자유롭게 넣는다.
+function exportFilename(trip) {
+  var t = String((trip && trip.title) || '여행').replace(/[\/\\:*?"<>|]/g, '-').trim();
+  if (!t) t = '여행';
+  return t + '-' + String((trip && trip.start) || '') + '.json';
+}
+
+function isISODate(s) { return typeof s === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s); }
+
+// 가져온 JSON이 여행으로 쓸 만한지 본다. 문제가 있으면 사람이 읽을 수 있는
+// 이유를 돌려주고, 없으면 null.
+// 렌더 경로는 escHtml이 막지만, 저장 전에 구조가 깨진 값을 걸러야
+// 화면이 죽거나 이상한 데이터가 영구화되는 것을 막을 수 있다.
+function validateImport(o) {
+  if (!o || typeof o !== "object" || Array.isArray(o)) return '여행 파일이 아닙니다.';
+  if (Number(o.schema) > SCHEMA) return '더 새로운 버전에서 만든 파일입니다.';
+  if (!o.title || !String(o.title).trim()) return '제목이 없습니다.';
+  if (!isISODate(o.start) || !isISODate(o.end)) return '날짜 형식이 올바르지 않습니다.';
+  if (o.end < o.start) return '종료일이 시작일보다 빠릅니다.';
+  if (o.days !== undefined && !Array.isArray(o.days)) return '일정 데이터가 올바르지 않습니다.';
+  if (Array.isArray(o.days) && o.days.length > MAX_IMPORT_DAYS) return '일정이 너무 많습니다.';
+  if (o.sections !== undefined && !Array.isArray(o.sections)) return '항목 데이터가 올바르지 않습니다.';
+  return null;
+}
+
+// 검증을 통과한 값을 저장 가능한 Trip으로 맞춘다. 빠진 필드를 채우고 타입을
+// 바로잡으며, id는 항상 새로 준다 — 같은 파일을 두 번 가져와도 기존 여행을
+// 덮어쓰지 않아야 한다.
+function normalizeImport(o) {
+  var t = emptyTrip({
+    title: String(o.title).trim(),
+    start: o.start, end: o.end,
+    party: Number(o.party) >= 1 ? Number(o.party) : 2,
+    hotel: typeof o.hotel === "string" ? o.hotel : ""
+  });
+  t.budgetKRW = isFinite(Number(o.budgetKRW)) ? Number(o.budgetKRW) : 0;
+  t.place = (o.place && typeof o.place === "object") ? o.place : null;
+  if (o.currency && typeof o.currency === "object" && o.currency.code) t.currency = o.currency;
+  t.packing = Array.isArray(o.packing) ? o.packing.filter(function (x) { return typeof x === "string"; }) : [];
+  t.expenses = Array.isArray(o.expenses) ? o.expenses.filter(function (x) { return x && typeof x === "object"; }) : [];
+  t.sections = Array.isArray(o.sections) ? o.sections.filter(function (x) { return x && typeof x === "object"; }) : [];
+
+  // 일차는 기간에서 새로 만든 뒤, 가져온 값 중 날짜가 맞는 것만 얹는다.
+  if (Array.isArray(o.days)) {
+    var byDate = {};
+    o.days.forEach(function (d) { if (d && isISODate(d.date)) byDate[d.date] = d; });
+    t.days.forEach(function (d) {
+      var src = byDate[d.date];
+      if (!src) return;
+      d.theme = typeof src.theme === "string" ? src.theme : "";
+      d.place = (src.place && typeof src.place === "object") ? src.place : null;
+      d.curCode = typeof src.curCode === "string" ? src.curCode : null;
+      d.items = Array.isArray(src.items) ? src.items.filter(function (x) { return x && typeof x === "object"; }) : [];
+      d.meals = Array.isArray(src.meals) ? src.meals : [];
+      d.images = Array.isArray(src.images) ? src.images : [];
+      normalizeDay(d);
+    });
+  }
+  return t;
+}
+
 </script>
 <script>
 // Trip 스키마 헬퍼: 일차 생성, 재동기화, 기본값.
@@ -1146,6 +1228,152 @@ function dayPlace(trip, day) {
 function dayCurrency(trip, day) {
   if (day && day.curCode) return { code: day.curCode };
   return (trip && trip.currency) || null;
+}
+
+</script>
+<script>
+// 이미지 첨부: 순수 로직 + IndexedDB 저장.
+// 이미지는 Trip 객체에 넣지 않는다 — localStorage는 5MB 남짓이라 사진 한 장이면
+// 터진다. blob은 IndexedDB에 두고 day.images에는 id만 담는다.
+// schema.js 다음에 로드된다.
+
+var _imgSeq = 0;
+function newImageId() {
+  return "im_" + Date.now().toString(36) + (_imgSeq++).toString(36);
+}
+
+// 긴 변을 maxPx에 맞추고 비율을 유지한다. 이미 작으면 그대로 둔다(늘리지 않는다).
+function fitSize(w, h, maxPx) {
+  var W = Number(w), H = Number(h), M = Number(maxPx);
+  if (!isFinite(W) || !isFinite(H) || W <= 0 || H <= 0) return { w: 0, h: 0 };
+  var long = Math.max(W, H);
+  if (!isFinite(M) || M <= 0 || long <= M) return { w: Math.round(W), h: Math.round(H) };
+  var k = M / long;
+  return { w: Math.round(W * k), h: Math.round(H * k) };
+}
+
+// day.images를 손상된 값에서도 안전하게 다룬다(검증 없이 가져온 JSON 등).
+function attachImage(day, id) {
+  if (!day) return day;
+  if (!Array.isArray(day.images)) day.images = [];
+  if (day.images.indexOf(id) === -1) day.images.push(id);
+  return day;
+}
+
+function detachImage(day, id) {
+  if (!day) return day;
+  if (!Array.isArray(day.images)) { day.images = []; return day; }
+  day.images = day.images.filter(function (x) { return x !== id; });
+  return day;
+}
+
+// 여행에서 실제로 쓰이는 이미지 id 전부. 일차를 지우거나 기간을 줄였을 때
+// 어디에도 안 붙은 blob을 정리하는 데 쓴다.
+function usedImageIds(trip) {
+  var out = [];
+  ((trip && trip.days) || []).forEach(function (d) {
+    if (!d || !Array.isArray(d.images)) return;
+    d.images.forEach(function (id) { if (out.indexOf(id) === -1) out.push(id); });
+  });
+  return out;
+}
+
+// ---- IndexedDB ----
+// Node 테스트 환경과 file://(브라우저에 따라 IndexedDB가 막힌다)에서는 조용히
+// 실패한다 — 이미지 첨부만 동작하지 않고 앱의 나머지는 그대로 쓸 수 있어야 한다.
+
+var IMG_DB = "trip-images";
+var IMG_STORE = "img";
+var _imgDb = null;
+
+function imgAvailable() {
+  try { return typeof indexedDB !== "undefined" && !!indexedDB; }
+  catch (e) { return false; }
+}
+
+function imgOpen() {
+  return new Promise(function (resolve, reject) {
+    if (!imgAvailable()) { reject(new Error("no-indexeddb")); return; }
+    if (_imgDb) { resolve(_imgDb); return; }
+    var req = indexedDB.open(IMG_DB, 1);
+    req.onupgradeneeded = function () {
+      var db = req.result;
+      if (!db.objectStoreNames.contains(IMG_STORE)) db.createObjectStore(IMG_STORE);
+    };
+    req.onsuccess = function () { _imgDb = req.result; resolve(_imgDb); };
+    req.onerror = function () { reject(req.error || new Error("idb-open")); };
+  });
+}
+
+function imgTx(mode, fn) {
+  return imgOpen().then(function (db) {
+    return new Promise(function (resolve, reject) {
+      var tx = db.transaction(IMG_STORE, mode);
+      var store = tx.objectStore(IMG_STORE);
+      var out;
+      try { out = fn(store); } catch (e) { reject(e); return; }
+      tx.oncomplete = function () { resolve(out && out.result !== undefined ? out.result : out); };
+      tx.onerror = function () { reject(tx.error || new Error("idb-tx")); };
+      tx.onabort = function () { reject(tx.error || new Error("idb-abort")); };
+    });
+  });
+}
+
+function imgPut(id, blob) { return imgTx("readwrite", function (s) { return s.put(blob, id); }); }
+function imgGet(id) { return imgTx("readonly", function (s) { return s.get(id); }); }
+function imgDel(id) { return imgTx("readwrite", function (s) { return s.delete(id); }); }
+
+// 파일을 캔버스로 줄여 JPEG blob으로 만든다. 원본을 그대로 넣으면 사진 한 장이
+// 수 MB라 IndexedDB도 금방 커지고, 화면에 그릴 때마다 디코딩 비용이 든다.
+var IMG_MAX_PX = 1600;
+var IMG_QUALITY = 0.8;
+
+function imgShrink(file) {
+  return new Promise(function (resolve, reject) {
+    if (!file || !/^image\//.test(file.type || "")) { reject(new Error("not-image")); return; }
+    var url = URL.createObjectURL(file);
+    var im = new Image();
+    im.onload = function () {
+      var d = fitSize(im.naturalWidth, im.naturalHeight, IMG_MAX_PX);
+      var c = document.createElement("canvas");
+      c.width = d.w; c.height = d.h;
+      c.getContext("2d").drawImage(im, 0, 0, d.w, d.h);
+      URL.revokeObjectURL(url);
+      c.toBlob(function (blob) {
+        if (blob) resolve(blob); else reject(new Error("toBlob"));
+      }, "image/jpeg", IMG_QUALITY);
+    };
+    im.onerror = function () { URL.revokeObjectURL(url); reject(new Error("decode")); };
+    im.src = url;
+  });
+}
+
+// 오브젝트 URL 캐시. renderTimeline이 화면을 통째로 다시 그리므로, 캐시가 없으면
+// 일차를 넘길 때마다 blob을 다시 읽고 디코딩하게 된다.
+var _imgUrls = {};
+
+function imgUrl(id) {
+  if (_imgUrls[id]) return Promise.resolve(_imgUrls[id]);
+  return imgGet(id).then(function (blob) {
+    if (!blob) return null;
+    _imgUrls[id] = URL.createObjectURL(blob);
+    return _imgUrls[id];
+  });
+}
+
+function imgForget(id) {
+  if (_imgUrls[id]) { URL.revokeObjectURL(_imgUrls[id]); delete _imgUrls[id]; }
+}
+
+// 어느 일차에도 안 붙은 blob을 지운다. 일차를 지우거나 기간을 줄이면 생긴다.
+function imgSweep(trip) {
+  if (!imgAvailable()) return Promise.resolve(0);
+  var used = usedImageIds(trip);
+  return imgTx("readonly", function (s) { return s.getAllKeys(); }).then(function (keys) {
+    var dead = (keys || []).filter(function (k) { return used.indexOf(k) === -1; });
+    return Promise.all(dead.map(function (k) { imgForget(k); return imgDel(k); }))
+      .then(function () { return dead.length; });
+  }).catch(function () { return 0; });
 }
 
 </script>
@@ -1749,6 +1977,92 @@ function afterItemEdit(trip, day, st, ok) {
   repaintDay(trip, day.n, st);
 }
 
+// 썸네일의 src를 채우고(비동기), 편집 모드면 추가·삭제를 잇는다.
+// IndexedDB가 없는 환경(file://, 일부 브라우저)에서는 조용히 넘어간다 —
+// 이미지 첨부만 동작하지 않고 앱의 나머지는 그대로 쓸 수 있어야 한다.
+function bindDayImages(trip, day, st, root) {
+  root.querySelectorAll('.dayimg').forEach(function (fig) {
+    var id = fig.dataset.img;
+    imgUrl(id).then(function (url) {
+      var im = fig.querySelector('img');
+      if (!im) return;
+      if (url) im.src = url;
+      else fig.remove();   // 저장소에서 사라진 사진은 자리만 차지한다
+    }).catch(function () { fig.remove(); });
+  });
+
+  if (!EDIT_MODE) return;
+
+  root.querySelectorAll('.img-del').forEach(function (b) {
+    b.addEventListener('click', function () {
+      if (!confirm('이 사진을 삭제할까요?')) return;
+      var id = b.dataset.img;
+      detachImage(day, id);
+      var ok = saveTripBody(trip);
+      if (!ok) {
+        var fresh = loadTrip(trip.id);
+        if (fresh) trip.days = fresh.days;
+        alert('저장에 실패했습니다. 기기 저장 공간을 확인해 주세요.');
+      } else {
+        imgForget(id);
+        imgDel(id).catch(function () {});
+      }
+      repaintDay(trip, day.n, st);
+    });
+  });
+
+  var input = root.querySelector('.img-add input[type=file]');
+  if (!input) return;
+  input.addEventListener('change', function () {
+    var files = Array.prototype.slice.call(input.files || []);
+    if (!files.length) return;
+    if (!imgAvailable()) {
+      alert('이 환경에서는 사진을 저장할 수 없습니다. 주소창으로 앱을 열어 주세요.');
+      input.value = '';
+      return;
+    }
+    var lbl = root.querySelector('.img-add');
+    if (lbl) lbl.classList.add('busy');
+    // 한 장씩 차례로 처리한다 — 큰 사진 여러 장을 동시에 디코딩하면 폰에서 버겁다.
+    files.reduce(function (chain, file) {
+      return chain.then(function () {
+        return imgShrink(file).then(function (blob) {
+          var id = newImageId();
+          return imgPut(id, blob).then(function () { attachImage(day, id); });
+        });
+      }).catch(function () { /* 못 읽는 파일 하나 때문에 나머지를 막지 않는다 */ });
+    }, Promise.resolve()).then(function () {
+      if (lbl) lbl.classList.remove('busy');
+      input.value = '';
+      if (!saveTripBody(trip)) {
+        var fresh = loadTrip(trip.id);
+        if (fresh) trip.days = fresh.days;
+        alert('저장에 실패했습니다. 기기 저장 공간을 확인해 주세요.');
+      }
+      repaintDay(trip, day.n, st);
+    });
+  });
+}
+
+// 일차에 붙은 사진. src는 비워 두고 렌더 후 IndexedDB에서 읽어 채운다 —
+// blob URL은 동기적으로 만들 수 없기 때문이다(bindDayImages 참고).
+function imagesHtml(day) {
+  var ids = (day && Array.isArray(day.images)) ? day.images : [];
+  if (!ids.length && !EDIT_MODE) return '';
+  var thumbs = ids.map(function (id) {
+    return '<figure class="dayimg" data-img="' + escHtml(id) + '">' +
+      '<img alt="" loading="lazy">' +
+      (EDIT_MODE ? '<button class="img-del" type="button" data-img="' + escHtml(id) +
+        '" aria-label="사진 삭제">×</button>' : '') +
+      '</figure>';
+  }).join('');
+  var adder = EDIT_MODE
+    ? '<label class="img-add">+ 사진 추가' +
+      '<input type="file" accept="image/*" multiple hidden></label>'
+    : '';
+  return '<div class="dayimgs">' + thumbs + adder + '</div>';
+}
+
 function renderTimeline(trip, day, st) {
   const main = document.getElementById("timeline");
   const slots = day.items.map(function (it) {
@@ -1794,6 +2108,7 @@ function renderTimeline(trip, day, st) {
         var wx = line ? '<div class="dwx">' + line + wxStamp(dp) + '</div>' : '';
         return badge + wx;
       })() + '</div>' +
+      imagesHtml(day) +
       '<div class="slots">' + rows + '</div>' +
       (EDIT_MODE
         ? '<form class="item-add">' +
@@ -1803,6 +2118,8 @@ function renderTimeline(trip, day, st) {
           '<button type="submit">일정 추가</button></form>'
         : '') +
       meals + '</div>';
+  bindDayImages(trip, day, st, main);
+
   main.querySelectorAll('.memo').forEach(function (inp) {
     inp.addEventListener('input', function () { st.set(inp.dataset.key, inp.value); });
   });
@@ -2437,10 +2754,33 @@ function showEdit(id) {
         '<ul class="daycity-list" id="daycity-list"></ul></div>' : '') +
       '<div class="eerr" id="e-err" hidden></div>' +
       '<button type="submit">' + (trip ? '저장' : '만들기') + '</button>' +
-    '</form>';
+    '</form>' +
+    // 내보내기는 기존 여행에서만 — 새 여행은 아직 저장된 게 없다.
+    (trip ? '<div class="eshare">' +
+      '<div class="geo-lbl">내보내기</div>' +
+      '<button id="e-export" type="button">📤 이 여행을 파일로 저장</button>' +
+      '<p class="geo-msg">사진은 파일에 담기지 않습니다. 일정·경비·준비물만 저장됩니다.</p>' +
+      '</div>' : '');
 
   document.getElementById("e-back").addEventListener("click", function () {
     go(trip ? '#/t/' + trip.id : '#/');
+  });
+
+  var exportBtn = document.getElementById("e-export");
+  if (exportBtn) exportBtn.addEventListener('click', function () {
+    // 사진(IndexedDB의 blob)은 담지 않는다 — base64로 인라인하면 파일이 수십 MB가
+    // 되고, 받는 쪽에서 다시 IndexedDB에 넣어야 해 실패 지점이 늘어난다.
+    // day.images의 id는 남지만 그 blob이 없으므로 렌더가 조용히 건너뛴다.
+    var data = JSON.stringify(trip, null, 2);
+    var blob = new Blob([data], { type: 'application/json' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = exportFilename(trip);
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
   });
 
   // undefined면 "도시를 건드리지 않음" — applyTripForm이 기존 값을 유지한다.
@@ -2828,6 +3168,19 @@ function showScreen(which) {
   });
 }
 
+// 가져온 JSON을 검증해 저장한다. 결과 메시지를 돌려준다(성공이면 null).
+// 파일 하나가 잘못돼도 앱은 그대로 동작해야 하므로 던지지 않는다.
+function importTripJson(text) {
+  var o;
+  try { o = JSON.parse(text); }
+  catch (e) { return '파일을 읽을 수 없습니다. 여행 파일이 맞는지 확인해 주세요.'; }
+  var err = validateImport(o);
+  if (err) return err;
+  var trip = normalizeImport(o);
+  if (!saveTrip(trip)) return '저장에 실패했습니다. 기기 저장 공간을 확인해 주세요.';
+  return null;
+}
+
 function showList() {
   showScreen("list");
   var trips = listTrips();
@@ -3004,6 +3357,28 @@ document.addEventListener("DOMContentLoaded", function () {
 
   document.getElementById("new-trip")
     .addEventListener("click", function () { go('#/new'); });
+
+  var imp = document.getElementById("import-trip");
+  var impInput = document.getElementById("import-file");
+  if (imp && impInput) {
+    imp.addEventListener("click", function () { impInput.click(); });
+    impInput.addEventListener("change", function () {
+      var file = (impInput.files || [])[0];
+      if (!file) return;
+      var reader = new FileReader();
+      reader.onload = function () {
+        var err = importTripJson(String(reader.result));
+        impInput.value = '';
+        if (err) { alert(err); return; }
+        showList();
+      };
+      reader.onerror = function () {
+        impInput.value = '';
+        alert('파일을 읽을 수 없습니다.');
+      };
+      reader.readAsText(file);
+    });
+  }
   document.getElementById("add-sample")
     .addEventListener("click", function () {
       // installSample은 저장 실패 시 null을 돌려준다 — 그대로 이동하면 showTrip이

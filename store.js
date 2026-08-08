@@ -247,3 +247,68 @@ function migrateSpend() {
   });
   return changed;
 }
+
+// ---- 내보내기·가져오기 (3단계) ----
+
+var MAX_IMPORT_DAYS = 366;
+
+// 파일명에 쓸 수 없는 문자를 지운다. 여행 제목은 사용자가 자유롭게 넣는다.
+function exportFilename(trip) {
+  var t = String((trip && trip.title) || '여행').replace(/[\/\\:*?"<>|]/g, '-').trim();
+  if (!t) t = '여행';
+  return t + '-' + String((trip && trip.start) || '') + '.json';
+}
+
+function isISODate(s) { return typeof s === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s); }
+
+// 가져온 JSON이 여행으로 쓸 만한지 본다. 문제가 있으면 사람이 읽을 수 있는
+// 이유를 돌려주고, 없으면 null.
+// 렌더 경로는 escHtml이 막지만, 저장 전에 구조가 깨진 값을 걸러야
+// 화면이 죽거나 이상한 데이터가 영구화되는 것을 막을 수 있다.
+function validateImport(o) {
+  if (!o || typeof o !== "object" || Array.isArray(o)) return '여행 파일이 아닙니다.';
+  if (Number(o.schema) > SCHEMA) return '더 새로운 버전에서 만든 파일입니다.';
+  if (!o.title || !String(o.title).trim()) return '제목이 없습니다.';
+  if (!isISODate(o.start) || !isISODate(o.end)) return '날짜 형식이 올바르지 않습니다.';
+  if (o.end < o.start) return '종료일이 시작일보다 빠릅니다.';
+  if (o.days !== undefined && !Array.isArray(o.days)) return '일정 데이터가 올바르지 않습니다.';
+  if (Array.isArray(o.days) && o.days.length > MAX_IMPORT_DAYS) return '일정이 너무 많습니다.';
+  if (o.sections !== undefined && !Array.isArray(o.sections)) return '항목 데이터가 올바르지 않습니다.';
+  return null;
+}
+
+// 검증을 통과한 값을 저장 가능한 Trip으로 맞춘다. 빠진 필드를 채우고 타입을
+// 바로잡으며, id는 항상 새로 준다 — 같은 파일을 두 번 가져와도 기존 여행을
+// 덮어쓰지 않아야 한다.
+function normalizeImport(o) {
+  var t = emptyTrip({
+    title: String(o.title).trim(),
+    start: o.start, end: o.end,
+    party: Number(o.party) >= 1 ? Number(o.party) : 2,
+    hotel: typeof o.hotel === "string" ? o.hotel : ""
+  });
+  t.budgetKRW = isFinite(Number(o.budgetKRW)) ? Number(o.budgetKRW) : 0;
+  t.place = (o.place && typeof o.place === "object") ? o.place : null;
+  if (o.currency && typeof o.currency === "object" && o.currency.code) t.currency = o.currency;
+  t.packing = Array.isArray(o.packing) ? o.packing.filter(function (x) { return typeof x === "string"; }) : [];
+  t.expenses = Array.isArray(o.expenses) ? o.expenses.filter(function (x) { return x && typeof x === "object"; }) : [];
+  t.sections = Array.isArray(o.sections) ? o.sections.filter(function (x) { return x && typeof x === "object"; }) : [];
+
+  // 일차는 기간에서 새로 만든 뒤, 가져온 값 중 날짜가 맞는 것만 얹는다.
+  if (Array.isArray(o.days)) {
+    var byDate = {};
+    o.days.forEach(function (d) { if (d && isISODate(d.date)) byDate[d.date] = d; });
+    t.days.forEach(function (d) {
+      var src = byDate[d.date];
+      if (!src) return;
+      d.theme = typeof src.theme === "string" ? src.theme : "";
+      d.place = (src.place && typeof src.place === "object") ? src.place : null;
+      d.curCode = typeof src.curCode === "string" ? src.curCode : null;
+      d.items = Array.isArray(src.items) ? src.items.filter(function (x) { return x && typeof x === "object"; }) : [];
+      d.meals = Array.isArray(src.meals) ? src.meals : [];
+      d.images = Array.isArray(src.images) ? src.images : [];
+      normalizeDay(d);
+    });
+  }
+  return t;
+}

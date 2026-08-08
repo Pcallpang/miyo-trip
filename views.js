@@ -198,6 +198,92 @@ function afterItemEdit(trip, day, st, ok) {
   repaintDay(trip, day.n, st);
 }
 
+// 썸네일의 src를 채우고(비동기), 편집 모드면 추가·삭제를 잇는다.
+// IndexedDB가 없는 환경(file://, 일부 브라우저)에서는 조용히 넘어간다 —
+// 이미지 첨부만 동작하지 않고 앱의 나머지는 그대로 쓸 수 있어야 한다.
+function bindDayImages(trip, day, st, root) {
+  root.querySelectorAll('.dayimg').forEach(function (fig) {
+    var id = fig.dataset.img;
+    imgUrl(id).then(function (url) {
+      var im = fig.querySelector('img');
+      if (!im) return;
+      if (url) im.src = url;
+      else fig.remove();   // 저장소에서 사라진 사진은 자리만 차지한다
+    }).catch(function () { fig.remove(); });
+  });
+
+  if (!EDIT_MODE) return;
+
+  root.querySelectorAll('.img-del').forEach(function (b) {
+    b.addEventListener('click', function () {
+      if (!confirm('이 사진을 삭제할까요?')) return;
+      var id = b.dataset.img;
+      detachImage(day, id);
+      var ok = saveTripBody(trip);
+      if (!ok) {
+        var fresh = loadTrip(trip.id);
+        if (fresh) trip.days = fresh.days;
+        alert('저장에 실패했습니다. 기기 저장 공간을 확인해 주세요.');
+      } else {
+        imgForget(id);
+        imgDel(id).catch(function () {});
+      }
+      repaintDay(trip, day.n, st);
+    });
+  });
+
+  var input = root.querySelector('.img-add input[type=file]');
+  if (!input) return;
+  input.addEventListener('change', function () {
+    var files = Array.prototype.slice.call(input.files || []);
+    if (!files.length) return;
+    if (!imgAvailable()) {
+      alert('이 환경에서는 사진을 저장할 수 없습니다. 주소창으로 앱을 열어 주세요.');
+      input.value = '';
+      return;
+    }
+    var lbl = root.querySelector('.img-add');
+    if (lbl) lbl.classList.add('busy');
+    // 한 장씩 차례로 처리한다 — 큰 사진 여러 장을 동시에 디코딩하면 폰에서 버겁다.
+    files.reduce(function (chain, file) {
+      return chain.then(function () {
+        return imgShrink(file).then(function (blob) {
+          var id = newImageId();
+          return imgPut(id, blob).then(function () { attachImage(day, id); });
+        });
+      }).catch(function () { /* 못 읽는 파일 하나 때문에 나머지를 막지 않는다 */ });
+    }, Promise.resolve()).then(function () {
+      if (lbl) lbl.classList.remove('busy');
+      input.value = '';
+      if (!saveTripBody(trip)) {
+        var fresh = loadTrip(trip.id);
+        if (fresh) trip.days = fresh.days;
+        alert('저장에 실패했습니다. 기기 저장 공간을 확인해 주세요.');
+      }
+      repaintDay(trip, day.n, st);
+    });
+  });
+}
+
+// 일차에 붙은 사진. src는 비워 두고 렌더 후 IndexedDB에서 읽어 채운다 —
+// blob URL은 동기적으로 만들 수 없기 때문이다(bindDayImages 참고).
+function imagesHtml(day) {
+  var ids = (day && Array.isArray(day.images)) ? day.images : [];
+  if (!ids.length && !EDIT_MODE) return '';
+  var thumbs = ids.map(function (id) {
+    return '<figure class="dayimg" data-img="' + escHtml(id) + '">' +
+      '<img alt="" loading="lazy">' +
+      (EDIT_MODE ? '<button class="img-del" type="button" data-img="' + escHtml(id) +
+        '" aria-label="사진 삭제">×</button>' : '') +
+      '</figure>';
+  }).join('');
+  var adder = EDIT_MODE
+    ? '<label class="img-add">+ 사진 추가' +
+      '<input type="file" accept="image/*" multiple hidden></label>'
+    : '';
+  return '<div class="dayimgs">' + thumbs + adder + '</div>';
+}
+
 function renderTimeline(trip, day, st) {
   const main = document.getElementById("timeline");
   const slots = day.items.map(function (it) {
@@ -243,6 +329,7 @@ function renderTimeline(trip, day, st) {
         var wx = line ? '<div class="dwx">' + line + wxStamp(dp) + '</div>' : '';
         return badge + wx;
       })() + '</div>' +
+      imagesHtml(day) +
       '<div class="slots">' + rows + '</div>' +
       (EDIT_MODE
         ? '<form class="item-add">' +
@@ -252,6 +339,8 @@ function renderTimeline(trip, day, st) {
           '<button type="submit">일정 추가</button></form>'
         : '') +
       meals + '</div>';
+  bindDayImages(trip, day, st, main);
+
   main.querySelectorAll('.memo').forEach(function (inp) {
     inp.addEventListener('input', function () { st.set(inp.dataset.key, inp.value); });
   });
