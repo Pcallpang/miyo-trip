@@ -125,9 +125,13 @@ body { margin:0; background:var(--bg); color:var(--text);
   font-weight:700; }
 
 #summary { position:relative; }
-.back-list { position:absolute; top:16px; left:14px; border:0; background:rgba(255,255,255,.18);
+/* z-index가 필요한 이유: .dday/.period/.hotel/.cost는 opacity가 1보다 작아 각자
+   쌓임 맥락을 만든다. 그러면 z-index:auto인 절대 위치 요소(이 버튼들)와 같은 페인팅
+   단계에 놓이고, 그 단계에서는 DOM 순서가 승부를 가른다 — .dday가 버튼보다 뒤에
+   있어 버튼 위를 덮었다. 눈에는 버튼이 보이는데 클릭은 .dday가 먹던 원인이다. */
+.back-list { position:absolute; z-index:1; top:16px; left:14px; border:0; background:rgba(255,255,255,.18);
   color:#fff; font-size:1.05rem; line-height:1; padding:7px 10px; border-radius:10px; cursor:pointer; }
-.edit-trip { position:absolute; top:16px; right:14px; border:0; background:rgba(255,255,255,.18);
+.edit-trip { position:absolute; z-index:1; top:16px; right:14px; border:0; background:rgba(255,255,255,.18);
   color:#fff; font-size:1.05rem; line-height:1; padding:7px 10px; border-radius:10px; cursor:pointer; }
 .ehead { background:var(--accent); color:#fff; padding:16px; display:flex; align-items:center; gap:10px; }
 .ehead h1 { margin:0; font-size:1.2rem; }
@@ -141,7 +145,7 @@ body { margin:0; background:var(--bg); color:var(--text);
 .eerr { background:#fff0f0; color:#c92a2a; border-left:4px solid #e03131;
   padding:9px 12px; border-radius:8px; font-size:.85rem; }
 
-.edit-mode { position:absolute; top:16px; right:52px; border:0; background:rgba(255,255,255,.18);
+.edit-mode { position:absolute; z-index:1; top:16px; right:52px; border:0; background:rgba(255,255,255,.18);
   color:#fff; font-size:.8rem; font-weight:700; line-height:1; padding:8px 10px;
   border-radius:10px; cursor:pointer; }
 .edit-mode[aria-pressed=true] { background:#fff; color:var(--accent); }
