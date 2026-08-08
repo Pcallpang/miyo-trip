@@ -1112,3 +1112,21 @@ eq('geoParse null 응답', geoParse(null), []);
 eq('placeLabel 조합', placeLabel({ name: '다낭', country: '베트남' }), '다낭 · 베트남');
 eq('placeLabel 국가 없으면 이름만', placeLabel({ name: '다낭' }), '다낭');
 eq('placeLabel 없으면 빈 문자열', placeLabel(null), '');
+
+// ---- 일차별 도시 ----
+(function () {
+  var trip = { place: { name: '하노이', lat: 21, lon: 105, tz: 'Asia/Bangkok' },
+    days: [{ n: 1, place: null }, { n: 2, place: null }] };
+  var P = { name: '다낭', country: '베트남', lat: 16.06778, lon: 108.22083, tz: 'Asia/Ho_Chi_Minh' };
+
+  setDayPlace(trip, 2, P);
+  eq('일차 도시 지정', trip.days[1].place.name, '다낭');
+  eq('지정 안 한 일차는 여행 기본값 상속', dayPlace(trip, trip.days[0]).name, '하노이');
+  eq('지정한 일차는 그 도시', dayPlace(trip, trip.days[1]).name, '다낭');
+
+  setDayPlace(trip, 2, null);
+  eq('null이면 상속으로 되돌아감', trip.days[1].place, null);
+  eq('되돌린 뒤 상속 확인', dayPlace(trip, trip.days[1]).name, '하노이');
+
+  eq('없는 일차는 무해', setDayPlace(trip, 99, P).days.length, 2);
+})();

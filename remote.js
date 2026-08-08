@@ -100,10 +100,17 @@ function wxStamp(place) {
 
 // 좌표별로 예보를 받아 캐시에 넣는다. 다 되면 onDone()을 부른다 —
 // remote.js가 렌더를 알지 못하게 콜백으로 뒤집었다(1단계 리뷰의 역방향 의존 지적).
+// 진행 중인 요청의 좌표. wxIsFresh는 "응답이 도착한" 좌표만 걸러내므로, 같은 좌표로
+// 연달아 부르면(여행을 열 때 showTrip이 한 번, 곧이어 showDay가 한 번) 응답 전이라
+// 둘 다 요청을 보낸다. 이 표로 두 번째를 막는다.
+var wxInflight = {};
+
 function wxRefresh(st, place, onDone) {
   var k = wxKey(place);
   if (!k) return;
   if (wxIsFresh(place)) return;
+  if (wxInflight[k]) return;
+  wxInflight[k] = true;
   var gen = wxGen;
   // 저장소 캐시부터 화면에 올린다(오프라인이면 이게 전부다).
   wxGet(st, place);
@@ -111,11 +118,13 @@ function wxRefresh(st, place, onDone) {
     if (!r.ok) throw new Error("wx " + r.status);
     return r.json();
   }).then(function (api) {
+    delete wxInflight[k];
     if (gen !== wxGen) return;   // 그 사이 여행이 바뀌었다 — 이 응답은 버린다
     st.set("wx:" + k, { at: new Date().toISOString(), api: api });
     wxMem[k] = { map: wxDailyMap(api), at: null, live: true, fetchedAt: Date.now() };
     if (onDone) onDone();
   }).catch(function () {
+    delete wxInflight[k];
     if (gen !== wxGen) return;
     // 실패해도 캐시가 있으면 다시 그린다 — 시각 스탬프가 붙어야 하기 때문이다.
     if (wxMem[k] && wxMem[k].at && onDone) onDone();

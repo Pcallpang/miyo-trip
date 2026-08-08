@@ -192,3 +192,15 @@ body { margin:0; background:var(--bg); color:var(--text);
 .geo-list li:last-child { border-bottom:0; }
 .geo-list li:hover { background:#f1f5f7; }
 .geo-msg { font-size:.85rem; color:var(--muted); }
+.daycity-block { display:flex; flex-direction:column; gap:6px; }
+.daycity-list { list-style:none; margin:0; padding:0; border:1px solid #d5dde1;
+  border-radius:10px; overflow:hidden; background:var(--card); }
+.daycity-list li { display:flex; align-items:center; gap:8px; padding:8px 12px;
+  border-bottom:1px solid #eef2f4; font-size:.9rem; }
+.daycity-list li:last-child { border-bottom:0; }
+.daycity-list .dc-n { flex:0 0 52px; font-weight:700; color:var(--accent); font-size:.82rem; }
+.daycity-list .dc-p { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.daycity-list button { flex:0 0 auto; font:inherit; font-size:.78rem; padding:4px 10px;
+  border:1px solid #d5dde1; border-radius:8px; background:var(--card); color:var(--muted); cursor:pointer; }
+.dayhead .daycity { display:inline-block; font-size:.78rem; font-weight:700; color:#fff;
+  background:var(--accent2); border-radius:999px; padding:2px 9px; margin-top:4px; }

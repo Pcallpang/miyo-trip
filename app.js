@@ -104,6 +104,10 @@ function showDay(trip, dayN) {
   if (day) {
     renderTabs(trip, day.n, function (n) { go('#/t/' + trip.id + '/d/' + n); });
     renderTimeline(trip, day, CUR.st);
+    // 그 일차만 다른 도시일 수 있다 — 여행을 열 때 받아 둔 좌표와 다르면 여기서 받는다.
+    // wxRefresh는 이미 받아 둔 좌표면 곧바로 반환하므로 일차를 오갈 때 요청이 늘지 않는다.
+    var dp = dayPlace(trip, day);
+    if (dp) wxRefresh(CUR.st, dp, wxRepaint);
   } else {
     document.getElementById("daytabs").innerHTML = '';
     document.getElementById("timeline").innerHTML =

@@ -45,6 +45,15 @@ function applyTripForm(trip, f) {
   // 도시를 건드리지 않은 저장(f.place === undefined)에서는 기존 값을 그대로 둔다.
   if (f.place !== undefined) next.place = f.place;
   next.days = resyncDays(trip.days, f.start, f.end);
+  // 일차별 도시는 resyncDays 뒤에 적용한다 — 기간이 바뀌면 일차 번호가 다시 매겨지므로
+  // 그 전에 적용하면 엉뚱한 날에 붙는다. {dayN: place|null} 형태다.
+  if (f.dayPlaces) {
+    for (var dn in f.dayPlaces) {
+      if (Object.prototype.hasOwnProperty.call(f.dayPlaces, dn)) {
+        setDayPlace(next, Number(dn), f.dayPlaces[dn]);
+      }
+    }
+  }
   return next;
 }
 
@@ -95,6 +104,10 @@ function showEdit(id) {
         '<div class="geo-msg" id="geo-msg" hidden></div>' +
         '<ul class="geo-list" id="geo-list" hidden></ul>' +
       '</div>' +
+      // 일차별 도시는 기존 여행에서만 — 새 여행은 아직 일차가 없다.
+      (trip ? '<div class="daycity-block"><div class="geo-lbl">일차별 도시 ' +
+        '<span class="geo-hint">(경유·이동하는 날만 지정하면 됩니다)</span></div>' +
+        '<ul class="daycity-list" id="daycity-list"></ul></div>' : '') +
       '<div class="eerr" id="e-err" hidden></div>' +
       '<button type="submit">' + (trip ? '저장' : '만들기') + '</button>' +
     '</form>';
@@ -105,6 +118,10 @@ function showEdit(id) {
 
   // undefined면 "도시를 건드리지 않음" — applyTripForm이 기존 값을 유지한다.
   var pickedPlace = undefined;
+  // 일차별 오버라이드 {dayN: place|null}. 저장할 때만 반영된다.
+  var pickedDayPlaces = {};
+  // 검색 결과를 어디에 적용할지: null이면 여행 기본 도시, 숫자면 그 일차.
+  var geoTarget = null;
   var curEl = document.getElementById("geo-cur");
   var msgEl = document.getElementById("geo-msg");
   var listEl = document.getElementById("geo-list");
@@ -147,15 +164,54 @@ function showEdit(id) {
       listEl.hidden = false;
       listEl.querySelectorAll('li').forEach(function (li) {
         li.addEventListener('click', function () {
-          pickedPlace = list[Number(li.dataset.i)];
+          var chosen = list[Number(li.dataset.i)];
+          if (geoTarget === null) pickedPlace = chosen;
+          else pickedDayPlaces[geoTarget] = chosen;
+          geoTarget = null;
           listEl.hidden = true;
           qEl.value = '';
           paintCur();
+          paintDays();
           showMsg('저장을 눌러야 반영됩니다.');
         });
       });
     });
   }
+
+  // 일차별 도시 목록. 지정된 일차는 그 도시를, 아니면 여행 기본값을 보여준다.
+  function paintDays() {
+    var host = document.getElementById("daycity-list");
+    if (!host || !trip) return;
+    var base = (pickedPlace !== undefined) ? pickedPlace : trip.place;
+    host.innerHTML = trip.days.map(function (d) {
+      var override = Object.prototype.hasOwnProperty.call(pickedDayPlaces, d.n)
+        ? pickedDayPlaces[d.n] : d.place;
+      var eff = override || base;
+      var mark = override ? '📍 ' : '';
+      var label = eff ? escHtml(placeLabel(eff)) : '<span class="geo-none">미지정</span>';
+      return '<li><span class="dc-n">' + Number(d.n) + '일차</span>' +
+        '<span class="dc-p">' + mark + label + '</span>' +
+        '<button type="button" class="dc-set" data-n="' + Number(d.n) + '">변경</button>' +
+        (override ? '<button type="button" class="dc-clr" data-n="' + Number(d.n) + '">기본값</button>' : '') +
+        '</li>';
+    }).join('');
+    host.querySelectorAll('.dc-set').forEach(function (b) {
+      b.addEventListener('click', function () {
+        geoTarget = Number(b.dataset.n);
+        showMsg(geoTarget + '일차에 적용할 도시를 검색하세요.');
+        qEl.focus();
+      });
+    });
+    host.querySelectorAll('.dc-clr').forEach(function (b) {
+      b.addEventListener('click', function () {
+        // null을 넣어야 "여행 기본값으로 되돌린다"가 저장 시 반영된다.
+        pickedDayPlaces[Number(b.dataset.n)] = null;
+        paintDays();
+        showMsg('저장을 눌러야 반영됩니다.');
+      });
+    });
+  }
+  paintDays();
 
   goEl.addEventListener('click', runSearch);
   // 폼 안의 text input은 Enter로 상위 폼이 제출된다 — 가로채서 검색으로 돌린다.
@@ -177,6 +233,9 @@ function showEdit(id) {
               party: fd.get('party'), hotel: fd.get('hotel') };
     // 검색으로 고른 도시가 있을 때만 넘긴다 — undefined면 기존 값이 유지된다.
     if (pickedPlace !== undefined) f.place = pickedPlace;
+    for (var _k in pickedDayPlaces) {
+      if (Object.prototype.hasOwnProperty.call(pickedDayPlaces, _k)) { f.dayPlaces = pickedDayPlaces; break; }
+    }
     var box = document.getElementById("e-err");
     submitting = true;
     var res = submitTripForm(trip, f);
@@ -277,5 +336,14 @@ function removeItem(trip, dayN, itemId) {
   var day = findDay(trip, dayN);
   if (!day) return trip;
   day.items = day.items.filter(function (it) { return it.id !== itemId; });
+  return trip;
+}
+
+// 그 일차만 다른 도시일 때 지정한다. place가 null이면 여행 기본값 상속으로 되돌린다.
+// addItem/updateItem/removeItem과 같은 계약 — 인자로 받은 trip을 그 자리에서 고친다.
+function setDayPlace(trip, dayN, place) {
+  var day = findDay(trip, dayN);
+  if (!day) return trip;
+  day.place = place || null;
   return trip;
 }

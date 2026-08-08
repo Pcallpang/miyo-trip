@@ -252,8 +252,13 @@ function renderTimeline(trip, day, st) {
       (function () {
         // 그 일차에 지정된 도시(없으면 여행 기본값)의 예보를 쓴다.
         var dp = dayPlace(trip, day);
+        // 배지는 여행 기본 도시와 다른 일차에만 붙인다 — 모든 일차에 붙이면
+        // 단일 도시 여행에서 같은 이름이 일곱 번 반복돼 소음이 된다.
+        var moved = dp && trip.place && wxKey(dp) !== wxKey(trip.place);
+        var badge = moved ? '<span class="daycity">📍 ' + escHtml(dp.name) + '</span>' : '';
         var line = wxLine(wxGet(st, dp).map, day.date);
-        return line ? '<div class="dwx">' + line + wxStamp(dp) + '</div>' : '';
+        var wx = line ? '<div class="dwx">' + line + wxStamp(dp) + '</div>' : '';
+        return badge + wx;
       })() + '</div>' +
       '<div class="slots">' + rows + '</div>' +
       (EDIT_MODE
