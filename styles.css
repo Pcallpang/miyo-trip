@@ -305,3 +305,44 @@ body { margin:0; background:var(--bg); color:var(--text);
 .cur-line { font-size:.9rem; color:var(--muted); margin-top:-6px; }
 .cur-line b { color:var(--text); }
 .geo-cur .geo-hint { color:var(--muted); }
+
+/* ---- 모달 ---- */
+body.modal-open { overflow:hidden; }
+.modal { position:fixed; inset:0; z-index:100; display:flex; align-items:flex-end;
+  justify-content:center; }
+.modal-back { position:absolute; inset:0; background:rgba(0,0,0,.45); }
+.modal-card { position:relative; width:100%; max-width:520px; max-height:88vh; overflow-y:auto;
+  background:var(--card); border-radius:18px 18px 0 0; box-shadow:0 -4px 24px rgba(0,0,0,.2);
+  padding-bottom:env(safe-area-inset-bottom); }
+@media (min-width:560px) {
+  .modal { align-items:center; }
+  .modal-card { border-radius:18px; }
+}
+.modal-head { display:flex; align-items:center; gap:10px; padding:16px 16px 8px; }
+.modal-head h2 { margin:0; font-size:1.05rem; flex:1; }
+.modal-x { border:0; background:none; font-size:1.4rem; line-height:1; color:var(--muted);
+  cursor:pointer; padding:2px 6px; }
+.modal-form { display:flex; flex-direction:column; gap:10px; padding:0 16px 16px; }
+.modal-form label { display:flex; flex-direction:column; gap:5px; font-size:.85rem;
+  color:var(--muted); }
+.modal-form input, .modal-form textarea, .modal-form select { font:inherit; color:var(--text);
+  padding:11px; border:1px solid #d5dde1; border-radius:10px; background:var(--card);
+  min-width:0; width:100%; }
+.modal-row { display:flex; gap:8px; }
+.modal-row > * { flex:1; min-width:0; }
+.modal-err { background:#fff0f0; color:#c92a2a; border-left:4px solid #e03131;
+  padding:9px 12px; border-radius:8px; font-size:.85rem; }
+.modal-btns { display:flex; gap:8px; margin-top:2px; }
+.modal-btns button { flex:1; font:inherit; font-weight:700; padding:13px; border:0;
+  border-radius:12px; background:var(--accent); color:#fff; cursor:pointer; }
+.modal-btns .modal-cancel { background:var(--card); color:var(--muted);
+  border:1px solid #d5dde1; font-weight:400; }
+
+/* 일차 머리의 추가 버튼 — 폼을 아래에 붙이지 않고 여기서 모달을 연다. */
+.day-actions { display:flex; gap:8px; margin-top:10px; }
+.day-actions button { flex:1; font:inherit; font-size:.85rem; font-weight:700; padding:9px;
+  border:1px solid var(--accent); border-radius:10px; background:var(--card);
+  color:var(--accent); cursor:pointer; }
+
+#city-sel { font:inherit; color:var(--text); padding:11px; border:1px solid #d5dde1;
+  border-radius:10px; background:var(--card); width:100%; }
