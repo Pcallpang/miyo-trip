@@ -213,3 +213,37 @@ function migrateLegacy() {
   found.forEach(lsDel);
   return t.id;
 }
+
+// 구 경비 레코드는 통화 정보가 없다({jpy}만 있다) — 당시 앱이 엔화 전용이었으므로
+// 그 여행의 기본 통화(없으면 JPY)로 채운다. 이게 유일하게 옳은 추정이다.
+// 일차마다 통화가 다를 수 있어(2단계-A의 일차별 도시와 같은 사정) 금액만으로는
+// 나중에 환산할 수 없으므로 cur를 함께 저장한다.
+function migrateSpendRecord(rec, defCur) {
+  if (!rec || typeof rec !== "object") return rec;
+  if (rec.cur !== undefined || rec.amount !== undefined) return rec;
+  var out = {};
+  for (var k in rec) {
+    if (Object.prototype.hasOwnProperty.call(rec, k) && k !== "jpy") out[k] = rec[k];
+  }
+  var n = Number(rec.jpy);
+  out.amount = isFinite(n) ? n : 0;
+  out.cur = defCur || "JPY";
+  return out;
+}
+
+// 재실행해도 안전하다 — 이미 새 형식이면 아무 것도 쓰지 않는다.
+function migrateSpend() {
+  var changed = 0;
+  listTrips().forEach(function (row) {
+    var trip = loadTrip(row.id);
+    if (!trip) return;
+    var st = tripStore(row.id);
+    var list = st.get("spend", []);
+    if (!Array.isArray(list) || !list.length) return;
+    var needs = list.some(function (r) { return r && r.jpy !== undefined && r.cur === undefined; });
+    if (!needs) return;
+    var defCur = (trip.currency && trip.currency.code) || "JPY";
+    if (st.set("spend", list.map(function (r) { return migrateSpendRecord(r, defCur); }))) changed++;
+  });
+  return changed;
+}

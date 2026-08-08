@@ -170,3 +170,69 @@ function geoSearch(q, cb) {
     cb([], '검색에 실패했습니다. 연결을 확인해 주세요.');
   });
 }
+
+// ---- 환율 ----
+
+// KRW 기준 한 번 조회로 166개 통화를 모두 얻는다(실측). 키 불요, CORS 허용.
+// rates는 "1 KRW당 해당 통화"다 — 원화 환산은 money.js의 toKRW가 뒤집어 계산한다.
+var FX_URL = "https://open.er-api.com/v6/latest/KRW";
+// 환율은 하루 한 번 갱신된다(time_next_update_utc 실측). 날씨의 30분과 달리 길게 잡는다.
+var FX_TTL_MS = 12 * 60 * 60 * 1000;
+// 무료 등급 이용 조건: "We require attribution on the pages you're using these rates".
+// 앱 톤에 맞춰 눈에 띄지 않게 둬도 되지만 링크 자체는 있어야 한다.
+var FX_ATTRIB_HTML =
+  '<a class="fx-attrib" href="https://www.exchangerate-api.com" ' +
+  'target="_blank" rel="noopener">환율 제공: Exchange Rate API</a>';
+
+// 여행 밖 전역 키 하나 — 통화가 무엇이든 같은 응답을 쓴다.
+function fxGet() {
+  var v = lsGet("fx", null);
+  return (v && v.rates) ? v : null;
+}
+
+// 사용자가 직접 넣은 환율은 "1단위당 원화"(예: 엔당 9원)로 저장된다.
+// rates는 반대 축(1원당 통화)이므로 뒤집어서 얹는다. 0이나 음수는 무시한다.
+function fxRates(st) {
+  var base = fxGet();
+  var out = {};
+  if (base && base.rates) {
+    for (var k in base.rates) {
+      if (Object.prototype.hasOwnProperty.call(base.rates, k)) out[k] = base.rates[k];
+    }
+  }
+  var manual = st ? st.get("fxManual", null) : null;
+  if (manual) {
+    for (var c in manual) {
+      if (!Object.prototype.hasOwnProperty.call(manual, c)) continue;
+      var krwPerUnit = Number(manual[c]);
+      if (isFinite(krwPerUnit) && krwPerUnit > 0) out[c] = 1 / krwPerUnit;
+    }
+  }
+  return out;
+}
+
+function fxIsFresh() {
+  var v = fxGet();
+  if (!v || !v.fetchedAt) return false;
+  return (Date.now() - v.fetchedAt) < FX_TTL_MS;
+}
+
+var fxInflight = false;
+
+// 캐시 우선. 실패해도 조용히 넘어간다 — 수동 입력이 항상 있으므로 앱은 계속 동작한다.
+function fxRefresh(onDone) {
+  if (fxIsFresh() || fxInflight) return;
+  fxInflight = true;
+  fetch(FX_URL).then(function (r) {
+    if (!r.ok) throw new Error("fx " + r.status);
+    return r.json();
+  }).then(function (api) {
+    fxInflight = false;
+    if (!api || api.result !== "success" || !api.rates) return;
+    lsSet("fx", { at: api.time_last_update_utc || new Date().toISOString(),
+                  fetchedAt: Date.now(), rates: api.rates });
+    if (onDone) onDone();
+  }).catch(function () {
+    fxInflight = false;
+  });
+}

@@ -33,6 +33,7 @@ function applyTripForm(trip, f) {
                            party: Number(f.party), hotel: (f.hotel || '').trim() });
     // f.place가 undefined면 도시를 건드리지 않은 저장이다(기본값 null 유지).
     if (f.place !== undefined) made.place = f.place;
+    if (f.currency !== undefined) made.currency = f.currency;
     return made;
   }
   var next = {};
@@ -44,6 +45,7 @@ function applyTripForm(trip, f) {
   next.hotel = (f.hotel || '').trim();
   // 도시를 건드리지 않은 저장(f.place === undefined)에서는 기존 값을 그대로 둔다.
   if (f.place !== undefined) next.place = f.place;
+  if (f.currency !== undefined) next.currency = f.currency;
   next.days = resyncDays(trip.days, f.start, f.end);
   // 일차별 도시는 resyncDays 뒤에 적용한다 — 기간이 바뀌면 일차 번호가 다시 매겨지므로
   // 그 전에 적용하면 엉뚱한 날에 붙는다. {dayN: place|null} 형태다.
@@ -92,6 +94,14 @@ function showEdit(id) {
         'value="' + (trip ? Number(trip.party) : 2) + '"></label>' +
       '<label>숙소<textarea name="hotel" rows="2" ' +
         'placeholder="숙소명 · 체크인/아웃">' + escHtml(trip ? trip.hotel : '') + '</textarea></label>' +
+      // 현지 통화. 경비를 이 통화로 기록하고 원화 환산을 함께 보여준다.
+      '<label>현지 통화<select name="cur">' +
+        CURRENCIES.map(function (c) {
+          var on = ((trip && trip.currency && trip.currency.code) || 'KRW') === c.code ? ' selected' : '';
+          return '<option value="' + escHtml(c.code) + '"' + on + '>' +
+            escHtml(c.code + ' · ' + c.name + ' (' + c.symbol + ')') + '</option>';
+        }).join('') +
+      '</select></label>' +
       // 도시는 폼 필드가 아니라 검색으로 고른다 — 선택값은 pickedPlace에 담아두고
       // 저장할 때 함께 넘긴다(취소하면 반영되지 않는다).
       '<div class="geo-block">' +
@@ -233,6 +243,8 @@ function showEdit(id) {
               party: fd.get('party'), hotel: fd.get('hotel') };
     // 검색으로 고른 도시가 있을 때만 넘긴다 — undefined면 기존 값이 유지된다.
     if (pickedPlace !== undefined) f.place = pickedPlace;
+    // 통화는 프리셋에서 고른 코드로 객체를 만들어 넘긴다.
+    f.currency = currencyByCode(fd.get('cur'));
     for (var _k in pickedDayPlaces) {
       if (Object.prototype.hasOwnProperty.call(pickedDayPlaces, _k)) { f.dayPlaces = pickedDayPlaces; break; }
     }

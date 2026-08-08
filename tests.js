@@ -1,25 +1,23 @@
 // 브라우저(test.html)와 Node(test-node.js) 양쪽에서 로드된다.
 // 러너가 전역 eq(name, got, want)를 미리 정의해 둔다. 여기서는 단언만 쓴다.
 
+// 경비 레코드는 통화를 함께 담는다({amount, cur}) — 2단계-B에서 {jpy}에서 옮겼다.
 var L = [
-  { id: 1, date: "2026-07-29", jpy: 1200, cat: "식비", note: "이치란" },
-  { id: 2, date: "2026-07-29", jpy: 800,  cat: "교통", note: "지하철" },
-  { id: 3, date: "2026-07-30", jpy: 2000, cat: "식비", note: "저녁" },
-  { id: 4, date: "2026-07-28", jpy: 500,  cat: "기타", note: "" }
+  { id: 1, date: "2026-07-29", amount: 1200, cur: "JPY", cat: "식비", note: "이치란" },
+  { id: 2, date: "2026-07-29", amount: 800,  cur: "JPY", cat: "교통", note: "지하철" },
+  { id: 3, date: "2026-07-30", amount: 2000, cur: "JPY", cat: "식비", note: "저녁" },
+  { id: 4, date: "2026-07-28", amount: 500,  cur: "JPY", cat: "기타", note: "" }
 ];
 
-eq('합계', spendTotalJpy(L), 4500);
-eq('빈 목록 합계', spendTotalJpy([]), 0);
-eq('잘못된 금액은 0으로', spendTotalJpy([{jpy:"abc"},{jpy:100}]), 100);
-
-eq('환산 900', jpyToKrw(4500, 900), 40500);
-eq('환산 반올림', jpyToKrw(1234, 900), 11106);
-eq('환율 0이면 0', jpyToKrw(4500, 0), 0);
+eq('통화별 합계(단일 통화)', spendTotals(L), [{ cur: "JPY", amount: 4500 }]);
+eq('빈 목록 합계', spendTotals([]), []);
+eq('잘못된 금액은 0으로',
+  spendTotals([{amount:"abc",cur:"JPY"},{amount:100,cur:"JPY"}]), [{ cur:"JPY", amount:100 }]);
 
 eq('분류별 집계', spendByCat(L), [
-  { cat: "식비", jpy: 3200 },
-  { cat: "교통", jpy: 800 },
-  { cat: "기타", jpy: 500 }
+  { cat: "식비", cur: "JPY", amount: 3200 },
+  { cat: "교통", cur: "JPY", amount: 800 },
+  { cat: "기타", cur: "JPY", amount: 500 }
 ]);
 eq('빈 목록 분류', spendByCat([]), []);
 
@@ -1129,4 +1127,103 @@ eq('placeLabel 없으면 빈 문자열', placeLabel(null), '');
   eq('되돌린 뒤 상속 확인', dayPlace(trip, trip.days[1]).name, '하노이');
 
   eq('없는 일차는 무해', setDayPlace(trip, 99, P).days.length, 2);
+})();
+
+// ---- 경비 레코드 마이그레이션 ----
+eq('구 레코드 변환', migrateSpendRecord({ id:1, date:'2026-07-29', jpy:1200, cat:'식비', note:'이치란' }, 'JPY'),
+  { id:1, date:'2026-07-29', cat:'식비', note:'이치란', amount:1200, cur:'JPY' });
+eq('이미 새 형식이면 그대로',
+  migrateSpendRecord({ id:2, date:'2026-07-29', amount:500, cur:'USD', cat:'교통', note:'' }, 'JPY').cur, 'USD');
+eq('기본 통화를 따른다',
+  migrateSpendRecord({ id:3, date:'2026-07-29', jpy:900, cat:'기타', note:'' }, 'VND').cur, 'VND');
+eq('금액이 숫자가 아니면 0', migrateSpendRecord({ id:4, jpy:'abc' }, 'JPY').amount, 0);
+
+(function () {
+  __resetStorage();
+  var t = emptyTrip({ title:'테스트', start:'2026-09-01', end:'2026-09-02' });
+  t.currency = { code:'JPY', symbol:'¥', decimals:0, unit:100 };
+  saveTrip(t);
+  tripStore(t.id).set('spend', [
+    { id:1, date:'2026-09-01', jpy:1200, cat:'식비', note:'라멘' },
+    { id:2, date:'2026-09-01', jpy:800,  cat:'교통', note:'' }
+  ]);
+  eq('마이그레이션이 한 여행을 고침', migrateSpend(), 1);
+  var got = tripStore(t.id).get('spend', []);
+  eq('금액 보존', got[0].amount, 1200);
+  eq('통화 부여', got[0].cur, 'JPY');
+  eq('구 필드 제거', got[0].jpy, undefined);
+  eq('두 번째 실행은 0건', migrateSpend(), 0);
+})();
+
+// ---- 통화 ----
+eq('JPY 프리셋', currencyByCode('JPY').symbol, '¥');
+eq('JPY는 소수점 없음', currencyByCode('JPY').decimals, 0);
+eq('USD는 소수점 둘', currencyByCode('USD').decimals, 2);
+eq('VND 단위 1000', currencyByCode('VND').unit, 1000);
+eq('모르는 코드는 코드 자체를 기호로', currencyByCode('XYZ').symbol, 'XYZ');
+eq('모르는 코드는 소수점 둘', currencyByCode('XYZ').decimals, 2);
+eq('기본 통화는 원화', defaultCurrency().code, 'KRW');
+
+eq('엔 표기', fmtAmount(1200, currencyByCode('JPY')), '¥1,200');
+eq('달러 표기(소수점 둘)', fmtAmount(12.5, currencyByCode('USD')), '$12.50');
+eq('동 표기(소수점 없음)', fmtAmount(120000, currencyByCode('VND')), '₫120,000');
+eq('엔은 반올림', fmtAmount(1200.7, currencyByCode('JPY')), '¥1,201');
+eq('숫자 아니면 0 취급', fmtAmount('abc', currencyByCode('JPY')), '¥0');
+
+// rates는 1 KRW당 해당 통화다(실측) — 원화 = 금액 / rates[코드]
+var RATES = { JPY: 0.111682, USD: 0.000708, VND: 18.53835 };
+eq('엔 → 원', toKRW(1200, 'JPY', RATES), 10745);
+eq('달러 → 원', toKRW(10, 'USD', RATES), 14124);
+eq('원 → 원은 그대로', toKRW(5000, 'KRW', RATES), 5000);
+eq('환율 없으면 null', toKRW(100, 'ZZZ', RATES), null);
+eq('rates 없으면 null', toKRW(100, 'JPY', null), null);
+eq('원화 표기', fmtKRW(10745), '10,745원');
+
+// 통화별 합계 — 한 여행에 여러 통화가 섞일 수 있다
+var SL = [
+  { id:1, amount:1200, cur:'JPY', cat:'식비', date:'2026-09-01' },
+  { id:2, amount:800,  cur:'JPY', cat:'교통', date:'2026-09-01' },
+  { id:3, amount:12.5, cur:'USD', cat:'식비', date:'2026-09-02' }
+];
+eq('통화별 합계', spendTotals(SL), [{ cur:'JPY', amount:2000 }, { cur:'USD', amount:12.5 }]);
+eq('빈 목록', spendTotals([]), []);
+eq('분류별 집계에 통화 축', spendByCat(SL), [
+  { cat:'식비', cur:'JPY', amount:1200 },
+  { cat:'식비', cur:'USD', amount:12.5 },
+  { cat:'교통', cur:'JPY', amount:800 }
+]);
+
+// ---- 환율 ----
+eq('FX_URL은 KRW 기준', FX_URL.indexOf('/latest/KRW') >= 0, true);
+// 무료 등급 이용 조건상 출처 표기가 필수다.
+eq('출처 표기에 링크가 있다', FX_ATTRIB_HTML.indexOf('exchangerate-api.com') >= 0, true);
+
+(function () {
+  __resetStorage();
+  lsSet('fx', { at:'2026-08-08T00:00:00Z', rates:{ JPY:0.111682, USD:0.000708 } });
+  var st = tripStore('t_fx');
+  eq('자동 환율을 읽는다', fxRates(st).JPY, 0.111682);
+  eq('모르는 통화는 환산 불가', toKRW(100, 'ZZZ', fxRates(st)), null);
+
+  // 수동값은 "1단위당 원화"로 저장한다(9원/엔). rates 축(1원당 통화)으로 뒤집어 얹는다.
+  st.set('fxManual', { JPY: 9 });
+  eq('수동 환율이 자동보다 우선', Math.round(1 / fxRates(st).JPY), 9);
+  eq('수동 환율로 환산', toKRW(1200, 'JPY', fxRates(st)), 10800);
+  eq('수동을 안 넣은 통화는 자동값', fxRates(st).USD, 0.000708);
+
+  st.set('fxManual', {});
+  eq('수동을 비우면 자동값으로', fxRates(st).JPY, 0.111682);
+})();
+
+// ---- 통화 기호 XSS ----
+// currency.symbol은 가져온 JSON에서 올 수 있는 외부 입력이다.
+(function () {
+  var H = '<img src=x onerror=alert(1)>';
+  var st = { get: function (k, fb) { return k === 'spend'
+    ? [{ id:1, date:'2026-08-08', amount:100, cur:H, cat:'식비', note:'' }] : fb; },
+    set: function () {} };
+  var el = global.__setDomTarget('summary');
+  renderSummary({ id:'t_x', title:'T', start:'2026-08-08', end:'2026-08-09',
+                  hotel:'', party:2, budgetKRW:0 }, st);
+  eq('요약: 통화 기호로 태그를 주입할 수 없다', el.innerHTML.indexOf('<img') === -1, true);
 })();

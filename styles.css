@@ -204,3 +204,16 @@ body { margin:0; background:var(--bg); color:var(--text);
   border:1px solid #d5dde1; border-radius:8px; background:var(--card); color:var(--muted); cursor:pointer; }
 .dayhead .daycity { display:inline-block; font-size:.78rem; font-weight:700; color:#fff;
   background:var(--accent2); border-radius:999px; padding:2px 9px; margin-top:4px; }
+
+.stotal .stot-row { font-size:1.25rem; font-weight:800; color:var(--accent); }
+.stotal .stot-row + .stot-row { margin-top:2px; }
+.stotal .stot-sum { font-size:.9rem; font-weight:700; color:var(--muted); margin-top:6px;
+  padding-top:6px; border-top:1px solid #eef2f4; }
+.spend-add .samt-in { flex:0 0 90px; }
+.spend-add .scur-in { flex:0 0 auto; background:#fff; }
+.slist .samt { flex:0 0 auto; font-weight:700; white-space:nowrap; }
+.sfx .sfx-clr { margin-left:6px; font:inherit; font-size:.75rem; padding:2px 8px;
+  border:1px solid #d5dde1; border-radius:6px; background:var(--card); color:var(--muted); cursor:pointer; }
+.fx-attrib-row { margin-top:10px; }
+.fx-attrib { font-size:.72rem; color:var(--muted); text-decoration:none; opacity:.8; }
+.fx-attrib:hover { text-decoration:underline; }

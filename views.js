@@ -46,44 +46,9 @@ function dday(todayISO, startISO, endISO) {
 
 // ---- 현지 경비 ----
 
-var SPEND_CATS = ["식비", "교통", "쇼핑", "관광", "기타"];
-
 function spendList(st) {
   var v = st.get("spend", []);
   return Array.isArray(v) ? v : [];
-}
-function spendFx(st) {
-  var n = Number(st.get("fx", 900));
-  return isFinite(n) && n > 0 ? n : 0;
-}
-function spendTotalJpy(list) {
-  return list.reduce(function (s, e) {
-    var n = Number(e.jpy);
-    return s + (isFinite(n) ? n : 0);
-  }, 0);
-}
-function jpyToKrw(jpy, fx) {
-  return Math.round(jpy * fx / 100);
-}
-function spendByCat(list) {
-  var m = {};
-  list.forEach(function (e) {
-    var n = Number(e.jpy);
-    m[e.cat] = (m[e.cat] || 0) + (isFinite(n) ? n : 0);
-  });
-  return SPEND_CATS.filter(function (c) { return m[c]; })
-    .map(function (c) { return { cat: c, jpy: m[c] }; });
-}
-function spendByDate(list) {
-  var m = {}, dates = [];
-  list.forEach(function (e) {
-    if (!m[e.date]) { m[e.date] = []; dates.push(e.date); }
-    m[e.date].push(e);
-  });
-  dates.sort().reverse();
-  return dates.map(function (d) {
-    return { date: d, items: m[d].slice().reverse() };
-  });
 }
 
 // 일차 번호(n)가 아니라 날짜로 키를 잡는다 — resyncDays가 날짜를 기준으로 일차를
@@ -95,15 +60,33 @@ function mealKey(date, i) { return "meal:" + String(date) + ":" + i; }
 // ---- 상단 요약 ----
 
 // lead가 true면(다른 요약 텍스트 뒤가 아니라 줄의 맨 앞이면) "· " 구분자를 붙이지 않는다.
+// 통화가 여럿이면 요약 한 줄에 다 담을 수 없으므로 원화 환산 총합만 보여준다 —
+// 통화별 내역은 경비 탭에서 본다.
 function summarySpend(st, lead) {
-  const tot = spendTotalJpy(spendList(st));
-  if (!tot) return '';
-  const fx = spendFx(st);
-  const krw = fx ? ' (약 ' + jpyToKrw(tot, fx).toLocaleString('ko-KR') + '원)' : '';
+  var totals = spendTotals(spendList(st));
+  if (!totals.length) return '';
+  var rates = fxRates(st);
+  var body;
+  if (totals.length === 1) {
+    var one = totals[0];
+    var krw = toKRW(one.amount, one.cur, rates);
+    // 통화 기호는 외부 입력이 될 수 있다(가져온 JSON의 currency.symbol) — escHtml 필수.
+    body = '💸 현지 ' + escHtml(fmtAmount(one.amount, currencyByCode(one.cur))) +
+      (krw === null ? '' : ' (약 ' + escHtml(fmtKRW(krw)) + ')');
+  } else {
+    // 환산할 수 없는 통화가 하나라도 있으면 총합이 거짓이 되므로 "+" 표시를 붙인다.
+    var sum = 0, partial = false;
+    totals.forEach(function (t) {
+      var k = toKRW(t.amount, t.cur, rates);
+      if (k === null) partial = true; else sum += k;
+    });
+    body = '💸 현지 ' + totals.length + '개 통화' +
+      (sum ? ' (약 ' + escHtml(fmtKRW(sum)) + (partial ? '+' : '') + ')' : '');
+  }
   // lead면 줄의 맨 앞이므로 선행 공백도 붙이지 않는다 — 붙이면 .cost가 공백으로 시작한다.
-  const dot = lead ? '' : '· ';
-  const gap = lead ? '' : ' ';
-  return gap + '<span class="spent">' + dot + '💸 현지 ¥' + tot.toLocaleString('ko-KR') + krw + '</span>';
+  var dot = lead ? '' : '· ';
+  var gap = lead ? '' : ' ';
+  return gap + '<span class="spent">' + dot + body + '</span>';
 }
 
 function renderSummary(trip, st) {
@@ -429,36 +412,86 @@ function renderTabbar(trip, tab, onSelect) {
 function renderSpend(trip, st) {
   const body = document.getElementById("spend-body");
   if (!body) return;
-  const keepAmt = (body.querySelector('.sjpy-in') || {}).value || '';
+  const keepAmt = (body.querySelector('.samt-in') || {}).value || '';
   const keepNote = (body.querySelector('.snote-in') || {}).value || '';
   const keepCat = (body.querySelector('.scat-in') || {}).value || '';
+  const keepCur = (body.querySelector('.scur-in') || {}).value || '';
   const list = spendList(st);
-  const fx = spendFx(st);
-  const tot = spendTotalJpy(list);
-  const krw = fx
-    ? ' <span class="skrw">(약 ' + jpyToKrw(tot, fx).toLocaleString('ko-KR') + '원)</span>'
+  const rates = fxRates(st);
+  const totals = spendTotals(list);
+
+  // 통화가 여럿이면 한 줄에 담을 수 없다 — 통화별로 줄을 나누고 맨 아래 원화 총합을 둔다.
+  var sum = 0, partial = false;
+  totals.forEach(function (t) {
+    var k = toKRW(t.amount, t.cur, rates);
+    if (k === null) partial = true; else sum += k;
+  });
+  const totalHtml = totals.length
+    ? '<div class="stotal">' + totals.map(function (t) {
+        var k = toKRW(t.amount, t.cur, rates);
+        return '<div class="stot-row">' + escHtml(fmtAmount(t.amount, currencyByCode(t.cur))) +
+          (k === null ? ' <span class="skrw">(환율 없음)</span>'
+                      : ' <span class="skrw">(약 ' + escHtml(fmtKRW(k)) + ')</span>') + '</div>';
+      }).join('') +
+      (totals.length > 1 && sum
+        ? '<div class="stot-sum">합계 약 ' + escHtml(fmtKRW(sum)) + (partial ? '+' : '') + '</div>'
+        : '') + '</div>'
     : '';
+
   const chips = spendByCat(list).map(function (c) {
-    return '<li>' + escHtml(c.cat) + ' <b>¥' + c.jpy.toLocaleString('ko-KR') + '</b></li>';
+    return '<li>' + escHtml(c.cat) + ' <b>' +
+      escHtml(fmtAmount(c.amount, currencyByCode(c.cur))) + '</b></li>';
   }).join('');
+
   const groups = spendByDate(list).map(function (g) {
     const rows = g.items.map(function (e) {
-      const n = Number(e.jpy);
       return '<li><span class="scat">' + escHtml(e.cat) + '</span>' +
         '<span class="snote">' + escHtml(e.note || e.cat) + '</span>' +
-        '<span class="sjpy">¥' + (isFinite(n) ? n : 0).toLocaleString('ko-KR') + '</span>' +
+        '<span class="samt">' + escHtml(fmtAmount(e.amount, currencyByCode(e.cur))) + '</span>' +
         '<button class="spend-del" type="button" data-id="' + escHtml(e.id) +
         '" aria-label="삭제">×</button></li>';
     }).join('');
     return '<div class="sgroup"><div class="sdate">' + escHtml(g.date) + '</div>' +
       '<ul class="slist">' + rows + '</ul></div>';
   }).join('');
+
+  // 기본 통화는 지금 보고 있는 일차의 통화다(없으면 여행 기본값) — 일차마다 다를 수 있다.
+  const day = (typeof CUR !== 'undefined' && CUR.dayN)
+    ? (trip.days || []).filter(function (d) { return d.n === CUR.dayN; })[0] : null;
+  const defCur = currencyByCode((dayCurrency(trip, day) || {}).code || 'KRW');
+  const defCode = defCur.code;
+  // 프리셋에 없는 통화(사용자가 직접 넣은 코드)도 목록에 넣어야 고를 수 있다.
+  const codes = CURRENCIES.map(function (c) { return c.code; });
+  if (codes.indexOf(defCode) === -1) codes.unshift(defCode);
+  const curOpts = codes.map(function (c) {
+    const on = (keepCur || defCode) === c ? ' selected' : '';
+    return '<option value="' + escHtml(c) + '"' + on + '>' + escHtml(c) + '</option>';
+  }).join('');
+
+  // 소수점 통화는 step을 0.01로 — JPY에 12.5를 넣을 수 없게, USD에는 넣을 수 있게.
+  const step = defCur.decimals > 0 ? '0.01' : '1';
+
+  // 수동 환율은 "unit당 원화"로 받는다(100엔 = ○○원). 저장은 1단위 기준으로 정규화한다.
+  const manual = st.get("fxManual", {}) || {};
+  const autoRate = rates[defCode];
+  const hasManual = manual[defCode] !== undefined && Number(manual[defCode]) > 0;
+  const shownKrw = hasManual
+    ? Math.round(Number(manual[defCode]) * defCur.unit * 100) / 100
+    : (autoRate ? Math.round(defCur.unit / autoRate) : '');
+  const fxRow = defCode === 'KRW' ? '' :
+    '<div class="sfx">' + escHtml(defCur.unit.toLocaleString('ko-KR') + defCur.name) +
+    ' = <input class="sfx-in" type="number" min="0" step="0.01" value="' +
+    escHtml(shownKrw) + '"> 원' +
+    (hasManual ? ' <button class="sfx-clr" type="button">자동</button>' : '') +
+    '</div>';
+
   body.innerHTML =
-    '<div class="stotal">¥' + tot.toLocaleString('ko-KR') + krw + '</div>' +
+    totalHtml +
     (chips ? '<ul class="scats">' + chips + '</ul>' : '') +
     '<form class="spend-add">' +
-      '<input class="sjpy-in" type="number" inputmode="numeric" min="1" step="1" ' +
-        'placeholder="금액 ¥" aria-label="금액(엔)">' +
+      '<input class="samt-in" type="number" inputmode="decimal" min="0" step="' + step + '" ' +
+        'placeholder="금액" aria-label="금액">' +
+      '<select class="scur-in" aria-label="통화">' + curOpts + '</select>' +
       '<input class="snote-in" type="text" placeholder="내용" aria-label="내용">' +
       '<select class="scat-in" aria-label="분류">' +
         SPEND_CATS.map(function (c) { return '<option>' + escHtml(c) + '</option>'; }).join('') +
@@ -466,35 +499,41 @@ function renderSpend(trip, st) {
       '<button type="submit">추가</button>' +
     '</form>' +
     (groups || '<div class="sempty">아직 기록이 없습니다.</div>') +
-    '<div class="sfx">100엔 = <input class="sfx-in" type="number" min="0" step="1" value="' +
-      fx + '"> 원</div>';
+    fxRow +
+    // 무료 등급 이용 조건상 출처 표기가 필수다.
+    '<div class="fx-attrib-row">' + FX_ATTRIB_HTML + '</div>';
 
   const form = body.querySelector('.spend-add');
-  if (keepAmt) form.querySelector('.sjpy-in').value = keepAmt;
+  if (keepAmt) form.querySelector('.samt-in').value = keepAmt;
   if (keepNote) form.querySelector('.snote-in').value = keepNote;
   if (keepCat) form.querySelector('.scat-in').value = keepCat;
   form.addEventListener('submit', function (e) {
     e.preventDefault();
-    const jin = form.querySelector('.sjpy-in');
-    const jpy = Math.round(Number(jin.value));
-    if (!isFinite(jpy) || jpy <= 0) { jin.focus(); return; }
+    const ain = form.querySelector('.samt-in');
+    const code = form.querySelector('.scur-in').value;
+    const c = currencyByCode(code);
+    // 소수점 자릿수에 맞춰 반올림한다 — JPY에 12.5를 넣으면 13이 된다.
+    const p = Math.pow(10, c.decimals);
+    const amount = Math.round(Number(ain.value) * p) / p;
+    if (!isFinite(amount) || amount <= 0) { ain.focus(); return; }
     const cur = spendList(st);
     let id = Date.now();
     while (cur.some(function (x) { return x.id === id; })) id++;
     cur.push({
       id: id,
       date: todayLocal(),
-      jpy: jpy,
+      amount: amount,
+      cur: code,
       cat: form.querySelector('.scat-in').value,
       note: form.querySelector('.snote-in').value.trim()
     });
     st.set("spend", cur);
     // 방금 기록한 값이 폼에 되살아나지 않도록 명시적으로 비운다.
-    jin.value = '';
+    ain.value = '';
     form.querySelector('.snote-in').value = '';
     renderSpend(trip, st);
     renderSummary(trip, st);
-    const next = body.querySelector('.sjpy-in');
+    const next = body.querySelector('.samt-in');
     if (next) next.focus();
   });
 
@@ -507,9 +546,32 @@ function renderSpend(trip, st) {
     });
   });
 
+  // 통화를 바꾸면 금액 입력의 step도 따라가야 한다 — 여행 기본값이 JPY(step=1)인데
+  // USD를 고르면 12.50을 넣을 수 없다(HTML5 검증에 걸려 제출 자체가 막힌다).
+  const curin = body.querySelector('.scur-in');
+  if (curin) curin.addEventListener('change', function () {
+    const c = currencyByCode(curin.value);
+    const ain = body.querySelector('.samt-in');
+    if (ain) ain.step = c.decimals > 0 ? '0.01' : '1';
+  });
+
   const fxin = body.querySelector('.sfx-in');
-  fxin.addEventListener('change', function () {
-    st.set("fx", Number(fxin.value) || 0);
+  if (fxin) fxin.addEventListener('change', function () {
+    const krwPerUnit = Number(fxin.value);
+    const m = st.get("fxManual", {}) || {};
+    // 비우거나 0을 넣으면 자동값으로 돌아간다.
+    if (isFinite(krwPerUnit) && krwPerUnit > 0) m[defCode] = krwPerUnit / defCur.unit;
+    else delete m[defCode];
+    st.set("fxManual", m);
+    renderSpend(trip, st);
+    renderSummary(trip, st);
+  });
+
+  const fxclr = body.querySelector('.sfx-clr');
+  if (fxclr) fxclr.addEventListener('click', function () {
+    const m = st.get("fxManual", {}) || {};
+    delete m[defCode];
+    st.set("fxManual", m);
     renderSpend(trip, st);
     renderSummary(trip, st);
   });
