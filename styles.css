@@ -301,3 +301,7 @@ body { margin:0; background:var(--bg); color:var(--text);
   font-weight:400; }
 .exp-err { background:#fff0f0; color:#c92a2a; border-left:4px solid #e03131;
   padding:9px 12px; border-radius:8px; font-size:.85rem; }
+
+.cur-line { font-size:.9rem; color:var(--muted); margin-top:-6px; }
+.cur-line b { color:var(--text); }
+.geo-cur .geo-hint { color:var(--muted); }

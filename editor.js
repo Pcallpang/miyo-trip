@@ -34,6 +34,7 @@ function applyTripForm(trip, f) {
     // f.place가 undefined면 도시를 건드리지 않은 저장이다(기본값 null 유지).
     if (f.place !== undefined) made.place = f.place;
     if (f.currency !== undefined) made.currency = f.currency;
+    if (f.countryCode !== undefined) made.countryCode = f.countryCode;
     return made;
   }
   var next = {};
@@ -46,6 +47,7 @@ function applyTripForm(trip, f) {
   // 도시를 건드리지 않은 저장(f.place === undefined)에서는 기존 값을 그대로 둔다.
   if (f.place !== undefined) next.place = f.place;
   if (f.currency !== undefined) next.currency = f.currency;
+  if (f.countryCode !== undefined) next.countryCode = f.countryCode;
   next.days = resyncDays(trip.days, f.start, f.end);
   // 일차별 도시는 resyncDays 뒤에 적용한다 — 기간이 바뀌면 일차 번호가 다시 매겨지므로
   // 그 전에 적용하면 엉뚱한 날에 붙는다. {dayN: place|null} 형태다.
@@ -94,23 +96,28 @@ function showEdit(id) {
         'value="' + (trip ? Number(trip.party) : 2) + '"></label>' +
       '<label>숙소<textarea name="hotel" rows="2" ' +
         'placeholder="숙소명 · 체크인/아웃">' + escHtml(trip ? trip.hotel : '') + '</textarea></label>' +
-      // 현지 통화. 경비를 이 통화로 기록하고 원화 환산을 함께 보여준다.
-      '<label>현지 통화<select name="cur">' +
-        CURRENCIES.map(function (c) {
-          var on = ((trip && trip.currency && trip.currency.code) || 'KRW') === c.code ? ' selected' : '';
-          return '<option value="' + escHtml(c.code) + '"' + on + '>' +
-            escHtml(c.code + ' · ' + c.name + ' (' + c.symbol + ')') + '</option>';
+      // 나라를 고르면 통화가 따라온다 — 통화 코드를 외우는 것보다 자연스럽다.
+      // 통화는 표시만 하고 값은 나라에서 끌어온다(둘이 어긋날 수 없다).
+      '<label>나라<select name="country">' +
+        '<option value="">— 선택 —</option>' +
+        COUNTRIES.map(function (c) {
+          var on = (trip && trip.countryCode) === c.cc ? ' selected' : '';
+          return '<option value="' + escHtml(c.cc) + '"' + on + '>' + escHtml(c.name) + '</option>';
         }).join('') +
       '</select></label>' +
+      '<div class="cur-line" id="cur-line"></div>' +
       // 도시는 폼 필드가 아니라 검색으로 고른다 — 선택값은 pickedPlace에 담아두고
       // 저장할 때 함께 넘긴다(취소하면 반영되지 않는다).
+      // 도시는 직접 적는다. 날씨에 쓸 좌표가 필요하면 '찾기'로 검색해 고른다 —
+      // 검색이 0건이어도 적어 둔 이름은 그대로 남는다(날씨만 안 뜬다).
       '<div class="geo-block">' +
-        '<div class="geo-lbl">도시 <span class="geo-hint">(날씨에 쓰입니다)</span></div>' +
-        '<div class="geo-cur" id="geo-cur"></div>' +
+        '<div class="geo-lbl">도시 <span class="geo-hint">(찾기를 누르면 날씨가 붙습니다)</span></div>' +
         '<div class="geo-row">' +
-          '<input id="geo-q" type="text" placeholder="예: 오사카, Da Nang" aria-label="도시 검색">' +
+          '<input id="geo-q" name="cityname" type="text" placeholder="예: 오사카" aria-label="도시" ' +
+            'value="' + escHtml((trip && trip.place && trip.place.name) || '') + '">' +
           '<button id="geo-go" type="button">찾기</button>' +
         '</div>' +
+        '<div class="geo-cur" id="geo-cur"></div>' +
         '<div class="geo-msg" id="geo-msg" hidden></div>' +
         '<ul class="geo-list" id="geo-list" hidden></ul>' +
       '</div>' +
@@ -149,6 +156,28 @@ function showEdit(id) {
     setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
   });
 
+  var countrySel = document.querySelector('#trip-form [name=country]');
+  var curLine = document.getElementById("cur-line");
+
+  // 고른 나라의 통화를 보여준다. 나라를 안 고르면 원화로 둔다 — 국내 여행도 있고,
+  // 통화를 못 정한 채로도 여행을 만들 수 있어야 한다.
+  function currentCurrency() {
+    var c = countrySel && countrySel.value ? countryByCode(countrySel.value) : null;
+    if (c && c.cur) return currencyByCode(c.cur);
+    // 나라를 안 골랐다면 기존 통화를 유지한다(설정을 다시 열어 저장할 때 초기화되면 안 된다).
+    if (trip && trip.currency && trip.currency.code) return currencyByCode(trip.currency.code);
+    return defaultCurrency();
+  }
+
+  function paintCur() {
+    if (!curLine) return;
+    var c = currentCurrency();
+    curLine.innerHTML = '통화 <b>' + escHtml(c.code) + '</b> ' +
+      escHtml(c.symbol + ' · ' + c.name);
+  }
+  paintCur();
+  if (countrySel) countrySel.addEventListener('change', paintCur);
+
   // undefined면 "도시를 건드리지 않음" — applyTripForm이 기존 값을 유지한다.
   var pickedPlace = undefined;
   // 일차별 오버라이드 {dayN: place|null}. 저장할 때만 반영된다.
@@ -161,36 +190,28 @@ function showEdit(id) {
   var qEl = document.getElementById("geo-q");
   var goEl = document.getElementById("geo-go");
 
-  function paintCur() {
+  function paintPickedCity() {
     var p = (pickedPlace !== undefined) ? pickedPlace : (trip ? trip.place : null);
-    curEl.innerHTML = p
-      ? '📍 ' + escHtml(placeLabel(p))
-      : '<span class="geo-none">도시가 지정되지 않았습니다</span>';
+    curEl.innerHTML = p && p.lat !== undefined
+      ? '📍 ' + escHtml(placeLabel(p)) + ' <span class="geo-hint">(날씨 연결됨)</span>'
+      : '<span class="geo-none">좌표 없음 — 날씨는 표시되지 않습니다</span>';
   }
-  paintCur();
+  paintPickedCity();
 
   function showMsg(text) {
     msgEl.textContent = text;
     msgEl.hidden = !text;
   }
 
-  // 고른 도시의 나라 통화를 통화 <select>에 반영한다. 반영했으면 통화 코드를,
-  // 아니면 null을 돌려준다(모르는 나라이거나 이미 같은 통화인 경우).
-  // 프리셋에 없는 통화(캐나다 달러 등)는 목록에 없으므로 항목을 만들어 넣는다.
-  function applyCountryCurrency(place) {
-    var sel = document.querySelector('#trip-form [name=cur]');
-    if (!sel || !place) return null;
-    var c = currencyForCountry(place.cc);
-    if (!c || sel.value === c.code) return null;
-    var has = Array.prototype.some.call(sel.options, function (o) { return o.value === c.code; });
-    if (!has) {
-      var opt = document.createElement('option');
-      opt.value = c.code;
-      opt.textContent = c.code + ' · ' + c.name + ' (' + c.symbol + ')';
-      sel.insertBefore(opt, sel.firstChild);
-    }
-    sel.value = c.code;
-    return c.code;
+  // 고른 도시의 나라를 나라 <select>에 반영한다(통화는 거기서 따라온다).
+  // 반영했으면 나라 이름을, 아니면 null을 돌려준다.
+  function applyCountryFromPlace(place) {
+    if (!countrySel || !place || !place.cc) return null;
+    var c = countryByCode(place.cc);
+    if (!c || countrySel.value === c.cc) return null;
+    countrySel.value = c.cc;
+    paintCur();
+    return c.name;
   }
 
   function runSearch() {
@@ -222,16 +243,18 @@ function showEdit(id) {
           else pickedDayPlaces[geoTarget] = chosen;
           geoTarget = null;
           listEl.hidden = true;
-          qEl.value = '';
-          paintCur();
+          // 이 입력칸은 이제 검색창이 아니라 도시 이름 자체다 — 비우면 저장 시
+          // 이름이 사라져 place가 null이 된다. 고른 이름으로 채운다.
+          // (일차별 도시를 고르는 중이면 여행 기본 도시 칸은 건드리지 않는다.)
+          if (forDay === null) qEl.value = chosen.name;
+          paintPickedCity();
           paintDays();
-          // 여행 기본 도시를 고르면 그 나라 통화도 함께 맞춘다. 고른 뒤에도 통화
-          // 선택은 그대로 열려 있으므로 원하면 바꿀 수 있다(면세점만 달러로 계산하는
-          // 경우 등). 일차별 도시(forDay !== null)에서는 건드리지 않는다 — 그건
-          // 경유지일 뿐이고 여행 기본 통화를 바꿀 이유가 없다.
-          var picked = (forDay === null) ? applyCountryCurrency(chosen) : null;
+          // 여행 기본 도시를 고르면 나라 선택도 그 나라로 맞춘다(통화가 따라온다).
+          // 일차별 도시(forDay !== null)에서는 건드리지 않는다 — 그건 경유지일 뿐이고
+          // 여행 기본 통화를 바꿀 이유가 없다.
+          var picked = (forDay === null) ? applyCountryFromPlace(chosen) : null;
           showMsg(picked
-            ? '통화를 ' + picked + '(으)로 맞췄습니다. 저장을 눌러야 반영됩니다.'
+            ? '나라를 ' + picked + '(으)로 맞췄습니다. 저장을 눌러야 반영됩니다.'
             : '저장을 눌러야 반영됩니다.');
         });
       });
@@ -291,10 +314,21 @@ function showEdit(id) {
     var fd = new FormData(e.target);
     var f = { title: fd.get('title'), start: fd.get('start'), end: fd.get('end'),
               party: fd.get('party'), hotel: fd.get('hotel') };
-    // 검색으로 고른 도시가 있을 때만 넘긴다 — undefined면 기존 값이 유지된다.
-    if (pickedPlace !== undefined) f.place = pickedPlace;
-    // 통화는 프리셋에서 고른 코드로 객체를 만들어 넘긴다.
-    f.currency = currencyByCode(fd.get('cur'));
+    // 도시는 직접 적은 이름을 쓰고, 좌표는 '찾기'로 고른 것이 있으면 얹는다 —
+    // 검색이 0건이어도 이름은 남아야 한다(날씨만 안 뜬다).
+    var cityName = String(fd.get('cityname') || '').trim();
+    var base = (pickedPlace !== undefined) ? pickedPlace : (trip ? trip.place : null);
+    if (cityName) {
+      // 이름만 바꿨는데 예전 좌표가 남아 엉뚱한 날씨가 뜨는 것을 막는다.
+      var sameCity = base && base.name === cityName;
+      f.place = sameCity ? base : (pickedPlace || { name: cityName });
+      if (f.place && f.place.name !== cityName) f.place = { name: cityName };
+    } else {
+      f.place = null;
+    }
+    // 통화는 고른 나라에서 끌어온다(폼에 통화 입력란이 따로 없다).
+    f.currency = currentCurrency();
+    f.countryCode = countrySel && countrySel.value ? countrySel.value : null;
     for (var _k in pickedDayPlaces) {
       if (Object.prototype.hasOwnProperty.call(pickedDayPlaces, _k)) { f.dayPlaces = pickedDayPlaces; break; }
     }

@@ -1461,3 +1461,19 @@ eq('음수 거부', validateExpenseForm({ cat:'항공', krw:'-5' }), '금액을 
   eq('금액은 그대로', loadTrip(t.id).expenses[0].krw, 640000);
   eq('두 번째 실행은 0건', migrateExpenseIds(), 0);
 })();
+
+// ---- 나라 목록 (새 여행에서 나라 → 통화) ----
+eq('나라 목록이 비어있지 않음', COUNTRIES.length > 30, true);
+eq('나라 항목 모양', Object.keys(countryByCode('JP')).sort().join(','), 'cc,cur,name');
+eq('일본', countryByCode('JP').name, '일본');
+eq('일본 통화', countryByCode('JP').cur, 'JPY');
+eq('베트남 통화', countryByCode('VN').cur, 'VND');
+eq('프랑스는 유로', countryByCode('FR').cur, 'EUR');
+eq('소문자도 받음', countryByCode('jp').name, '일본');
+eq('모르는 코드는 null', countryByCode('ZZ'), null);
+// 목록의 모든 나라는 통화 표에 있어야 한다 — 고르면 통화가 반드시 따라와야 하므로.
+eq('모든 나라에 통화가 있다',
+  COUNTRIES.filter(function (c) { return !COUNTRY_CURRENCY[c.cc]; }).length, 0);
+eq('나라 목록은 가나다순',
+  COUNTRIES.map(function (c) { return c.name; }).join('|') ===
+  COUNTRIES.map(function (c) { return c.name; }).slice().sort(function(a,b){return a.localeCompare(b,'ko');}).join('|'), true);
