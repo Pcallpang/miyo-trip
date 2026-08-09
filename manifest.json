@@ -3,8 +3,8 @@
   "short_name": "여행",
   "start_url": "./index.html",
   "display": "standalone",
-  "background_color": "#0b7285",
-  "theme_color": "#0b7285",
+  "background_color": "#FDF3E7",
+  "theme_color": "#FDF3E7",
   "icons": [
     { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" },
     { "src": "icon-180.png", "sizes": "180x180", "type": "image/png" },

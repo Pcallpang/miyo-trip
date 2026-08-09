@@ -3,6 +3,36 @@
 // schema.js·remote.js 다음, app.js 앞에 로드된다 (dowOf/daysBetween은 schema.js,
 // wxGet/wxLine/wxStamp는 remote.js, dayPlace는 schema.js).
 
+// ---- 미요 캐릭터 ----
+// 미요 앱 시리즈 공통 마스코트. UI의 "무엇을 하는 자리인지" 알리는 아이콘 자리에만
+// 쓴다 — 날씨(☀️🌧️)나 정보 탭의 🔌🚨처럼 그림 자체가 뜻을 가진 것은 그대로 둔다.
+// 이름은 SNAseating의 assets/mascot 규칙을 따른다.
+var MIYO = {
+  day: "nep-miyo",          // 일정 — 노트북 앞 "넵!"
+  hotel: "pingp-miyo",      // 숙소 — 폰 위에 누워 쉬는
+  packing: "yarr-miyo",     // 준비물 — 브이, 준비 완료
+  money: "ppak-miyo",       // 경비 — 돈 나갈 때 그 표정
+  info: "tip-miyo",         // 정보 — 안경 쓰고 훈수
+  god: "god-miyo",          // 대표 — 헤더·앱 아이콘
+  share: "parrot-miyo",     // 공유 — 말을 옮기는
+  note: "why-miyo",         // 메모
+  empty: "clear-eye-miyo",  // 빈 화면
+  fail: "sweat-miyo"        // 오류·실패
+};
+
+// 단일 파일 번들(trip.html)에는 assets/ 폴더가 없다 — bundle.py가 캐릭터를
+// data: URI 표(MIYO_DATA)로 심어 두므로, 있으면 그쪽을 먼저 쓴다.
+function miyoSrc(name) {
+  var table = (typeof MIYO_DATA !== 'undefined') ? MIYO_DATA : null;
+  return (table && table[name]) ? table[name] : ('assets/miyo/' + name + '.webp');
+}
+
+// alt는 비워 둔다 — 옆에 늘 글자 라벨이 함께 있어 읽어 주면 중복이 된다.
+function miyoImg(name, cls) {
+  return '<img class="miyo' + (cls ? ' ' + cls : '') + '" src="' + miyoSrc(name) +
+    '" alt="" loading="lazy">';
+}
+
 // 사용자가 입력한 문자열이 HTML로 해석되지 않게 막는다.
 function escHtml(s) {
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
@@ -118,7 +148,7 @@ function summarySpend(st, lead) {
     var one = totals[0];
     var krw = toKRW(one.amount, one.cur, rates);
     // 통화 기호는 외부 입력이 될 수 있다(가져온 JSON의 currency.symbol) — escHtml 필수.
-    body = '💸 현지 ' + escHtml(fmtAmount(one.amount, currencyByCode(one.cur))) +
+    body = '현지 ' + escHtml(fmtAmount(one.amount, currencyByCode(one.cur))) +
       (krw === null ? '' : ' (약 ' + escHtml(fmtKRW(krw)) + ')');
   } else {
     // 환산할 수 없는 통화가 하나라도 있으면 총합이 거짓이 되므로 "+" 표시를 붙인다.
@@ -127,7 +157,7 @@ function summarySpend(st, lead) {
       var k = toKRW(t.amount, t.cur, rates);
       if (k === null) partial = true; else sum += k;
     });
-    body = '💸 현지 ' + totals.length + '개 통화' +
+    body = '현지 ' + totals.length + '개 통화' +
       (sum ? ' (약 ' + escHtml(fmtKRW(sum)) + (partial ? '+' : '') + ')' : '');
   }
   // lead면 줄의 맨 앞이므로 선행 공백도 붙이지 않는다 — 붙이면 .cost가 공백으로 시작한다.
@@ -142,7 +172,7 @@ function renderSummary(trip, st) {
   const nights = daysBetween(trip.start, trip.end) - 1;
   el.innerHTML =
     '<button class="back-list" type="button" aria-label="여행 목록">←</button>' +
-    '<button class="share-trip" type="button">공유</button>' +
+    '<button class="share-trip" type="button">' + miyoImg(MIYO.share) + '공유</button>' +
     '<button class="edit-trip" type="button" aria-label="여행 설정">⚙</button>' +
     '<div class="dday">' + dday(today, trip.start, trip.end) + '</div>' +
     '<h1>' + escHtml(trip.title) + '</h1>' +
@@ -160,7 +190,7 @@ function renderSummary(trip, st) {
       // 예산을 입력하지 않은 여행(생성/설정 화면에 그 입력란이 없어 기본값 0으로
       // 남는 게 보통이다)이라도 경비를 기록했다면 그 합계는 보여야 한다.
       var budgetLine = trip.budgetKRW
-        ? '💰 총 ' + Number(trip.budgetKRW).toLocaleString('ko-KR') + '원 (' +
+        ? '총 ' + Number(trip.budgetKRW).toLocaleString('ko-KR') + '원 (' +
           Number(trip.party) + '인)'
         : '';
       var spendLine = summarySpend(st, !budgetLine);
@@ -238,7 +268,8 @@ function renderTimeline(trip, day, st) {
       '<div class="what">' + itemLinesHtml(it.text) + '</div></button>';
   }).join('');
   // 새로 만든 여행의 1일차는 일정이 하나도 없다 — 무엇을 하면 되는지 알려 준다.
-  const rows = slots || '<p class="empty">아직 일정이 없습니다. 위 + 를 눌러 추가해 보세요.</p>';
+  const rows = slots || ('<div class="empty">' + miyoImg(MIYO.empty, 'miyo-lg') +
+    '<p>아직 일정이 없습니다. 위 + 를 눌러 추가해 보세요.</p></div>');
   // 자유 메모. 예전의 "뭐먹지"(엑셀에서 온 문구 + 답 입력칸)를 대체한다 —
   // 그 틀에 맞지 않는 메모(예약 번호, 챙길 것)를 적을 곳이 없었다.
   const noteList = Array.isArray(day.notes) ? day.notes : [];
@@ -271,10 +302,10 @@ function renderTimeline(trip, day, st) {
       // 일정 추가는 아이콘 하나로 충분하다(무엇에 대한 +인지는 자리가 말해 준다).
       '<div class="day-actions">' +
         '<button class="day-add-item" type="button" aria-label="일정 추가">+</button>' +
-        '<button class="day-note" type="button">📝 메모' +
+        '<button class="day-note" type="button">' + miyoImg(MIYO.note) + '메모' +
           (noteCount ? ' <span class="nbadge">' + noteCount + '</span>' : '') +
         '</button>' +
-        '<button class="day-spend" type="button">💰 경비' +
+        '<button class="day-spend" type="button">' + miyoImg(MIYO.money) + '경비' +
           (spendBadge ? ' <span class="sbadge">' + spendBadge + '</span>' : '') +
         '</button>' +
       '</div></div>' +
@@ -801,7 +832,7 @@ function hotelPanelHtml(trip) {
              : '<span class="hr-same">기본 숙소와 같음</span>') +
       '</div></button>';
   }).join('');
-  return '<div class="panel-card"><h2 class="panel-h">🏨 숙소</h2>' +
+  return '<div class="panel-card"><h2 class="panel-h">' + miyoImg(MIYO.hotel) + '숙소</h2>' +
     '<div class="hrs">' + base + rows + '</div>' +
     '<p class="hr-hint">묵는 곳이 바뀌는 날만 따로 적으면 됩니다.</p></div>';
 }
@@ -861,7 +892,8 @@ function panelHtml(trip, tab) {
   }
   if (tab === "money") {
     // 내역이 없어도 편집기는 보여야 한다 — 그래야 첫 항목을 넣을 수 있다.
-    var exp = '<div class="panel-card"><h2 class="panel-h">💰 출발 전 결제 내역</h2>' +
+    var exp = '<div class="panel-card"><h2 class="panel-h">' + miyoImg(MIYO.money) +
+      '출발 전 결제 내역</h2>' +
       ((trip.expenses && trip.expenses.length)
         ? expensesTableHtml(trip)
         : '<p class="sempty">아직 내역이 없습니다.</p>') +
@@ -1051,7 +1083,7 @@ function renderTabbar(trip, tab, onSelect) {
     var on = t.key === tab ? ' data-selected="1"' : '';
     return '<button class="tb"' + on + ' data-tab="' + escHtml(t.key) + '"' +
       ' aria-current="' + (t.key === tab ? 'page' : 'false') + '">' +
-      '<span class="tb-i">' + t.icon + '</span>' +
+      '<span class="tb-i">' + miyoImg(t.miyo) + '</span>' +
       '<span class="tb-l">' + escHtml(t.label) + '</span></button>';
   }).join('');
   nav.querySelectorAll('.tb').forEach(function (b) {
@@ -1135,7 +1167,7 @@ function renderSpend(trip, st) {
     totalHtml +
     (chips ? '<ul class="scats">' + chips + '</ul>' : '') +
     (groups || '<div class="sempty">아직 기록이 없습니다.</div>') +
-    '<p class="sread">기록은 일정 탭의 💰 경비에서 넣고 고칩니다.</p>' +
+    '<p class="sread">기록은 일정 탭의 경비 버튼에서 넣고 고칩니다.</p>' +
     fxRow +
     // 무료 등급 이용 조건상 출처 표기가 필수다.
     '<div class="fx-attrib-row">' + FX_ATTRIB_HTML + '</div>';
@@ -1210,7 +1242,7 @@ function packingListHtml(trip, st) {
         : '') +
       '</li>';
   }).join('');
-  return '<div class="pk-h">🎒 준비물' +
+  return '<div class="pk-h">' + miyoImg(MIYO.packing) + '준비물' +
       (pr.total ? '<span class="pk-n">' + pr.done + ' / ' + pr.total + '</span>' : '') +
     '</div>' +
     (rows ? '<ul class="packlist">' + rows + '</ul>'

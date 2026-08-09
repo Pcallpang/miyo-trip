@@ -110,7 +110,8 @@ function showList() {
           '<div class="tc-dday">' + dday(todayLocal(), t.start, t.end) + '</div>' +
           '<button class="tc-del" type="button" aria-label="삭제">×</button></article>';
       }).join('')
-    : '<p class="empty">아직 여행이 없습니다. 새로 만들어 보세요.</p>';
+    : '<div class="empty">' + miyoImg(MIYO.empty, 'miyo-lg') +
+      '<p>아직 여행이 없습니다. 새로 만들어 보세요.</p></div>';
 
   var list = document.getElementById("triplist");
   list.querySelectorAll('.tripcard').forEach(function (c) {
@@ -225,12 +226,14 @@ function showPanelTab(trip, tab, dayN) {
   if (prev !== tab) renderSummary(trip, CUR.st);
 }
 
+// 아이콘은 미요 캐릭터다(views.js의 MIYO 참고) — 탭마다 다른 캐릭터를 세워
+// 어느 탭인지 색과 모양으로 먼저 알아보게 한다.
 var TAB_DEFS = [
-  { key: "day",     icon: "🗓", label: "일정" },
-  { key: "hotel",   icon: "🏨", label: "숙소" },
-  { key: "packing", icon: "🎒", label: "준비물" },
-  { key: "money",   icon: "💰", label: "경비" },
-  { key: "info",    icon: "ℹ️", label: "정보" }
+  { key: "day",     miyo: "nep-miyo",       label: "일정" },
+  { key: "hotel",   miyo: "pingp-miyo",     label: "숙소" },
+  { key: "packing", miyo: "yarr-miyo",      label: "준비물" },
+  { key: "money",   miyo: "ppak-miyo",      label: "경비" },
+  { key: "info",    miyo: "tip-miyo",       label: "정보" }
 ];
 var TAB_KEYS = TAB_DEFS.map(function (t) { return t.key; });
 

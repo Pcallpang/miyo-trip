@@ -1,7 +1,13 @@
-const CACHE = "trip-v26";
+const CACHE = "trip-v27";
 const ASSETS = ["./", "./index.html", "./styles.css",
   "./sample-trip.js", "./store.js", "./schema.js", "./cities.js", "./country-info.js", "./money.js", "./remote.js", "./views.js", "./editor.js", "./app.js",
-  "./manifest.json", "./icon.svg", "./icon-180.png", "./icon-512.png"];
+  "./manifest.json", "./icon.svg", "./icon-180.png", "./icon-512.png",
+  // 미요 캐릭터 — 오프라인에서도 아이콘이 비지 않아야 한다(전부 합쳐 72KB).
+  "./assets/miyo/god-miyo.webp", "./assets/miyo/nep-miyo.webp",
+  "./assets/miyo/pingp-miyo.webp", "./assets/miyo/yarr-miyo.webp",
+  "./assets/miyo/ppak-miyo.webp", "./assets/miyo/tip-miyo.webp",
+  "./assets/miyo/parrot-miyo.webp", "./assets/miyo/why-miyo.webp",
+  "./assets/miyo/clear-eye-miyo.webp", "./assets/miyo/sweat-miyo.webp"];
 self.addEventListener("install", function (e) {
   // {cache:"reload"}: 브라우저 HTTP 캐시를 건너뛰고 서버에서 새로 받는다.
   e.waitUntil(caches.open(CACHE).then(function (c) {

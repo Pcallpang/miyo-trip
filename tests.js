@@ -280,7 +280,15 @@ eq('D-day 이후', dday('2026-08-05', '2026-07-28', '2026-08-03'), '여행 종�
     renderTimeline(trip, day, st);
     var html = el.innerHTML;
 
-    eq('renderTimeline: raw <img> 태그가 어디에도 없음', html.indexOf('<img') === -1, true);
+// 미요 캐릭터 <img>는 앱이 스스로 내는 것이라 존재가 정상이다. 지켜야 할 계약은
+    // "사용자 입력이 태그가 되지 않는다" — 공격 문자열이 살아 있는 태그로 나오지
+    // 않는지, 그리고 그 어떤 img도 우리 자산(assets/miyo/)만 가리키는지로 잰다.
+    eq('renderTimeline: 사용자 입력이 태그가 되지 않는다',
+      html.indexOf('<img src=x') === -1, true);
+    eq('renderTimeline: img는 미요 자산만 가리킨다',
+      (html.match(/<img[^>]*>/g) || []).every(function (t) {
+        return t.indexOf('src="assets/miyo/') !== -1;
+      }), true);
     eq('renderTimeline: 문자열이 와야 할 data-item 속성은 이스케이프됨',
       html.indexOf('data-item="' + escHostile + '"') !== -1, true);
     // 메모 본문·id는 이제 카드가 아니라 메모 모달 안에서만 그려진다 — 카드에는
@@ -306,7 +314,15 @@ eq('D-day 이후', dday('2026-08-05', '2026-07-28', '2026-08-03'), '여행 종�
     renderTabs(trip, 2, function () {});
     var html = el.innerHTML;
 
-    eq('renderTabs: raw <img> 태그가 어디에도 없음', html.indexOf('<img') === -1, true);
+// 미요 캐릭터 <img>는 앱이 스스로 내는 것이라 존재가 정상이다. 지켜야 할 계약은
+    // "사용자 입력이 태그가 되지 않는다" — 공격 문자열이 살아 있는 태그로 나오지
+    // 않는지, 그리고 그 어떤 img도 우리 자산(assets/miyo/)만 가리키는지로 잰다.
+    eq('renderTabs: 사용자 입력이 태그가 되지 않는다',
+      html.indexOf('<img src=x') === -1, true);
+    eq('renderTabs: img는 미요 자산만 가리킨다',
+      (html.match(/<img[^>]*>/g) || []).every(function (t) {
+        return t.indexOf('src="assets/miyo/') !== -1;
+      }), true);
     eq('renderTabs: 숫자 필드 d.n은 data-n 속성에서 NaN으로 강제 변환됨',
       html.indexOf('data-n="NaN"') !== -1, true);
     eq('renderTabs: 숫자 필드 d.n은 탭 라벨에서도 NaN으로 강제 변환됨',
@@ -324,7 +340,15 @@ eq('D-day 이후', dday('2026-08-05', '2026-07-28', '2026-08-03'), '여행 종�
     renderSummary(trip, st);
     var html = el.innerHTML;
 
-    eq('renderSummary: raw <img> 태그가 어디에도 없음', html.indexOf('<img') === -1, true);
+// 미요 캐릭터 <img>는 앱이 스스로 내는 것이라 존재가 정상이다. 지켜야 할 계약은
+    // "사용자 입력이 태그가 되지 않는다" — 공격 문자열이 살아 있는 태그로 나오지
+    // 않는지, 그리고 그 어떤 img도 우리 자산(assets/miyo/)만 가리키는지로 잰다.
+    eq('renderSummary: 사용자 입력이 태그가 되지 않는다',
+      html.indexOf('<img src=x') === -1, true);
+    eq('renderSummary: img는 미요 자산만 가리킨다',
+      (html.match(/<img[^>]*>/g) || []).every(function (t) {
+        return t.indexOf('src="assets/miyo/') !== -1;
+      }), true);
     eq('renderSummary: budgetKRW/party 문자열은 숫자로 강제 변환되어 안전함',
       html.indexOf('NaN원 (NaN인)') !== -1, true);
   })();
@@ -375,9 +399,9 @@ eq('D-day 이후', dday('2026-08-05', '2026-07-28', '2026-08-03'), '여행 종�
       var cost = costDiv(html);
 
       eq('renderSummary: 예산 0·경비 있음 → .cost 존재', cost !== null, true);
-      eq('renderSummary: 예산 0·경비 있음 → 💸 현지 줄 표시', cost.indexOf('💸 현지') !== -1, true);
-      eq('renderSummary: 예산 0·경비 있음 → 💰 총 줄은 없음', cost.indexOf('💰 총') === -1, true);
-      eq('renderSummary: 예산 0·경비 있음 → 선행 구분자(·) 없음', cost.indexOf('· 💸') === -1, true);
+      eq('renderSummary: 예산 0·경비 있음 → 현지 줄 표시', cost.indexOf('현지') !== -1, true);
+      eq('renderSummary: 예산 0·경비 있음 → 총 줄은 없음', cost.indexOf('총') === -1, true);
+      eq('renderSummary: 예산 0·경비 있음 → 선행 구분자(·) 없음', cost.indexOf('· 현지') === -1, true);
       // 줄의 맨 앞이므로 선행 공백도 없어야 한다(summarySpend의 lead 인자).
       eq('renderSummary: 예산 0·경비 있음 → 선행 공백 없음', cost.charAt(0) === ' ', false);
     })();
@@ -392,10 +416,10 @@ eq('D-day 이후', dday('2026-08-05', '2026-07-28', '2026-08-03'), '여행 종�
       var html = el.innerHTML;
       var cost = costDiv(html);
 
-      eq('renderSummary: 예산·경비 모두 있음 → 💰 총 줄 표시', cost.indexOf('💰 총') !== -1, true);
-      eq('renderSummary: 예산·경비 모두 있음 → 💸 현지 줄 표시', cost.indexOf('💸 현지') !== -1, true);
-      eq('renderSummary: 예산·경비 모두 있음 → 구분자(· 💸)로 연결됨',
-        cost.indexOf('· 💸') !== -1, true);
+      eq('renderSummary: 예산·경비 모두 있음 → 총 줄 표시', cost.indexOf('총') !== -1, true);
+      eq('renderSummary: 예산·경비 모두 있음 → 현지 줄 표시', cost.indexOf('현지') !== -1, true);
+      eq('renderSummary: 예산·경비 모두 있음 → 구분자(·)로 연결됨',
+        cost.indexOf('· 현지') !== -1, true);
     })();
 
     // budgetKRW=0, 경비 없음 → .cost 자체가 없어야 함(빈 div/떠 있는 구분자 금지).
@@ -674,7 +698,8 @@ eq('normalizeTimeInput: 빈 문자열은 null', normalizeTimeInput(''), null);
   renderTimeline(trip, day, st);
   var html = el.innerHTML;
 
-  eq('탭편집 renderTimeline: raw <img> 태그가 어디에도 없음', html.indexOf('<img') === -1, true);
+  eq('탭편집 renderTimeline: 사용자 입력이 태그가 되지 않는다',
+    html.indexOf('<img src=x') === -1, true);
   eq('탭편집 renderTimeline: 일정 줄은 button이고 data-item이 이스케이프됨',
     html.indexOf('<button class="slot" type="button" data-item="' + escHostile + '"') !== -1, true);
   eq('탭편집 renderTimeline: 일정 추가 버튼은 편집 토글 없이도 항상 나온다',
@@ -1004,8 +1029,10 @@ eq('숙소 패널은 줄바꿈을 살린다',
   panelHtml(PT, 'hotel').indexOf('<div class="line">체크인 14시</div>') >= 0, true);
 eq('숙소 없으면 입력 안내',
   panelHtml({ hotel: '', days: [] }, 'hotel').indexOf('hr-none') >= 0, true);
+// 미요 아이콘 <img>는 앱이 내는 것이라 정상 — 사용자 입력이 태그가 되지 않는지만 본다.
 eq('숙소 패널 XSS',
-  panelHtml({ hotel: '<img src=x onerror=alert(1)>', days: [] }, 'hotel').indexOf('<img') === -1, true);
+  panelHtml({ hotel: '<img src=x onerror=alert(1)>', days: [] }, 'hotel')
+    .indexOf('<img src=x') === -1, true);
 
 eq('준비물 패널은 packing-body 컨테이너',
   panelHtml(PT, 'packing').indexOf('id="packing-body"') >= 0, true);
@@ -1253,7 +1280,7 @@ eq('출처 표기에 링크가 있다', FX_ATTRIB_HTML.indexOf('exchangerate-api
   var el = global.__setDomTarget('summary');
   renderSummary({ id:'t_x', title:'T', start:'2026-08-08', end:'2026-08-09',
                   hotel:'', party:2, budgetKRW:0 }, st);
-  eq('요약: 통화 기호로 태그를 주입할 수 없다', el.innerHTML.indexOf('<img') === -1, true);
+  eq('요약: 통화 기호로 태그를 주입할 수 없다', el.innerHTML.indexOf('<img src=x') === -1, true);
 })();
 
 // ---- 나라 → 통화 ----
@@ -1536,7 +1563,7 @@ eq('기간 라벨: 날짜가 아니면 빈 문자열', nightsLabel('어제', '20
     html.indexOf('<div class="line">체크인 15시</div>') >= 0, true);
   eq('숙소 탭: 일차별 줄이 일수만큼 있다',
     (html.match(/hr-day/g) || []).length, 2);
-  eq('숙소 탭: 악의적인 일차 숙소는 이스케이프됨', html.indexOf('<img') === -1, true);
+  eq('숙소 탭: 악의적인 일차 숙소는 이스케이프됨', html.indexOf('<img src=x') === -1, true);
   eq('숙소 탭: 기본값을 쓰는 일차는 그렇다고 알려준다',
     html.indexOf('기본 숙소와 같음') >= 0, true);
   eq('숙소 탭: 기본 숙소가 없어도 일차별 목록은 나온다',
@@ -1658,7 +1685,7 @@ eq('기간 라벨: 날짜가 아니면 빈 문자열', nightsLabel('어제', '20
   eq('줄 수는 항목 수와 같다', (html.match(/class="pk-r/g) || []).length, 3);
   eq('체크된 항목에 표시가 붙는다', html.indexOf('pk-r done') >= 0, true);
   eq('기본 항목에는 삭제 버튼이 없다', (html.match(/class="pack-del"/g) || []).length, 1);
-  eq('악의적인 항목명은 이스케이프됨', html.indexOf('<img') === -1, true);
+  eq('악의적인 항목명은 이스케이프됨', html.indexOf('<img src=x') === -1, true);
   eq('진행 표시', html.indexOf('1 / 3') >= 0, true);
   eq('추가 버튼은 늘 보인다', html.indexOf('class="pack-add-btn"') >= 0, true);
   eq('아무것도 없으면 안내',
