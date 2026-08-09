@@ -43,7 +43,7 @@ html = """<!doctype html>
 </head>
 <body>
 <section id="screen-list" hidden>
-<header class="lhead"><img src="assets/miyo/god-miyo.webp" alt=""><h1>내 여행</h1></header>
+<header class="lhead"><img src="assets/miyo/yarr-miyo.webp" alt=""><h1>내 여행</h1></header>
 <div id="triplist"></div>
 <div class="lactions">
 <button id="new-trip" type="button">+ 새 여행 만들기</button>
