@@ -97,14 +97,6 @@ body { margin:0; background:var(--bg); color:var(--text);
 .scats { list-style:none; padding:0; margin:10px 0 0; display:flex; flex-wrap:wrap; gap:6px; }
 .scats li { font-size:.78rem; background:#f1f5f7; border-radius:999px; padding:4px 10px; color:var(--muted); }
 .scats li b { color:var(--text); }
-.spend-add { display:flex; flex-wrap:wrap; gap:6px; margin:12px 0; }
-.spend-add input,.spend-add select { padding:8px 10px; border:1px solid #d5dde1;
-  border-radius:8px; font:inherit; min-width:0; }
-.spend-add .sjpy-in { flex:0 0 90px; }
-.spend-add .snote-in { flex:1 1 110px; }
-.spend-add .scat-in { flex:0 0 auto; background:#fff; }
-.spend-add button { flex:0 0 auto; padding:8px 14px; border:none; border-radius:8px;
-  background:var(--accent); color:#fff; font:inherit; font-weight:600; cursor:pointer; }
 .sgroup { margin-top:12px; }
 .sdate { font-size:.78rem; font-weight:700; color:var(--muted); padding-bottom:4px;
   border-bottom:1px solid #eef2f4; }
@@ -115,8 +107,6 @@ body { margin:0; background:var(--bg); color:var(--text);
   background:var(--accent); border-radius:999px; padding:2px 8px; }
 .slist .snote { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .slist .sjpy { flex:0 0 auto; font-weight:700; white-space:nowrap; }
-.spend-del { flex:0 0 auto; border:none; background:#f1f3f5; color:var(--muted);
-  width:26px; height:26px; border-radius:50%; font-size:1.1rem; line-height:1; cursor:pointer; }
 .sempty { color:var(--muted); padding:10px 0; }
 .sfx { margin-top:14px; font-size:.82rem; color:var(--muted); }
 .sfx input { width:70px; padding:5px 8px; border:1px solid #d5dde1; border-radius:6px;
@@ -217,8 +207,6 @@ body { margin:0; background:var(--bg); color:var(--text);
 .stotal .stot-row + .stot-row { margin-top:2px; }
 .stotal .stot-sum { font-size:.9rem; font-weight:700; color:var(--muted); margin-top:6px;
   padding-top:6px; border-top:1px solid #eef2f4; }
-.spend-add .samt-in { flex:0 0 90px; }
-.spend-add .scur-in { flex:0 0 auto; background:#fff; }
 .slist .samt { flex:0 0 auto; font-weight:700; white-space:nowrap; }
 .sfx .sfx-clr { margin-left:6px; font:inherit; font-size:.75rem; padding:2px 8px;
   border:1px solid #d5dde1; border-radius:6px; background:var(--card); color:var(--muted); cursor:pointer; }
@@ -400,3 +388,14 @@ body.modal-open { overflow:hidden; }
 .sh-go { background:var(--accent); color:#fff; margin-top:22px !important; }
 .sh-cancel { background:var(--card); color:var(--muted); border:1px solid #d5dde1 !important; }
 .sh-hint { margin:16px 0 0; font-size:.78rem; color:var(--muted); line-height:1.6; }
+
+/* 원화 환산 — 현지 금액 옆·아래에 나란히. 환율을 모르면 이 줄 자체가 없다. */
+.dsp-amt { text-align:right; }
+.dsp-krw { display:block; font-size:.72rem; font-weight:400; color:var(--muted); }
+.dsp-tkrw { display:block; font-size:.8rem; font-weight:700; color:var(--muted); }
+.slist .skrw2 { display:block; font-size:.72rem; font-weight:400; color:var(--muted); }
+.slist .samt { text-align:right; }
+.sp-krw { margin:-4px 0 0; font-size:.85rem; font-weight:700; color:var(--accent);
+  min-height:1.2em; }
+.sread { margin:14px 0 0; padding-top:10px; border-top:1px dashed #dde4e8;
+  font-size:.8rem; color:var(--muted); }

@@ -28,6 +28,16 @@ function wxRepaint() {
   repaintDay(CUR.trip, CUR.dayN, CUR.st);
 }
 
+// 환율이 새로 들어오면 원화 환산을 쓰는 화면만 다시 그린다(wxRepaint와 같은 사정 —
+// showTrip 전체를 다시 부르면 스크롤이 튀고 열어 둔 것이 닫힌다).
+function fxRepaint() {
+  if (!CUR.trip) return;
+  if (document.getElementById("screen-trip").hidden) return;
+  renderSummary(CUR.trip, CUR.st);
+  if (CUR.tab === "day") repaintDay(CUR.trip, CUR.dayN, CUR.st);
+  else if (CUR.tab === "money") renderPanel(CUR.trip, CUR.st, "money");
+}
+
 // ---- 라우터 ----
 
 var CUR = { id: null, trip: null, st: null, dayN: null, tab: "day" };
@@ -191,6 +201,9 @@ function showTrip(id, tab, dayN) {
     var d0 = pickDay(trip, CUR.dayN);
     var p0 = d0 ? dayPlace(trip, d0) : trip.place;
     if (p0) wxRefresh(CUR.st, p0, wxRepaint);
+    // 환율도 여행을 열 때 받아 둔다. 캐시가 신선하면(12시간) 아무 것도 하지 않으므로
+    // 여행을 오갈 때 요청이 늘지 않는다. 실패해도 조용히 넘어간다 — 수동 입력이 있다.
+    fxRefresh(fxRepaint);
   }
 }
 

@@ -319,17 +319,27 @@ function daySpendBadge(st, date) {
 // 경비 목록 모달의 본문. 합계·목록·추가 버튼이 한자리에 있다(메모 모달과 같은 꼴).
 function daySpendListHtml(st, date) {
   var list = daySpend(st, date);
+  var rates = fxRates(st);
+  // 현지 통화만 보고는 얼마를 쓴 건지 감이 안 온다 — 원화를 나란히 낸다.
+  // 환율을 모르는 통화(또는 아직 환율을 못 받아온 상태)면 그 자리는 비운다:
+  // 틀린 숫자를 내느니 안 내는 편이 낫다.
+  function krwSpan(amount, cur, cls) {
+    var k = toKRW(amount, cur, rates);
+    return k === null ? '' : '<span class="' + cls + '">약 ' + escHtml(fmtKRW(k)) + '</span>';
+  }
   var rows = list.map(function (e) {
     return '<button class="dsp-r" type="button" data-id="' + Number(e.id) + '">' +
       '<span class="dsp-cat">' + escHtml(e.cat) + '</span>' +
       '<span class="dsp-note">' + escHtml(e.note || e.cat) + '</span>' +
       '<span class="dsp-amt">' +
-        escHtml(fmtAmount(e.amount, currencyByCode(e.cur))) + '</span></button>';
+        escHtml(fmtAmount(e.amount, currencyByCode(e.cur))) +
+        krwSpan(e.amount, e.cur, 'dsp-krw') + '</span></button>';
   }).join('');
   // 하루 안에서도 통화가 섞일 수 있다(국경을 넘는 날) — 통화별로 한 줄씩 낸다.
   var totals = spendTotals(list).map(function (t) {
     return '<div class="dsp-t">' +
-      escHtml(fmtAmount(t.amount, currencyByCode(t.cur))) + '</div>';
+      escHtml(fmtAmount(t.amount, currencyByCode(t.cur))) +
+      krwSpan(t.amount, t.cur, 'dsp-tkrw') + '</div>';
   }).join('');
   return (totals ? '<div class="dsp-ts">' + totals + '</div>' : '') +
     (rows ? '<div class="dsps">' + rows + '</div>'
@@ -397,7 +407,8 @@ function openSpendModal(trip, day, st, e) {
           return '<option' + (e && e.cat === c ? ' selected' : '') + '>' + escHtml(c) + '</option>';
         }).join('') + '</select></label>' +
       '<label>내용<input class="sp-note" type="text" placeholder="예: 반미 2개" ' +
-        'value="' + escHtml(e ? (e.note || '') : '') + '"></label>',
+        'value="' + escHtml(e ? (e.note || '') : '') + '"></label>' +
+      '<p class="sp-krw" id="sp-krw"></p>',
     onSubmit: function (form) {
       var codeNow = form.querySelector('.sp-cur').value;
       var c = currencyByCode(codeNow);
@@ -415,12 +426,24 @@ function openSpendModal(trip, day, st, e) {
       return null;
     }
   });
+  // 치는 동안 원화가 보여야 "이게 얼마짜리인지"를 그 자리에서 안다.
+  var curSel = document.querySelector('.modal-form .sp-cur');
+  var amtEl = document.querySelector('.modal-form .sp-amt');
+  var krwEl = document.getElementById('sp-krw');
+  function paintKrw() {
+    if (!krwEl) return;
+    var n = Number(amtEl.value);
+    var k = (isFinite(n) && n > 0) ? toKRW(n, curSel.value, fxRates(st)) : null;
+    krwEl.textContent = k === null ? '' : '약 ' + fmtKRW(k);
+  }
+  paintKrw();
+  if (amtEl) amtEl.addEventListener('input', paintKrw);
   // 통화를 바꾸면 금액 입력의 step도 따라가야 한다 — 기본값이 VND(step=1)인데
   // USD를 고르면 12.50을 넣을 수 없다(HTML5 검증에 걸려 제출 자체가 막힌다).
-  var curSel = document.querySelector('.modal-form .sp-cur');
   if (curSel) curSel.addEventListener('change', function () {
     var c2 = currencyByCode(curSel.value);
-    document.querySelector('.modal-form .sp-amt').step = c2.decimals > 0 ? '0.01' : '1';
+    if (amtEl) amtEl.step = c2.decimals > 0 ? '0.01' : '1';
+    paintKrw();
   });
 }
 
@@ -983,10 +1006,6 @@ function renderTabbar(trip, tab, onSelect) {
 function renderSpend(trip, st) {
   const body = document.getElementById("spend-body");
   if (!body) return;
-  const keepAmt = (body.querySelector('.samt-in') || {}).value || '';
-  const keepNote = (body.querySelector('.snote-in') || {}).value || '';
-  const keepCat = (body.querySelector('.scat-in') || {}).value || '';
-  const keepCur = (body.querySelector('.scur-in') || {}).value || '';
   const list = spendList(st);
   const rates = fxRates(st);
   const totals = spendTotals(list);
@@ -1016,31 +1035,23 @@ function renderSpend(trip, st) {
 
   const groups = spendByDate(list).map(function (g) {
     const rows = g.items.map(function (e) {
+      // 여기서는 읽기만 한다 — 추가·수정·삭제는 그날의 일정 카드에서.
+      var k = toKRW(e.amount, e.cur, rates);
       return '<li><span class="scat">' + escHtml(e.cat) + '</span>' +
         '<span class="snote">' + escHtml(e.note || e.cat) + '</span>' +
-        '<span class="samt">' + escHtml(fmtAmount(e.amount, currencyByCode(e.cur))) + '</span>' +
-        '<button class="spend-del" type="button" data-id="' + escHtml(e.id) +
-        '" aria-label="삭제">×</button></li>';
+        '<span class="samt">' + escHtml(fmtAmount(e.amount, currencyByCode(e.cur))) +
+        (k === null ? '' : '<span class="skrw2">약 ' + escHtml(fmtKRW(k)) + '</span>') +
+        '</span></li>';
     }).join('');
     return '<div class="sgroup"><div class="sdate">' + escHtml(g.date) + '</div>' +
       '<ul class="slist">' + rows + '</ul></div>';
   }).join('');
 
-  // 기본 통화는 지금 보고 있는 일차의 통화다(없으면 여행 기본값) — 일차마다 다를 수 있다.
+  // 환율을 고칠 때 기준이 되는 통화는 지금 보고 있는 일차의 통화다(없으면 여행 기본값).
   const day = (typeof CUR !== 'undefined' && CUR.dayN)
     ? (trip.days || []).filter(function (d) { return d.n === CUR.dayN; })[0] : null;
   const defCur = currencyByCode((dayCurrency(trip, day) || {}).code || 'KRW');
   const defCode = defCur.code;
-  // 프리셋에 없는 통화(사용자가 직접 넣은 코드)도 목록에 넣어야 고를 수 있다.
-  const codes = CURRENCIES.map(function (c) { return c.code; });
-  if (codes.indexOf(defCode) === -1) codes.unshift(defCode);
-  const curOpts = codes.map(function (c) {
-    const on = (keepCur || defCode) === c ? ' selected' : '';
-    return '<option value="' + escHtml(c) + '"' + on + '>' + escHtml(c) + '</option>';
-  }).join('');
-
-  // 소수점 통화는 step을 0.01로 — JPY에 12.5를 넣을 수 없게, USD에는 넣을 수 있게.
-  const step = defCur.decimals > 0 ? '0.01' : '1';
 
   // 수동 환율은 "unit당 원화"로 받는다(100엔 = ○○원). 저장은 1단위 기준으로 정규화한다.
   const manual = st.get("fxManual", {}) || {};
@@ -1056,70 +1067,17 @@ function renderSpend(trip, st) {
     (hasManual ? ' <button class="sfx-clr" type="button">자동</button>' : '') +
     '</div>';
 
+  // 현지 경비는 여기서 읽기만 한다 — 넣고 고치는 것은 그날의 일정 카드에서 한다.
+  // 한 가지 일을 두 곳에서 할 수 있으면 어느 쪽이 "그날"인지 헷갈리고(이 탭의 입력은
+  // 늘 오늘 날짜였다), 같은 폼을 두 벌 유지해야 한다.
   body.innerHTML =
     totalHtml +
     (chips ? '<ul class="scats">' + chips + '</ul>' : '') +
-    '<form class="spend-add">' +
-      '<input class="samt-in" type="number" inputmode="decimal" min="0" step="' + step + '" ' +
-        'placeholder="금액" aria-label="금액">' +
-      '<select class="scur-in" aria-label="통화">' + curOpts + '</select>' +
-      '<input class="snote-in" type="text" placeholder="내용" aria-label="내용">' +
-      '<select class="scat-in" aria-label="분류">' +
-        SPEND_CATS.map(function (c) { return '<option>' + escHtml(c) + '</option>'; }).join('') +
-      '</select>' +
-      '<button type="submit">추가</button>' +
-    '</form>' +
     (groups || '<div class="sempty">아직 기록이 없습니다.</div>') +
+    '<p class="sread">기록은 일정 탭의 💰 경비에서 넣고 고칩니다.</p>' +
     fxRow +
     // 무료 등급 이용 조건상 출처 표기가 필수다.
     '<div class="fx-attrib-row">' + FX_ATTRIB_HTML + '</div>';
-
-  const form = body.querySelector('.spend-add');
-  if (keepAmt) form.querySelector('.samt-in').value = keepAmt;
-  if (keepNote) form.querySelector('.snote-in').value = keepNote;
-  if (keepCat) form.querySelector('.scat-in').value = keepCat;
-  form.addEventListener('submit', function (e) {
-    e.preventDefault();
-    const ain = form.querySelector('.samt-in');
-    const code = form.querySelector('.scur-in').value;
-    const c = currencyByCode(code);
-    // 소수점 자릿수에 맞춰 반올림한다 — JPY에 12.5를 넣으면 13이 된다.
-    const p = Math.pow(10, c.decimals);
-    const amount = Math.round(Number(ain.value) * p) / p;
-    if (!isFinite(amount) || amount <= 0) { ain.focus(); return; }
-    // 경비 탭에서 넣는 기록은 오늘 날짜다 — 지난 날 것은 그 일차 카드에서 넣는다.
-    spendAdd(st, {
-      date: todayLocal(),
-      amount: amount,
-      cur: code,
-      cat: form.querySelector('.scat-in').value,
-      note: form.querySelector('.snote-in').value
-    });
-    // 방금 기록한 값이 폼에 되살아나지 않도록 명시적으로 비운다.
-    ain.value = '';
-    form.querySelector('.snote-in').value = '';
-    renderSpend(trip, st);
-    renderSummary(trip, st);
-    const next = body.querySelector('.samt-in');
-    if (next) next.focus();
-  });
-
-  body.querySelectorAll('.spend-del').forEach(function (btn) {
-    btn.addEventListener('click', function () {
-      spendRemove(st, Number(btn.dataset.id));
-      renderSpend(trip, st);
-      renderSummary(trip, st);
-    });
-  });
-
-  // 통화를 바꾸면 금액 입력의 step도 따라가야 한다 — 여행 기본값이 JPY(step=1)인데
-  // USD를 고르면 12.50을 넣을 수 없다(HTML5 검증에 걸려 제출 자체가 막힌다).
-  const curin = body.querySelector('.scur-in');
-  if (curin) curin.addEventListener('change', function () {
-    const c = currencyByCode(curin.value);
-    const ain = body.querySelector('.samt-in');
-    if (ain) ain.step = c.decimals > 0 ? '0.01' : '1';
-  });
 
   const fxin = body.querySelector('.sfx-in');
   if (fxin) fxin.addEventListener('change', function () {

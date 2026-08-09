@@ -1747,3 +1747,55 @@ eq('도시가 있는 나라는 정보도 있다',
   eq('망가진 링크', importShare('0!!!').error, '공유 링크를 읽을 수 없습니다.');
   eq('여행이 아닌 데이터', importShare(packShareSync('{"a":1}')).error, '제목이 없습니다.');
 })();
+
+// ---- 경비: 원화 환산 표시 ----
+// 현지 통화만 보고는 얼마를 쓴 건지 감이 안 온다 — 기록마다, 합계마다 원화를 함께 낸다.
+// 환율이 아직 없으면(오프라인 첫 실행) 그 자리는 그냥 비운다. 오류 문구를 넣지 않는다.
+(function () {
+  var mem = { fx: null };
+  var st = {
+    get: function (k, fb) { return Object.prototype.hasOwnProperty.call(mem, k) ? mem[k] : fb; },
+    set: function (k, v) { mem[k] = v; }
+  };
+  // 1원당 통화 — open.er-api.com의 KRW 기준 응답과 같은 축이다.
+  lsSet('fx', { at: 'x', fetchedAt: Date.now(), rates: { VND: 18.531034, USD: 0.000708 } });
+
+  spendAdd(st, { date: '2026-08-10', amount: 50000, cur: 'VND', cat: '식비', note: '반미' });
+  var html = daySpendListHtml(st, '2026-08-10');
+  eq('기록 줄에 원화가 함께 나온다', html.indexOf('2,698원') >= 0, true);
+  eq('합계에도 원화', (html.match(/2,698원/g) || []).length, 2);
+
+  // 환율을 모르는 통화는 원화 자리를 비운다(틀린 숫자를 내느니 안 내는 게 낫다).
+  spendAdd(st, { date: '2026-08-11', amount: 100, cur: 'ZZZ', cat: '기타', note: '?' });
+  var h2 = daySpendListHtml(st, '2026-08-11');
+  eq('모르는 통화는 원화를 내지 않는다', h2.indexOf('원</span>') === -1, true);
+
+  // 환율 자체가 없으면(첫 실행·오프라인) 전부 통화만 나온다.
+  lsDel('fx');
+  var h3 = daySpendListHtml(st, '2026-08-10');
+  eq('환율이 없으면 통화만', h3.indexOf('원') === -1, true);
+  eq('그래도 금액은 나온다', h3.indexOf('50,000') >= 0, true);
+})();
+
+// 경비 탭의 현지 경비는 읽기 전용이다 — 입력은 일차 카드에서 한다.
+(function () {
+  __resetStorage();
+  var mem = {};
+  var st = {
+    get: function (k, fb) { return Object.prototype.hasOwnProperty.call(mem, k) ? mem[k] : fb; },
+    set: function (k, v) { mem[k] = v; }
+  };
+  spendAdd(st, { date: '2026-08-10', amount: 50000, cur: 'VND', cat: '식비', note: '반미' });
+  var trip = { id: 't_x', days: [{ n: 1, date: '2026-08-10' }],
+               currency: { code: 'VND', symbol: '₫', decimals: 0, unit: 1000 } };
+  var el = global.__setDomTarget('spend-body');
+  renderSpend(trip, st);
+  var html = el.innerHTML;
+  eq('입력 폼은 없다', html.indexOf('class="spend-add"') === -1, true);
+  eq('줄마다 붙던 삭제 버튼도 없다', html.indexOf('spend-del') === -1, true);
+  eq('날짜별 기록은 그대로 보인다', html.indexOf('2026-08-10') >= 0, true);
+  eq('금액도 보인다', html.indexOf('50,000') >= 0, true);
+  eq('어디서 넣는지 알려 준다', html.indexOf('일정 탭') >= 0, true);
+  // 환율 입력은 남는다 — 경비 입력이 아니라 환산 설정이다.
+  eq('환율 줄은 남는다', html.indexOf('class="sfx"') >= 0, true);
+})();
