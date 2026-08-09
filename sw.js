@@ -1,4 +1,4 @@
-const CACHE = "trip-v25";
+const CACHE = "trip-v26";
 const ASSETS = ["./", "./index.html", "./styles.css",
   "./sample-trip.js", "./store.js", "./schema.js", "./cities.js", "./country-info.js", "./money.js", "./remote.js", "./views.js", "./editor.js", "./app.js",
   "./manifest.json", "./icon.svg", "./icon-180.png", "./icon-512.png"];

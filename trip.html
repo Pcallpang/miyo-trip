@@ -446,6 +446,7 @@ window.SAMPLE_TRIP = {
     "lon": 135.5,
     "tz": "Asia/Tokyo"
   },
+  "countryCode": "JP",
   "currency": {
     "code": "JPY",
     "symbol": "¥",
@@ -781,64 +782,6 @@ window.SAMPLE_TRIP = {
   ],
   "sections": [
     {
-      "id": "s_rapit",
-      "icon": "🚄",
-      "title": "라피트 시간표",
-      "type": "table",
-      "body": [
-        {
-          "caption": "간사이 → 난바",
-          "head": [
-            "편",
-            "출발",
-            "도착"
-          ],
-          "rows": [
-            [
-              "특급 라피트 α",
-              "13:05",
-              "13:43"
-            ],
-            [
-              "특급 라피트 β",
-              "13:35",
-              "14:14"
-            ],
-            [
-              "특급 라피트 α",
-              "14:05",
-              "14:43"
-            ]
-          ]
-        },
-        {
-          "caption": "난바 → 간사이",
-          "head": [
-            "편",
-            "출발",
-            "도착"
-          ],
-          "rows": [
-            [
-              "특급 라피트 α",
-              "10:05",
-              "10:41"
-            ],
-            [
-              "특급 라피트 β",
-              "10:35",
-              "11:15"
-            ],
-            [
-              "특급 라피트 α",
-              "11:05",
-              "11:41"
-            ]
-          ]
-        }
-      ]
-    },
-    {
       "id": "s_tips",
       "icon": "💡",
       "title": "팁",
@@ -1065,6 +1008,13 @@ function cloneSample() {
 function installSample() {
   var t = cloneSample();
   t.id = newTripId();
+  // 결제 내역은 id로 가리켜 수정·삭제한다. migrateExpenseIds는 부팅 때 한 번 도는데
+  // 샘플 설치는 그보다 나중이라, 여기서 채우지 않으면 샘플의 내역은 눌러도 열리지
+  // 않는다(data-id가 undefined가 된다). 데이터 파일에 id를 박아 두는 대신 설치할 때
+  // 부여한다 — 샘플을 두 번 설치해도 서로 다른 id가 된다.
+  (Array.isArray(t.expenses) ? t.expenses : []).forEach(function (e) {
+    if (e && !e.id) e.id = newExpenseId();
+  });
   return saveTrip(t) ? t.id : null;
 }
 

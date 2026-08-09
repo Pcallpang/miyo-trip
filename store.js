@@ -95,6 +95,13 @@ function cloneSample() {
 function installSample() {
   var t = cloneSample();
   t.id = newTripId();
+  // 결제 내역은 id로 가리켜 수정·삭제한다. migrateExpenseIds는 부팅 때 한 번 도는데
+  // 샘플 설치는 그보다 나중이라, 여기서 채우지 않으면 샘플의 내역은 눌러도 열리지
+  // 않는다(data-id가 undefined가 된다). 데이터 파일에 id를 박아 두는 대신 설치할 때
+  // 부여한다 — 샘플을 두 번 설치해도 서로 다른 id가 된다.
+  (Array.isArray(t.expenses) ? t.expenses : []).forEach(function (e) {
+    if (e && !e.id) e.id = newExpenseId();
+  });
   return saveTrip(t) ? t.id : null;
 }
 

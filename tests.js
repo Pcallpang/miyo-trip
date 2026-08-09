@@ -1054,9 +1054,36 @@ eq('새 여행은 섹션이 비어 있다', defaultSections(), []);
 
 eq('샘플 여행에 builtin 섹션 없음',
   window.SAMPLE_TRIP.sections.filter(function (s) { return s.type === 'builtin'; }).length, 0);
-eq('샘플 여행의 사용자 섹션은 둘',
-  window.SAMPLE_TRIP.sections.map(function (s) { return s.title; }),
-  ['라피트 시간표', '팁']);
+// 라피트 시간표(오사카 공항철도 시간표)는 뺐다 — 정보 탭은 나라 정보가 먼저 보여야
+// 하는 자리다. 사용자 섹션이 어떤 것인지 보여주는 예시로는 '팁' 하나면 충분하다.
+eq('샘플 여행의 사용자 섹션은 하나',
+  window.SAMPLE_TRIP.sections.map(function (s) { return s.title; }), ['팁']);
+
+// ---- 샘플 여행: 나라 정보와 결제 내역 편집 ----
+// 정보 탭의 나라 카드는 trip.countryCode로 그린다 — 샘플에 없으면 카드가 안 나온다.
+eq('샘플 여행에 나라 코드가 있다', window.SAMPLE_TRIP.countryCode, 'JP');
+eq('샘플 정보 탭에 나라 카드', panelHtml(window.SAMPLE_TRIP, 'info').indexOf('일본 정보') >= 0, true);
+eq('샘플 정보 탭에 전압', panelHtml(window.SAMPLE_TRIP, 'info').indexOf('100V') >= 0, true);
+
+// 결제 내역은 id로 가리켜 수정·삭제한다. id가 없으면 줄을 눌러도 아무 일이 없다 —
+// migrateExpenseIds는 부팅 때 한 번 도는데 샘플 설치는 그보다 나중이라, 설치 시점에
+// 채워야 한다.
+(function () {
+  __resetStorage();
+  var id = installSample();
+  var t = loadTrip(id);
+  eq('설치된 샘플의 결제 내역에 모두 id가 있다',
+    t.expenses.every(function (e) { return !!e.id; }), true);
+  eq('id는 서로 다르다',
+    t.expenses.map(function (e) { return e.id; })
+      .filter(function (v, i, a) { return a.indexOf(v) === i; }).length, t.expenses.length);
+  // 그 id로 실제 수정이 되는지(줄을 눌러 여는 경로가 쓰는 함수 그대로).
+  var first = t.expenses[0];
+  updateExpense(t, first.id, { cat: '항공권', krw: 700000, detail: '왕복 2인', date: '', pay: '', note: '' });
+  eq('결제 내역 수정됨', t.expenses[0].krw, 700000);
+  eq('표의 줄이 id를 달고 나온다',
+    expensesTableHtml(t).indexOf('data-id="' + first.id + '"') >= 0, true);
+})();
 
 // ---- 좌표별 날씨 캐시 ----
 var OSAKA = { name: '오사카', lat: 34.69379, lon: 135.50107, tz: 'Asia/Tokyo' };
