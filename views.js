@@ -142,6 +142,7 @@ function renderSummary(trip, st) {
   const nights = daysBetween(trip.start, trip.end) - 1;
   el.innerHTML =
     '<button class="back-list" type="button" aria-label="여행 목록">←</button>' +
+    '<button class="share-trip" type="button">공유</button>' +
     '<button class="edit-trip" type="button" aria-label="여행 설정">⚙</button>' +
     '<div class="dday">' + dday(today, trip.start, trip.end) + '</div>' +
     '<h1>' + escHtml(trip.title) + '</h1>' +
@@ -168,6 +169,8 @@ function renderSummary(trip, st) {
     })();
   var bl = el.querySelector('.back-list');
   if (bl) bl.addEventListener('click', function () { go('#/'); });
+  var sb = el.querySelector('.share-trip');
+  if (sb) sb.addEventListener('click', function () { openShareModal(trip); });
   var eb = el.querySelector('.edit-trip');
   if (eb) eb.addEventListener('click', function () { go('#/t/' + trip.id + '/edit'); });
 }
@@ -526,6 +529,64 @@ function openNoteModal(trip, day, st, note) {
       afterItemEdit(trip, day, st, saveTripBody(trip));
       return null;
     }
+  });
+}
+
+// ---- 동행자 공유 ----
+// 여행 데이터를 URL의 '#' 뒤에 담는다 — 그 부분은 HTTP 요청에 실리지 않으므로
+// 서버(GitHub Pages)도 내용을 보지 못한다. 대신 링크를 받은 사람은 누구나 볼 수
+// 있으니 링크 자체가 열쇠다.
+// 담는 것은 여행 본체(일정·메모·숙소·준비물·섹션·결제내역)뿐이다. 현지 경비 기록과
+// 준비물 체크는 그 사람 개인의 것이라 넘기지 않는다.
+function openShareModal(trip) {
+  var form = modalOpen({
+    title: '동행자에게 공유',
+    closeLabel: '닫기',
+    html: '<p class="sh-load2">공유 링크를 만드는 중…</p>'
+  });
+
+  packShare(JSON.stringify(trip)).then(function (payload) {
+    // 만드는 동안 사용자가 닫았을 수 있다 — 그러면 아무 것도 하지 않는다.
+    if (!_modalEl || !_modalEl.contains(form)) return;
+    var url = shareUrl(location.href, payload);
+    // 메신저·브라우저마다 감당하는 URL 길이가 다르다. 지나치게 길면 중간에 잘려
+    // 상대가 열지 못하므로, 링크를 주기 전에 먼저 알린다.
+    var tooLong = url.length > SHARE_URL_WARN;
+    form.querySelector('.sh-load2').outerHTML =
+      '<p class="modal-hint">링크를 열면 상대 앱에 이 여행이 담깁니다. ' +
+        '지금 모습 그대로 복사되는 것이라, 이후에 고친 내용은 상대에게 반영되지 않습니다.</p>' +
+      (tooLong ? '<p class="sh-warn">링크가 깁니다(' + url.length +
+        '자). 메신저에서 잘릴 수 있으니 열리는지 확인해 보세요.</p>' : '') +
+      '<textarea class="sh-url" readonly rows="3">' + escHtml(url) + '</textarea>' +
+      '<div class="sh-btns">' +
+        (navigator.share ? '<button class="sh-send" type="button">공유하기</button>' : '') +
+        '<button class="sh-copy" type="button">링크 복사</button>' +
+      '</div>';
+
+    var copyBtn = form.querySelector('.sh-copy');
+    copyBtn.addEventListener('click', function () {
+      var ta = form.querySelector('.sh-url');
+      // navigator.clipboard는 https/localhost에서만 쓸 수 있다 — 안 되면 선택 후
+      // execCommand로 물러나고, 그것도 막히면 직접 복사하라고 알린다.
+      var done = function () { copyBtn.textContent = '복사됨'; };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(ta.value).then(done, function () { fallback(); });
+      } else fallback();
+      function fallback() {
+        ta.select();
+        var ok = false;
+        try { ok = document.execCommand('copy'); } catch (e) {}
+        if (ok) done(); else copyBtn.textContent = '길게 눌러 복사하세요';
+      }
+    });
+
+    var sendBtn = form.querySelector('.sh-send');
+    if (sendBtn) sendBtn.addEventListener('click', function () {
+      navigator.share({ title: trip.title, url: url }).catch(function () {});
+    });
+  }, function () {
+    if (!_modalEl || !_modalEl.contains(form)) return;
+    form.querySelector('.sh-load2').textContent = '공유 링크를 만들지 못했습니다.';
   });
 }
 

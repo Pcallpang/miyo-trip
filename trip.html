@@ -13,11 +13,11 @@ html { background:var(--bg); }
 body { margin:0; background:var(--bg); color:var(--text);
   font-family:-apple-system,"Segoe UI",Roboto,"Noto Sans KR",sans-serif; line-height:1.5; }
 #summary { background:var(--accent); color:#fff; padding:20px 16px; }
-/* 오른쪽에는 ⚙ 설정과 여행 종료 두 버튼이 절대 배치로 얹힌다 — 왼쪽 끝이 오른쪽에서
-   대략 98px 지점이라 긴 제목·D-day가 그 밑으로 파고들지 않게 100px을 비운다.
+/* 오른쪽에는 [공유]와 ⚙ 두 버튼이 절대 배치로 얹힌다 — 공유 버튼의 왼쪽 끝이
+   오른쪽에서 대략 120px 지점이라, 긴 제목·D-day가 그 밑으로 파고들지 않게 비워 둔다.
    왼쪽에는 목록으로 돌아가는 버튼(.back-list) 하나뿐이라 40px면 충분하다. */
-#summary h1 { margin:4px 0; font-size:1.5rem; padding-right:100px; padding-left:40px; }
-#summary .dday { font-weight:700; opacity:.9; padding-right:100px; padding-left:40px; }
+#summary h1 { margin:4px 0; font-size:1.5rem; padding-right:124px; padding-left:40px; }
+#summary .dday { font-weight:700; opacity:.9; padding-right:124px; padding-left:40px; }
 #summary .period,#summary .hotel,#summary .cost { font-size:.9rem; opacity:.95; margin-top:2px; }
 #daytabs { display:flex; gap:6px; overflow-x:auto; padding:10px 12px;
   position:sticky; top:0; background:var(--bg); z-index:5; -webkit-overflow-scrolling:touch; }
@@ -151,6 +151,11 @@ body { margin:0; background:var(--bg); color:var(--text);
   color:#fff; font-size:1.05rem; line-height:1; padding:7px 10px; border-radius:10px; cursor:pointer; }
 .edit-trip { position:absolute; z-index:1; top:16px; right:14px; border:0; background:rgba(255,255,255,.18);
   color:#fff; font-size:1.05rem; line-height:1; padding:7px 10px; border-radius:10px; cursor:pointer; }
+/* 공유는 ⚙ 왼쪽에. 설정 안에 두니 잘 눈에 띄지 않아 밖으로 뺐다. z-index는 위 주석과
+   같은 이유로 반드시 있어야 한다 — 없으면 .dday가 버튼 위를 덮어 클릭을 가로챈다. */
+.share-trip { position:absolute; z-index:1; top:16px; right:56px; border:0;
+  background:rgba(255,255,255,.18); color:#fff; font:inherit; font-size:.85rem;
+  font-weight:700; line-height:1; padding:9px 12px; border-radius:10px; cursor:pointer; }
 .ehead { background:var(--accent); color:#fff; padding:16px; display:flex; align-items:center; gap:10px; }
 .ehead h1 { margin:0; font-size:1.2rem; }
 .ehead button { border:0; background:none; color:#fff; font-size:1.3rem; cursor:pointer; padding:0 4px; }
@@ -231,11 +236,6 @@ body { margin:0; background:var(--bg); color:var(--text);
 .sec-tools button { font:inherit; font-size:.75rem; padding:4px 10px; border:1px solid #d5dde1;
   border-radius:8px; background:var(--card); color:var(--muted); cursor:pointer; }
 .sec-tools .sec-ro { font-size:.75rem; color:var(--muted); }
-
-.eshare { display:flex; flex-direction:column; gap:6px; padding:0 16px 20px; }
-.eshare button { font:inherit; padding:12px; border:1px solid #d5dde1; border-radius:10px;
-  background:var(--card); color:var(--text); cursor:pointer; }
-.eshare .geo-msg { margin:0; }
 
 /* 메모는 카드가 아니라 모달 안에서 본다 — 목록의 각 줄이 곧 편집 버튼이다. */
 .mnotes { display:flex; flex-direction:column; border:1px solid #ffd8a8;
@@ -408,6 +408,8 @@ body.modal-open { overflow:hidden; }
   min-height:1.2em; }
 .sread { margin:14px 0 0; padding-top:10px; border-top:1px dashed #dde4e8;
   font-size:.8rem; color:var(--muted); }
+
+.sh-load2 { margin:0; padding:14px 0; color:var(--muted); text-align:center; }
 
 </style>
 </head>
@@ -3753,6 +3755,7 @@ function renderSummary(trip, st) {
   const nights = daysBetween(trip.start, trip.end) - 1;
   el.innerHTML =
     '<button class="back-list" type="button" aria-label="여행 목록">←</button>' +
+    '<button class="share-trip" type="button">공유</button>' +
     '<button class="edit-trip" type="button" aria-label="여행 설정">⚙</button>' +
     '<div class="dday">' + dday(today, trip.start, trip.end) + '</div>' +
     '<h1>' + escHtml(trip.title) + '</h1>' +
@@ -3779,6 +3782,8 @@ function renderSummary(trip, st) {
     })();
   var bl = el.querySelector('.back-list');
   if (bl) bl.addEventListener('click', function () { go('#/'); });
+  var sb = el.querySelector('.share-trip');
+  if (sb) sb.addEventListener('click', function () { openShareModal(trip); });
   var eb = el.querySelector('.edit-trip');
   if (eb) eb.addEventListener('click', function () { go('#/t/' + trip.id + '/edit'); });
 }
@@ -4137,6 +4142,64 @@ function openNoteModal(trip, day, st, note) {
       afterItemEdit(trip, day, st, saveTripBody(trip));
       return null;
     }
+  });
+}
+
+// ---- 동행자 공유 ----
+// 여행 데이터를 URL의 '#' 뒤에 담는다 — 그 부분은 HTTP 요청에 실리지 않으므로
+// 서버(GitHub Pages)도 내용을 보지 못한다. 대신 링크를 받은 사람은 누구나 볼 수
+// 있으니 링크 자체가 열쇠다.
+// 담는 것은 여행 본체(일정·메모·숙소·준비물·섹션·결제내역)뿐이다. 현지 경비 기록과
+// 준비물 체크는 그 사람 개인의 것이라 넘기지 않는다.
+function openShareModal(trip) {
+  var form = modalOpen({
+    title: '동행자에게 공유',
+    closeLabel: '닫기',
+    html: '<p class="sh-load2">공유 링크를 만드는 중…</p>'
+  });
+
+  packShare(JSON.stringify(trip)).then(function (payload) {
+    // 만드는 동안 사용자가 닫았을 수 있다 — 그러면 아무 것도 하지 않는다.
+    if (!_modalEl || !_modalEl.contains(form)) return;
+    var url = shareUrl(location.href, payload);
+    // 메신저·브라우저마다 감당하는 URL 길이가 다르다. 지나치게 길면 중간에 잘려
+    // 상대가 열지 못하므로, 링크를 주기 전에 먼저 알린다.
+    var tooLong = url.length > SHARE_URL_WARN;
+    form.querySelector('.sh-load2').outerHTML =
+      '<p class="modal-hint">링크를 열면 상대 앱에 이 여행이 담깁니다. ' +
+        '지금 모습 그대로 복사되는 것이라, 이후에 고친 내용은 상대에게 반영되지 않습니다.</p>' +
+      (tooLong ? '<p class="sh-warn">링크가 깁니다(' + url.length +
+        '자). 메신저에서 잘릴 수 있으니 열리는지 확인해 보세요.</p>' : '') +
+      '<textarea class="sh-url" readonly rows="3">' + escHtml(url) + '</textarea>' +
+      '<div class="sh-btns">' +
+        (navigator.share ? '<button class="sh-send" type="button">공유하기</button>' : '') +
+        '<button class="sh-copy" type="button">링크 복사</button>' +
+      '</div>';
+
+    var copyBtn = form.querySelector('.sh-copy');
+    copyBtn.addEventListener('click', function () {
+      var ta = form.querySelector('.sh-url');
+      // navigator.clipboard는 https/localhost에서만 쓸 수 있다 — 안 되면 선택 후
+      // execCommand로 물러나고, 그것도 막히면 직접 복사하라고 알린다.
+      var done = function () { copyBtn.textContent = '복사됨'; };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(ta.value).then(done, function () { fallback(); });
+      } else fallback();
+      function fallback() {
+        ta.select();
+        var ok = false;
+        try { ok = document.execCommand('copy'); } catch (e) {}
+        if (ok) done(); else copyBtn.textContent = '길게 눌러 복사하세요';
+      }
+    });
+
+    var sendBtn = form.querySelector('.sh-send');
+    if (sendBtn) sendBtn.addEventListener('click', function () {
+      navigator.share({ title: trip.title, url: url }).catch(function () {});
+    });
+  }, function () {
+    if (!_modalEl || !_modalEl.contains(form)) return;
+    form.querySelector('.sh-load2').textContent = '공유 링크를 만들지 못했습니다.';
   });
 }
 
@@ -4954,68 +5017,11 @@ function showEdit(id) {
         '<ul class="daycity-list" id="daycity-list"></ul></div>' : '') +
       '<div class="eerr" id="e-err" hidden></div>' +
       '<button type="submit">' + (trip ? '저장' : '만들기') + '</button>' +
-    '</form>' +
-    // 공유는 기존 여행에서만 — 새 여행은 아직 저장된 게 없다.
-    (trip ? '<div class="eshare">' +
-      '<div class="geo-lbl">동행자에게 공유</div>' +
-      '<button id="e-share" type="button">🔗 공유 링크 만들기</button>' +
-      '<p class="geo-msg">링크를 열면 상대 앱에 이 여행이 담깁니다. ' +
-        '만든 뒤에 고친 내용은 상대에게 반영되지 않습니다.</p>' +
-      '<div class="sh-out" id="e-share-out" hidden></div>' +
-      '</div>' : '');
+    // 공유는 여행 화면 상단(⚙ 옆)에서 한다 — 설정 안에 두면 잘 눈에 띄지 않는다.
+    '</form>';
 
   document.getElementById("e-back").addEventListener("click", function () {
     go(trip ? '#/t/' + trip.id : '#/');
-  });
-
-  // 공유 링크. 여행 데이터를 URL의 '#' 뒤에 담는다 — 그 부분은 HTTP 요청에 실리지
-  // 않으므로 서버(GitHub Pages)도 내용을 보지 못한다. 대신 링크를 받은 사람은 누구나
-  // 볼 수 있으니 링크 자체가 열쇠다.
-  // 담는 것은 여행 본체(일정·메모·숙소·준비물·섹션·결제내역)뿐이다. 현지 경비 기록과
-  // 준비물 체크는 그 사람 개인의 것이라 넘기지 않는다.
-  var shareBtn = document.getElementById("e-share");
-  if (shareBtn) shareBtn.addEventListener('click', function () {
-    var out = document.getElementById("e-share-out");
-    shareBtn.disabled = true;
-    packShare(JSON.stringify(trip)).then(function (payload) {
-      shareBtn.disabled = false;
-      var url = shareUrl(location.href, payload);
-      out.hidden = false;
-      // 메신저·브라우저마다 감당하는 URL 길이가 다르다. 지나치게 길면 중간에 잘려
-      // 상대가 열지 못하므로, 링크를 주기 전에 먼저 알린다.
-      var tooLong = url.length > SHARE_URL_WARN;
-      out.innerHTML =
-        (tooLong ? '<p class="sh-warn">링크가 깁니다(' + url.length +
-          '자). 메신저에서 잘릴 수 있으니 열리는지 확인해 보세요.</p>' : '') +
-        '<textarea class="sh-url" readonly rows="3">' + escHtml(url) + '</textarea>' +
-        '<div class="sh-btns">' +
-          (navigator.share ? '<button class="sh-send" type="button">공유하기</button>' : '') +
-          '<button class="sh-copy" type="button">링크 복사</button>' +
-        '</div>';
-      var copyBtn = out.querySelector('.sh-copy');
-      copyBtn.addEventListener('click', function () {
-        var ta = out.querySelector('.sh-url');
-        // navigator.clipboard는 https/localhost에서만 쓸 수 있다 — 안 되면 선택 후
-        // execCommand로 물러나고, 그것도 막히면 직접 복사하라고 알린다.
-        var done = function () { copyBtn.textContent = '복사됨'; };
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-          navigator.clipboard.writeText(ta.value).then(done, function () { fallback(); });
-        } else fallback();
-        function fallback() {
-          ta.select();
-          var ok = false;
-          try { ok = document.execCommand('copy'); } catch (e) {}
-          if (ok) done(); else copyBtn.textContent = '길게 눌러 복사하세요';
-        }
-      });
-      var sendBtn = out.querySelector('.sh-send');
-      if (sendBtn) sendBtn.addEventListener('click', function () {
-        navigator.share({ title: trip.title, url: url }).catch(function () {});
-      });
-    }, function () {
-      shareBtn.disabled = false;
-      alert('공유 링크를 만들지 못했습니다.');
-    });
   });
 
   // 날짜를 고칠 때마다 기간을 다시 셈해 보여준다. 요약 헤더와 같은 문구(nightsLabel)를

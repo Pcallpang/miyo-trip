@@ -4,11 +4,11 @@ html { background:var(--bg); }
 body { margin:0; background:var(--bg); color:var(--text);
   font-family:-apple-system,"Segoe UI",Roboto,"Noto Sans KR",sans-serif; line-height:1.5; }
 #summary { background:var(--accent); color:#fff; padding:20px 16px; }
-/* 오른쪽에는 ⚙ 설정과 여행 종료 두 버튼이 절대 배치로 얹힌다 — 왼쪽 끝이 오른쪽에서
-   대략 98px 지점이라 긴 제목·D-day가 그 밑으로 파고들지 않게 100px을 비운다.
+/* 오른쪽에는 [공유]와 ⚙ 두 버튼이 절대 배치로 얹힌다 — 공유 버튼의 왼쪽 끝이
+   오른쪽에서 대략 120px 지점이라, 긴 제목·D-day가 그 밑으로 파고들지 않게 비워 둔다.
    왼쪽에는 목록으로 돌아가는 버튼(.back-list) 하나뿐이라 40px면 충분하다. */
-#summary h1 { margin:4px 0; font-size:1.5rem; padding-right:100px; padding-left:40px; }
-#summary .dday { font-weight:700; opacity:.9; padding-right:100px; padding-left:40px; }
+#summary h1 { margin:4px 0; font-size:1.5rem; padding-right:124px; padding-left:40px; }
+#summary .dday { font-weight:700; opacity:.9; padding-right:124px; padding-left:40px; }
 #summary .period,#summary .hotel,#summary .cost { font-size:.9rem; opacity:.95; margin-top:2px; }
 #daytabs { display:flex; gap:6px; overflow-x:auto; padding:10px 12px;
   position:sticky; top:0; background:var(--bg); z-index:5; -webkit-overflow-scrolling:touch; }
@@ -142,6 +142,11 @@ body { margin:0; background:var(--bg); color:var(--text);
   color:#fff; font-size:1.05rem; line-height:1; padding:7px 10px; border-radius:10px; cursor:pointer; }
 .edit-trip { position:absolute; z-index:1; top:16px; right:14px; border:0; background:rgba(255,255,255,.18);
   color:#fff; font-size:1.05rem; line-height:1; padding:7px 10px; border-radius:10px; cursor:pointer; }
+/* 공유는 ⚙ 왼쪽에. 설정 안에 두니 잘 눈에 띄지 않아 밖으로 뺐다. z-index는 위 주석과
+   같은 이유로 반드시 있어야 한다 — 없으면 .dday가 버튼 위를 덮어 클릭을 가로챈다. */
+.share-trip { position:absolute; z-index:1; top:16px; right:56px; border:0;
+  background:rgba(255,255,255,.18); color:#fff; font:inherit; font-size:.85rem;
+  font-weight:700; line-height:1; padding:9px 12px; border-radius:10px; cursor:pointer; }
 .ehead { background:var(--accent); color:#fff; padding:16px; display:flex; align-items:center; gap:10px; }
 .ehead h1 { margin:0; font-size:1.2rem; }
 .ehead button { border:0; background:none; color:#fff; font-size:1.3rem; cursor:pointer; padding:0 4px; }
@@ -222,11 +227,6 @@ body { margin:0; background:var(--bg); color:var(--text);
 .sec-tools button { font:inherit; font-size:.75rem; padding:4px 10px; border:1px solid #d5dde1;
   border-radius:8px; background:var(--card); color:var(--muted); cursor:pointer; }
 .sec-tools .sec-ro { font-size:.75rem; color:var(--muted); }
-
-.eshare { display:flex; flex-direction:column; gap:6px; padding:0 16px 20px; }
-.eshare button { font:inherit; padding:12px; border:1px solid #d5dde1; border-radius:10px;
-  background:var(--card); color:var(--text); cursor:pointer; }
-.eshare .geo-msg { margin:0; }
 
 /* 메모는 카드가 아니라 모달 안에서 본다 — 목록의 각 줄이 곧 편집 버튼이다. */
 .mnotes { display:flex; flex-direction:column; border:1px solid #ffd8a8;
@@ -399,3 +399,5 @@ body.modal-open { overflow:hidden; }
   min-height:1.2em; }
 .sread { margin:14px 0 0; padding-top:10px; border-top:1px dashed #dde4e8;
   font-size:.8rem; color:var(--muted); }
+
+.sh-load2 { margin:0; padding:14px 0; color:var(--muted); text-align:center; }
