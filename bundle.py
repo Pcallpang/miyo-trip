@@ -8,7 +8,7 @@ def read(name):
     with open(os.path.join(BASE, name), encoding="utf-8") as f:
         return f.read()
 
-SCRIPTS = ["sample-trip.js", "store.js", "schema.js", "cities.js", "money.js", "remote.js", "views.js", "editor.js", "app.js"]
+SCRIPTS = ["sample-trip.js", "store.js", "schema.js", "cities.js", "country-info.js", "money.js", "remote.js", "views.js", "editor.js", "app.js"]
 
 html = """<!doctype html>
 <html lang="ko">

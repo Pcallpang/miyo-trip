@@ -376,6 +376,16 @@ body.modal-open { overflow:hidden; }
   color:var(--accent); cursor:pointer; }
 .modal-form .m-narrow2 { flex:0 0 104px; }
 
+/* 나라 정보 — 도착 첫날 찾게 되는 것만. 라벨/값 두 칸으로 훑어보기 쉽게. */
+.ci-r { display:flex; gap:10px; align-items:baseline; padding:8px 0;
+  border-bottom:1px solid #eef2f4; font-size:.9rem; }
+.ci-r:last-of-type { border-bottom:0; }
+.ci-k { flex:0 0 74px; color:var(--muted); font-size:.82rem; font-weight:700; }
+.ci-v { flex:1; min-width:0; }
+.ci-note { margin:10px 0 0; padding-top:10px; border-top:1px dashed #dde4e8;
+  font-size:.78rem; color:var(--muted); line-height:1.6; }
+.ci-note a { color:var(--accent); }
+
 </style>
 </head>
 <body>
@@ -1313,6 +1323,41 @@ function dowOf(iso) {
 }
 function addDays(iso, n) { return msDate(dateMs(iso) + n * DAY_MS); }
 function daysBetween(a, b) { return Math.round((dateMs(b) - dateMs(a)) / DAY_MS) + 1; }
+
+// 시차. 표에 적어 두지 않고 시간대(cities.js의 tz)로 그때그때 계산한다 —
+// 서머타임이 있는 나라는 계절에 따라 달라지므로 적어 두면 반드시 틀린다.
+// 그 시간대의 벽시계 시각을 읽어 UTC로 되읽으면 오프셋이 나온다.
+function tzOffsetMinutes(tz, at) {
+  if (!tz) return null;
+  try {
+    var d = at || new Date();
+    var parts = {};
+    new Intl.DateTimeFormat('en-US', {
+      timeZone: tz, hour12: false,
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit'
+    }).formatToParts(d).forEach(function (p) { parts[p.type] = p.value; });
+    // hour는 hour12:false에서도 24가 나올 수 있다(자정) — 0으로 되돌린다.
+    var asUTC = Date.UTC(Number(parts.year), Number(parts.month) - 1, Number(parts.day),
+                         Number(parts.hour) % 24, Number(parts.minute), Number(parts.second));
+    return Math.round((asUTC - d.getTime()) / 60000);
+  } catch (e) {
+    return null;
+  }
+}
+
+// 한국 기준 시차를 사람이 읽는 문구로. 알 수 없으면 빈 문자열(그 줄이 사라진다).
+function tzDiffLabel(tz, at) {
+  var there = tzOffsetMinutes(tz, at);
+  var here = tzOffsetMinutes('Asia/Seoul', at);
+  if (there === null || here === null) return "";
+  var m = there - here;
+  if (m === 0) return "한국과 같음";
+  var abs = Math.abs(m), h = Math.floor(abs / 60), mm = abs % 60;
+  var t = h ? h + "시간" : "";
+  if (mm) t += (t ? " " : "") + mm + "분";
+  return "한국보다 " + t + " " + (m > 0 ? "빠름" : "느림");
+}
 
 var _seq = 0;
 function newItemId() { return "i_" + Date.now().toString(36) + (_seq++).toString(36); }
@@ -2779,6 +2824,164 @@ window.CITIES = {
 
 </script>
 <script>
+// 나라별 실용 정보. 도착 첫날 실제로 찾게 되는 것들만 담는다 —
+// 전압·플러그, 긴급 전화, 팁 문화, 수돗물. 모두 몇 년 단위로도 잘 바뀌지 않는 값이다.
+//
+// 여기에 넣지 않는 것: 비자·입국 요건·치안 경보. 자주 바뀌는데다 낡은 값이 공항에서
+// 사람을 곤란하게 만든다. 그건 외교부 해외안전여행으로 링크만 보낸다(views.js).
+//
+// 시차는 여기 적지 않는다 — 도시의 시간대(cities.js의 tz)로 실행 시점에 계산한다.
+// 서머타임이 있는 나라는 계절에 따라 달라지므로 적어 두면 반드시 틀린다.
+//
+// 값이 없는 필드는 그냥 비워 둔다(그 줄이 사라진다). 확실하지 않은 것을 적는 것보다
+// 안 적는 편이 낫다.
+window.COUNTRY_INFO = {
+  JP: { volt: "100V", plug: "A형 (한국과 다름 — 어댑터 필요)", emg: "경찰 110 · 구급/화재 119",
+        tip: "팁 문화 없음", water: "수돗물 음용 가능" },
+  KR: { volt: "220V", plug: "C/F형", emg: "경찰 112 · 구급/화재 119",
+        tip: "팁 문화 없음", water: "수돗물 음용 가능" },
+  TW: { volt: "110V", plug: "A/B형 (한국과 다름 — 어댑터 필요)", emg: "경찰 110 · 구급/화재 119",
+        tip: "팁 문화 거의 없음", water: "수돗물 음용 권장하지 않음" },
+  CN: { volt: "220V", plug: "A/C/I형", emg: "경찰 110 · 구급 120 · 화재 119",
+        tip: "팁 문화 거의 없음", water: "수돗물 음용 권장하지 않음" },
+  HK: { volt: "220V", plug: "G형 (영국식 — 어댑터 필요)", emg: "통합 999",
+        tip: "봉사료 10% 포함이 일반적", water: "수돗물 음용 가능" },
+  MO: { volt: "220V", plug: "G형 (영국식 — 어댑터 필요)", emg: "통합 999",
+        tip: "봉사료 10% 포함이 일반적", water: "수돗물 음용 가능" },
+  VN: { volt: "220V", plug: "C/F형 (한국과 같음)", emg: "경찰 113 · 구급 115 · 화재 114",
+        tip: "팁 문화 거의 없음", water: "수돗물 음용 권장하지 않음" },
+  TH: { volt: "220V", plug: "A/B/C형", emg: "경찰 191 · 구급 1669 · 관광경찰 1155",
+        tip: "잔돈 정도의 팁이 흔함", water: "수돗물 음용 권장하지 않음" },
+  SG: { volt: "230V", plug: "G형 (영국식 — 어댑터 필요)", emg: "경찰 999 · 구급/화재 995",
+        tip: "봉사료 10% 포함이 일반적", water: "수돗물 음용 가능" },
+  MY: { volt: "240V", plug: "G형 (영국식 — 어댑터 필요)", emg: "통합 999",
+        tip: "팁 문화 거의 없음", water: "수돗물 음용 권장하지 않음" },
+  ID: { volt: "230V", plug: "C/F형 (한국과 같음)", emg: "경찰 110 · 구급 118 · 화재 113",
+        tip: "봉사료가 포함되는 경우가 많음", water: "수돗물 음용 권장하지 않음" },
+  PH: { volt: "220V", plug: "A/B/C형", emg: "통합 911",
+        tip: "잔돈 정도의 팁이 흔함", water: "수돗물 음용 권장하지 않음" },
+  KH: { volt: "230V", plug: "A/C/G형", emg: "경찰 117 · 구급 119 · 화재 118",
+        tip: "잔돈 정도의 팁이 흔함", water: "수돗물 음용 권장하지 않음" },
+  LA: { volt: "230V", plug: "A/B/C/E/F형", emg: "경찰 191 · 구급 195",
+        tip: "팁 문화 거의 없음", water: "수돗물 음용 권장하지 않음" },
+  MM: { volt: "230V", plug: "C/D/F/G형", emg: "경찰 199 · 구급 192",
+        tip: "팁 문화 거의 없음", water: "수돗물 음용 권장하지 않음" },
+  BN: { volt: "240V", plug: "G형 (영국식 — 어댑터 필요)", emg: "경찰 993 · 구급 991 · 화재 995",
+        tip: "팁 문화 거의 없음", water: "수돗물 음용 가능" },
+  IN: { volt: "230V", plug: "C/D/M형 (어댑터 필요)", emg: "통합 112",
+        tip: "잔돈 정도의 팁이 흔함", water: "수돗물 음용 권장하지 않음" },
+  NP: { volt: "230V", plug: "C/D/M형 (어댑터 필요)", emg: "경찰 100 · 구급 102",
+        tip: "잔돈 정도의 팁이 흔함", water: "수돗물 음용 권장하지 않음" },
+  LK: { volt: "230V", plug: "D/G/M형 (어댑터 필요)", emg: "경찰 119 · 구급 1990",
+        tip: "잔돈 정도의 팁이 흔함", water: "수돗물 음용 권장하지 않음" },
+  MV: { volt: "230V", plug: "G/D형 (어댑터 필요)", emg: "경찰 119 · 구급 102",
+        tip: "봉사료 10% 포함이 일반적", water: "생수 권장" },
+  MN: { volt: "220V", plug: "C/E형 (한국과 같음)", emg: "경찰 102 · 구급 103 · 화재 101",
+        tip: "팁 문화 거의 없음", water: "수돗물 음용 권장하지 않음" },
+  KZ: { volt: "220V", plug: "C/F형 (한국과 같음)", emg: "통합 112",
+        tip: "팁 문화 거의 없음", water: "수돗물 음용 권장하지 않음" },
+  UZ: { volt: "220V", plug: "C/F형 (한국과 같음)", emg: "경찰 102 · 구급 103 · 화재 101",
+        tip: "팁 문화 거의 없음", water: "수돗물 음용 권장하지 않음" },
+
+  US: { volt: "120V", plug: "A/B형 (한국과 다름 — 어댑터 필요)", emg: "통합 911",
+        tip: "팁 문화 강함 — 식당 15~20%", water: "수돗물 음용 가능" },
+  CA: { volt: "120V", plug: "A/B형 (한국과 다름 — 어댑터 필요)", emg: "통합 911",
+        tip: "팁 문화 강함 — 식당 15~20%", water: "수돗물 음용 가능" },
+  MX: { volt: "127V", plug: "A/B형 (한국과 다름 — 어댑터 필요)", emg: "통합 911",
+        tip: "식당 10~15%", water: "수돗물 음용 권장하지 않음" },
+  BR: { volt: "127/220V (지역마다 다름)", plug: "C/N형", emg: "경찰 190 · 구급 192",
+        tip: "봉사료 10% 포함이 일반적", water: "수돗물 음용 권장하지 않음" },
+  AR: { volt: "220V", plug: "C/I형", emg: "경찰 911 · 구급 107",
+        tip: "식당 10% 정도", water: "지역에 따라 다름 — 생수 권장" },
+  CL: { volt: "220V", plug: "C/L형", emg: "경찰 133 · 구급 131",
+        tip: "식당 10% 정도", water: "수돗물 음용 가능(지역차 있음)" },
+  PE: { volt: "220V", plug: "A/B/C형", emg: "경찰 105 · 구급 106",
+        tip: "식당 10% 정도", water: "수돗물 음용 권장하지 않음" },
+
+  GB: { volt: "230V", plug: "G형 (영국식 — 어댑터 필요)", emg: "통합 999 (112도 가능)",
+        tip: "봉사료 12.5% 포함이 흔함", water: "수돗물 음용 가능" },
+  IE: { volt: "230V", plug: "G형 (영국식 — 어댑터 필요)", emg: "통합 112 / 999",
+        tip: "식당 10~15%", water: "수돗물 음용 가능" },
+  FR: { volt: "230V", plug: "C/E형 (한국과 같음)", emg: "통합 112",
+        tip: "봉사료 포함 — 잔돈 정도", water: "수돗물 음용 가능" },
+  DE: { volt: "230V", plug: "C/F형 (한국과 같음)", emg: "통합 112",
+        tip: "5~10% 정도", water: "수돗물 음용 가능" },
+  IT: { volt: "230V", plug: "C/F/L형", emg: "통합 112",
+        tip: "자릿세(coperto)가 따로 붙는 곳이 많음", water: "수돗물 음용 가능" },
+  ES: { volt: "230V", plug: "C/F형 (한국과 같음)", emg: "통합 112",
+        tip: "잔돈 정도", water: "수돗물 음용 가능" },
+  PT: { volt: "230V", plug: "C/F형 (한국과 같음)", emg: "통합 112",
+        tip: "잔돈 정도", water: "수돗물 음용 가능" },
+  NL: { volt: "230V", plug: "C/F형 (한국과 같음)", emg: "통합 112",
+        tip: "5~10% 정도", water: "수돗물 음용 가능" },
+  BE: { volt: "230V", plug: "C/E형 (한국과 같음)", emg: "통합 112",
+        tip: "봉사료 포함 — 잔돈 정도", water: "수돗물 음용 가능" },
+  AT: { volt: "230V", plug: "C/F형 (한국과 같음)", emg: "통합 112",
+        tip: "5~10% 정도", water: "수돗물 음용 가능" },
+  CH: { volt: "230V", plug: "C/J형 (어댑터 필요할 수 있음)", emg: "통합 112",
+        tip: "봉사료 포함 — 잔돈 정도", water: "수돗물 음용 가능" },
+  CZ: { volt: "230V", plug: "C/E형 (한국과 같음)", emg: "통합 112",
+        tip: "10% 정도", water: "수돗물 음용 가능" },
+  HU: { volt: "230V", plug: "C/F형 (한국과 같음)", emg: "통합 112",
+        tip: "10% 정도", water: "수돗물 음용 가능" },
+  PL: { volt: "230V", plug: "C/E형 (한국과 같음)", emg: "통합 112",
+        tip: "10% 정도", water: "수돗물 음용 가능" },
+  GR: { volt: "230V", plug: "C/F형 (한국과 같음)", emg: "통합 112",
+        tip: "잔돈 정도", water: "지역에 따라 다름 — 섬 지역은 생수 권장" },
+  HR: { volt: "230V", plug: "C/F형 (한국과 같음)", emg: "통합 112",
+        tip: "10% 정도", water: "수돗물 음용 가능" },
+  FI: { volt: "230V", plug: "C/F형 (한국과 같음)", emg: "통합 112",
+        tip: "팁 문화 거의 없음", water: "수돗물 음용 가능" },
+  SE: { volt: "230V", plug: "C/F형 (한국과 같음)", emg: "통합 112",
+        tip: "팁 문화 거의 없음", water: "수돗물 음용 가능" },
+  NO: { volt: "230V", plug: "C/F형 (한국과 같음)", emg: "경찰 112 · 구급 113 · 화재 110",
+        tip: "팁 문화 거의 없음", water: "수돗물 음용 가능" },
+  DK: { volt: "230V", plug: "C/E/F/K형", emg: "통합 112",
+        tip: "봉사료 포함 — 팁 불필요", water: "수돗물 음용 가능" },
+  IS: { volt: "230V", plug: "C/F형 (한국과 같음)", emg: "통합 112",
+        tip: "팁 문화 없음", water: "수돗물 음용 가능" },
+  RU: { volt: "220V", plug: "C/F형 (한국과 같음)", emg: "통합 112",
+        tip: "10% 정도", water: "수돗물 음용 권장하지 않음" },
+  TR: { volt: "230V", plug: "C/F형 (한국과 같음)", emg: "통합 112",
+        tip: "5~10% 정도", water: "수돗물 음용 권장하지 않음" },
+
+  AE: { volt: "230V", plug: "G형 (영국식 — 어댑터 필요)", emg: "경찰 999 · 구급 998 · 화재 997",
+        tip: "봉사료 10% 포함이 흔함", water: "수돗물 음용 가능(생수가 일반적)" },
+  QA: { volt: "240V", plug: "G형 (영국식 — 어댑터 필요)", emg: "통합 999",
+        tip: "봉사료 10% 포함이 흔함", water: "수돗물 음용 가능(생수가 일반적)" },
+  SA: { volt: "230V", plug: "G형 (영국식 — 어댑터 필요)", emg: "경찰 999 · 구급 997 · 화재 998",
+        tip: "봉사료 포함이 흔함", water: "생수 권장" },
+  IL: { volt: "230V", plug: "C/H형 (어댑터 필요할 수 있음)", emg: "경찰 100 · 구급 101 · 화재 102",
+        tip: "식당 10~15%", water: "수돗물 음용 가능" },
+  JO: { volt: "230V", plug: "C/D/F/G/J형", emg: "통합 911",
+        tip: "봉사료 10% 포함이 흔함", water: "생수 권장" },
+  EG: { volt: "220V", plug: "C/F형 (한국과 같음)", emg: "경찰 122 · 구급 123 · 화재 180",
+        tip: "잔돈 팁(박시시)이 일상적", water: "수돗물 음용 권장하지 않음" },
+  MA: { volt: "220V", plug: "C/E형 (한국과 같음)", emg: "경찰 190 · 구급 150",
+        tip: "잔돈 정도의 팁이 흔함", water: "수돗물 음용 권장하지 않음" },
+  ZA: { volt: "230V", plug: "M/N/C형 (어댑터 필요)", emg: "경찰 10111 · 구급 10177",
+        tip: "식당 10~15%", water: "대도시는 음용 가능" },
+  KE: { volt: "240V", plug: "G형 (영국식 — 어댑터 필요)", emg: "통합 999 / 112",
+        tip: "식당 10% 정도", water: "수돗물 음용 권장하지 않음" },
+
+  AU: { volt: "230V", plug: "I형 (어댑터 필요)", emg: "통합 000",
+        tip: "팁 문화 거의 없음", water: "수돗물 음용 가능" },
+  NZ: { volt: "230V", plug: "I형 (어댑터 필요)", emg: "통합 111",
+        tip: "팁 문화 거의 없음", water: "수돗물 음용 가능" },
+  FJ: { volt: "240V", plug: "I형 (어댑터 필요)", emg: "경찰 917 · 구급 911",
+        tip: "팁 문화 거의 없음", water: "수돗물 음용 권장하지 않음" },
+  GU: { volt: "110V", plug: "A/B형 (한국과 다름 — 어댑터 필요)", emg: "통합 911",
+        tip: "팁 문화 강함 — 식당 15~20%", water: "수돗물 음용 가능" }
+};
+
+function countryInfo(cc) {
+  var k = String(cc || "").toUpperCase();
+  var info = (typeof COUNTRY_INFO !== "undefined" && COUNTRY_INFO) ? COUNTRY_INFO[k] : null;
+  return info || null;
+}
+
+</script>
+<script>
 // 통화 계층: 프리셋·표기·원화 환산. 순수 함수만 있다 — DOM에도 저장소에도 손대지 않는다.
 // schema.js 다음, remote.js 앞에 로드된다.
 
@@ -3787,6 +3990,46 @@ function openNoteModal(trip, day, st, note) {
   });
 }
 
+// ---- 나라 정보 ----
+// 도착 첫날 실제로 찾게 되는 것만 낸다(country-info.js 주석 참고). 비자·입국 요건은
+// 자주 바뀌어 구워 두면 낡은 값이 사람을 곤란하게 만드므로, 적지 않고 외교부로 보낸다.
+function countryCardHtml(trip) {
+  var cc = trip && trip.countryCode;
+  var info = countryInfo(cc);
+  if (!info) return '';
+  var c = countryByCode(cc);
+  var name = c ? c.name : String(cc);
+
+  // 시차는 그 여행의 도시 시간대로 잰다. 도시를 안 골랐으면 그 나라 첫 도시로
+  // 갈음한다 — 한 나라 안에서 시간대가 갈리는 경우(미국·러시아)는 도시를 고르면
+  // 정확해진다.
+  var tz = (trip.place && trip.place.tz) || ((citiesOf(cc)[0] || {}).tz) || '';
+  var diff = tzDiffLabel(tz);
+
+  var cur = trip.currency && trip.currency.code
+    ? escHtml(trip.currency.code + (trip.currency.name ? ' · ' + trip.currency.name : ''))
+    : '';
+
+  function row(icon, k, v) {
+    return v ? '<div class="ci-r"><span class="ci-k">' + icon + ' ' + k + '</span>' +
+      '<span class="ci-v">' + escHtml(v) + '</span></div>' : '';
+  }
+
+  return '<div class="panel-card ci">' +
+    '<h2 class="panel-h">' + escHtml(name) + ' 정보</h2>' +
+    row('🔌', '전압', info.volt + ' · ' + info.plug) +
+    (diff ? '<div class="ci-r"><span class="ci-k">🕐 시차</span>' +
+      '<span class="ci-v">' + escHtml(diff) + '</span></div>' : '') +
+    row('🚨', '긴급', info.emg) +
+    (cur ? '<div class="ci-r"><span class="ci-k">💵 통화</span>' +
+      '<span class="ci-v">' + cur + ' · ' + escHtml(info.tip) + '</span></div>' : '') +
+    row('🚰', '물', info.water) +
+    '<p class="ci-note">비자·입국 요건·치안은 자주 바뀝니다. 떠나기 전 ' +
+      '<a href="https://www.0404.go.kr" target="_blank" rel="noopener">외교부 해외안전여행</a>' +
+      '에서 확인하세요.</p>' +
+    '</div>';
+}
+
 // ---- 하단 고정 섹션 ----
 
 function sectionBodyHtml(trip, sec) {
@@ -4044,7 +4287,7 @@ function panelHtml(trip, tab) {
             '<div class="acc">' + sectionBodyHtml(trip, sec) + tools + '</div></details>';
         }).join('')
       : '<p class="empty">시간표·메모처럼 직접 만드는 항목이 여기 표시됩니다.</p>';
-    return body + sectionEditorHtml();
+    return countryCardHtml(trip) + body + sectionEditorHtml();
   }
   return '';
 }

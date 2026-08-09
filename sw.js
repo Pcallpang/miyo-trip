@@ -1,6 +1,6 @@
-const CACHE = "trip-v20";
+const CACHE = "trip-v21";
 const ASSETS = ["./", "./index.html", "./styles.css",
-  "./sample-trip.js", "./store.js", "./schema.js", "./cities.js", "./money.js", "./remote.js", "./views.js", "./editor.js", "./app.js",
+  "./sample-trip.js", "./store.js", "./schema.js", "./cities.js", "./country-info.js", "./money.js", "./remote.js", "./views.js", "./editor.js", "./app.js",
   "./manifest.json", "./icon.svg", "./icon-180.png", "./icon-512.png"];
 self.addEventListener("install", function (e) {
   // {cache:"reload"}: 브라우저 HTTP 캐시를 건너뛰고 서버에서 새로 받는다.

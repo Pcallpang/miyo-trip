@@ -16,6 +16,41 @@ function dowOf(iso) {
 function addDays(iso, n) { return msDate(dateMs(iso) + n * DAY_MS); }
 function daysBetween(a, b) { return Math.round((dateMs(b) - dateMs(a)) / DAY_MS) + 1; }
 
+// 시차. 표에 적어 두지 않고 시간대(cities.js의 tz)로 그때그때 계산한다 —
+// 서머타임이 있는 나라는 계절에 따라 달라지므로 적어 두면 반드시 틀린다.
+// 그 시간대의 벽시계 시각을 읽어 UTC로 되읽으면 오프셋이 나온다.
+function tzOffsetMinutes(tz, at) {
+  if (!tz) return null;
+  try {
+    var d = at || new Date();
+    var parts = {};
+    new Intl.DateTimeFormat('en-US', {
+      timeZone: tz, hour12: false,
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit'
+    }).formatToParts(d).forEach(function (p) { parts[p.type] = p.value; });
+    // hour는 hour12:false에서도 24가 나올 수 있다(자정) — 0으로 되돌린다.
+    var asUTC = Date.UTC(Number(parts.year), Number(parts.month) - 1, Number(parts.day),
+                         Number(parts.hour) % 24, Number(parts.minute), Number(parts.second));
+    return Math.round((asUTC - d.getTime()) / 60000);
+  } catch (e) {
+    return null;
+  }
+}
+
+// 한국 기준 시차를 사람이 읽는 문구로. 알 수 없으면 빈 문자열(그 줄이 사라진다).
+function tzDiffLabel(tz, at) {
+  var there = tzOffsetMinutes(tz, at);
+  var here = tzOffsetMinutes('Asia/Seoul', at);
+  if (there === null || here === null) return "";
+  var m = there - here;
+  if (m === 0) return "한국과 같음";
+  var abs = Math.abs(m), h = Math.floor(abs / 60), mm = abs % 60;
+  var t = h ? h + "시간" : "";
+  if (mm) t += (t ? " " : "") + mm + "분";
+  return "한국보다 " + t + " " + (m > 0 ? "빠름" : "느림");
+}
+
 var _seq = 0;
 function newItemId() { return "i_" + Date.now().toString(36) + (_seq++).toString(36); }
 function newSectionId() { return "s_" + Date.now().toString(36) + (_seq++).toString(36); }

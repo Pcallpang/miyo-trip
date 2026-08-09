@@ -506,6 +506,46 @@ function openNoteModal(trip, day, st, note) {
   });
 }
 
+// ---- 나라 정보 ----
+// 도착 첫날 실제로 찾게 되는 것만 낸다(country-info.js 주석 참고). 비자·입국 요건은
+// 자주 바뀌어 구워 두면 낡은 값이 사람을 곤란하게 만드므로, 적지 않고 외교부로 보낸다.
+function countryCardHtml(trip) {
+  var cc = trip && trip.countryCode;
+  var info = countryInfo(cc);
+  if (!info) return '';
+  var c = countryByCode(cc);
+  var name = c ? c.name : String(cc);
+
+  // 시차는 그 여행의 도시 시간대로 잰다. 도시를 안 골랐으면 그 나라 첫 도시로
+  // 갈음한다 — 한 나라 안에서 시간대가 갈리는 경우(미국·러시아)는 도시를 고르면
+  // 정확해진다.
+  var tz = (trip.place && trip.place.tz) || ((citiesOf(cc)[0] || {}).tz) || '';
+  var diff = tzDiffLabel(tz);
+
+  var cur = trip.currency && trip.currency.code
+    ? escHtml(trip.currency.code + (trip.currency.name ? ' · ' + trip.currency.name : ''))
+    : '';
+
+  function row(icon, k, v) {
+    return v ? '<div class="ci-r"><span class="ci-k">' + icon + ' ' + k + '</span>' +
+      '<span class="ci-v">' + escHtml(v) + '</span></div>' : '';
+  }
+
+  return '<div class="panel-card ci">' +
+    '<h2 class="panel-h">' + escHtml(name) + ' 정보</h2>' +
+    row('🔌', '전압', info.volt + ' · ' + info.plug) +
+    (diff ? '<div class="ci-r"><span class="ci-k">🕐 시차</span>' +
+      '<span class="ci-v">' + escHtml(diff) + '</span></div>' : '') +
+    row('🚨', '긴급', info.emg) +
+    (cur ? '<div class="ci-r"><span class="ci-k">💵 통화</span>' +
+      '<span class="ci-v">' + cur + ' · ' + escHtml(info.tip) + '</span></div>' : '') +
+    row('🚰', '물', info.water) +
+    '<p class="ci-note">비자·입국 요건·치안은 자주 바뀝니다. 떠나기 전 ' +
+      '<a href="https://www.0404.go.kr" target="_blank" rel="noopener">외교부 해외안전여행</a>' +
+      '에서 확인하세요.</p>' +
+    '</div>';
+}
+
 // ---- 하단 고정 섹션 ----
 
 function sectionBodyHtml(trip, sec) {
@@ -763,7 +803,7 @@ function panelHtml(trip, tab) {
             '<div class="acc">' + sectionBodyHtml(trip, sec) + tools + '</div></details>';
         }).join('')
       : '<p class="empty">시간표·메모처럼 직접 만드는 항목이 여기 표시됩니다.</p>';
-    return body + sectionEditorHtml();
+    return countryCardHtml(trip) + body + sectionEditorHtml();
   }
   return '';
 }

@@ -1644,3 +1644,59 @@ eq('기간 라벨: 날짜가 아니면 빈 문자열', nightsLabel('어제', '20
     packingListHtml({ packing: [] }, { get: function (k, fb) { return fb; }, set: function () {} })
       .indexOf('아직 준비물이 없습니다') >= 0, true);
 })();
+
+// ---- 나라 정보 ----
+// 시차는 표에 적지 않고 시간대(tz)로 계산한다 — 서머타임이 있는 나라는 계절에 따라
+// 달라지므로 적어 두면 반드시 틀린다.
+(function () {
+  var 여름 = new Date('2026-07-15T00:00:00Z');
+  var 겨울 = new Date('2026-01-15T00:00:00Z');
+  eq('한국은 같음', tzDiffLabel('Asia/Seoul', 여름), '한국과 같음');
+  eq('일본도 같음', tzDiffLabel('Asia/Tokyo', 여름), '한국과 같음');
+  eq('베트남은 2시간 느림', tzDiffLabel('Asia/Ho_Chi_Minh', 여름), '한국보다 2시간 느림');
+  eq('네팔은 3시간 15분 느림', tzDiffLabel('Asia/Kathmandu', 여름), '한국보다 3시간 15분 느림');
+  eq('시드니는 겨울에 2시간 빠름', tzDiffLabel('Australia/Sydney', 겨울), '한국보다 2시간 빠름');
+  eq('시드니는 여름에 1시간 빠름', tzDiffLabel('Australia/Sydney', 여름), '한국보다 1시간 빠름');
+  // 서머타임: 파리는 겨울 -8, 여름 -7.
+  eq('파리 겨울', tzDiffLabel('Europe/Paris', 겨울), '한국보다 8시간 느림');
+  eq('파리 여름', tzDiffLabel('Europe/Paris', 여름), '한국보다 7시간 느림');
+  eq('모르는 시간대는 빈 문자열', tzDiffLabel('Nowhere/Nothing', 여름), '');
+  eq('빈 값도 빈 문자열', tzDiffLabel('', 여름), '');
+})();
+
+eq('나라 정보 표가 있다', typeof COUNTRY_INFO === 'object' && COUNTRY_INFO !== null, true);
+eq('베트남 정보', countryInfo('VN').emg.indexOf('113') >= 0, true);
+eq('소문자 나라코드도 받는다', countryInfo('jp') !== null, true);
+eq('모르는 나라는 null', countryInfo('ZZ'), null);
+eq('빈 값도 null', countryInfo(''), null);
+// 표에 적은 나라는 모두 같은 모양이어야 한다 — 한 필드라도 비면 그 줄이 사라진다.
+eq('모든 나라에 전압·플러그·긴급전화',
+  Object.keys(COUNTRY_INFO).every(function (cc) {
+    var i = COUNTRY_INFO[cc];
+    return !!i.volt && !!i.plug && !!i.emg && !!i.tip && !!i.water;
+  }), true);
+// cities.js에 있는 나라는 정보도 있어야 한다(도시를 고를 수 있는데 정보가 없으면 빈다).
+eq('도시가 있는 나라는 정보도 있다',
+  Object.keys(CITIES).filter(function (cc) { return !COUNTRY_INFO[cc]; }), []);
+
+// 정보 탭의 나라 카드
+(function () {
+  var trip = { countryCode: 'VN', place: { name: '다낭', tz: 'Asia/Ho_Chi_Minh' },
+               currency: { code: 'VND', symbol: '₫', decimals: 0, unit: 1000 },
+               sections: [], days: [] };
+  var html = panelHtml(trip, 'info');
+  eq('나라 이름이 보인다', html.indexOf('베트남') >= 0, true);
+  eq('전압이 보인다', html.indexOf('220V') >= 0, true);
+  eq('긴급 전화가 보인다', html.indexOf('113') >= 0, true);
+  eq('시차가 보인다', html.indexOf('한국보다 2시간 느림') >= 0, true);
+  eq('통화가 보인다', html.indexOf('VND') >= 0, true);
+  // 비자·입국은 적지 않고 외교부로 보낸다 — 자주 바뀌는 정보를 구워 두면 안 된다.
+  eq('비자는 외교부로 안내', html.indexOf('0404.go.kr') >= 0, true);
+
+  // 나라를 안 고른 여행에는 카드가 없다(빈 카드를 내지 않는다).
+  eq('나라 없으면 카드도 없다',
+    panelHtml({ sections: [], days: [] }, 'info').indexOf('class="ci"') === -1, true);
+  // 표에 없는 나라도 카드를 내지 않는다.
+  eq('모르는 나라도 카드 없음',
+    panelHtml({ countryCode: 'ZZ', sections: [], days: [] }, 'info').indexOf('class="ci"') === -1, true);
+})();
