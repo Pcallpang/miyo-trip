@@ -39,22 +39,54 @@ function go(hash) {
 }
 
 function showScreen(which) {
-  ["list", "trip", "edit"].forEach(function (s) {
-    document.getElementById("screen-" + s).hidden = (s !== which);
+  ["list", "trip", "edit", "share"].forEach(function (s) {
+    var el = document.getElementById("screen-" + s);
+    if (el) el.hidden = (s !== which);
   });
 }
 
-// 가져온 JSON을 검증해 저장한다. 결과 메시지를 돌려준다(성공이면 null).
-// 파일 하나가 잘못돼도 앱은 그대로 동작해야 하므로 던지지 않는다.
-function importTripJson(text) {
-  var o;
-  try { o = JSON.parse(text); }
-  catch (e) { return '파일을 읽을 수 없습니다. 여행 파일이 맞는지 확인해 주세요.'; }
-  var err = validateImport(o);
-  if (err) return err;
-  var trip = normalizeImport(o);
-  if (!saveTrip(trip)) return '저장에 실패했습니다. 기기 저장 공간을 확인해 주세요.';
-  return null;
+// 공유 링크로 들어온 화면. 바로 담지 않고 무엇이 담기는지 먼저 보여준다 —
+// 링크 하나로 남의 여행이 내 목록에 소리 없이 늘어나면 곤란하다.
+function showShare(payload) {
+  showScreen("share");
+  var el = document.getElementById("screen-share");
+  el.innerHTML = '<div class="sh-wrap"><p class="sh-load">여행을 읽는 중…</p></div>';
+
+  unpackShare(payload).then(function (json) {
+    var o = null;
+    if (json !== null) { try { o = JSON.parse(json); } catch (e) { o = null; } }
+    var err = o === null ? '공유 링크를 읽을 수 없습니다.' : validateImport(o);
+    if (err) {
+      el.innerHTML = '<div class="sh-wrap">' +
+        '<h1 class="sh-h">여행을 담을 수 없습니다</h1>' +
+        '<p class="sh-msg">' + escHtml(err) + '</p>' +
+        '<p class="sh-hint">링크가 중간에 잘렸을 수 있습니다. 보낸 사람에게 다시 받아 보세요.</p>' +
+        '<button class="sh-cancel" type="button">내 여행 목록으로</button></div>';
+    } else {
+      var days = Array.isArray(o.days) ? o.days.length : 0;
+      var items = 0;
+      (Array.isArray(o.days) ? o.days : []).forEach(function (d) {
+        if (d && Array.isArray(d.items)) items += d.items.length;
+      });
+      el.innerHTML = '<div class="sh-wrap">' +
+        '<p class="sh-eyebrow">공유받은 여행</p>' +
+        '<h1 class="sh-h">' + escHtml(o.title) + '</h1>' +
+        '<p class="sh-msg">' + escHtml(o.start) + ' ~ ' + escHtml(o.end) +
+          ' · ' + escHtml(nightsLabel(o.start, o.end)) + '</p>' +
+        '<p class="sh-msg">' + days + '일차 · 일정 ' + items + '개</p>' +
+        '<button class="sh-go" type="button">내 여행에 담기</button>' +
+        '<button class="sh-cancel" type="button">담지 않기</button>' +
+        '<p class="sh-hint">담은 뒤에는 내 여행이 됩니다 — 보낸 사람이 나중에 고친 내용은 ' +
+          '따라오지 않습니다.</p></div>';
+      el.querySelector('.sh-go').addEventListener('click', function () {
+        var res = importShareJson(json);
+        if (res.error) { alert(res.error); return; }
+        go('#/t/' + res.trip.id);
+      });
+    }
+    var cancel = el.querySelector('.sh-cancel');
+    if (cancel) cancel.addEventListener('click', function () { go('#/'); });
+  });
 }
 
 function showList() {
@@ -210,6 +242,8 @@ function route() {
   if (t) { showTrip(t.id, t.tab, t.dayN); return; }
   if (/^#\/t\/[^/]+\/edit$/.test(h)) { showEdit(h.split('/')[2]); return; }
   if (h === "#/new") { showEdit(null); return; }
+  var payload = parseShareHash(h);
+  if (payload) { showShare(payload); return; }
   showList();
 }
 
@@ -237,27 +271,6 @@ document.addEventListener("DOMContentLoaded", function () {
   document.getElementById("new-trip")
     .addEventListener("click", function () { go('#/new'); });
 
-  var imp = document.getElementById("import-trip");
-  var impInput = document.getElementById("import-file");
-  if (imp && impInput) {
-    imp.addEventListener("click", function () { impInput.click(); });
-    impInput.addEventListener("change", function () {
-      var file = (impInput.files || [])[0];
-      if (!file) return;
-      var reader = new FileReader();
-      reader.onload = function () {
-        var err = importTripJson(String(reader.result));
-        impInput.value = '';
-        if (err) { alert(err); return; }
-        showList();
-      };
-      reader.onerror = function () {
-        impInput.value = '';
-        alert('파일을 읽을 수 없습니다.');
-      };
-      reader.readAsText(file);
-    });
-  }
   document.getElementById("add-sample")
     .addEventListener("click", function () {
       // installSample은 저장 실패 시 null을 돌려준다 — 그대로 이동하면 showTrip이

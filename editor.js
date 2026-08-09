@@ -136,32 +136,67 @@ function showEdit(id) {
       '<div class="eerr" id="e-err" hidden></div>' +
       '<button type="submit">' + (trip ? '저장' : '만들기') + '</button>' +
     '</form>' +
-    // 내보내기는 기존 여행에서만 — 새 여행은 아직 저장된 게 없다.
+    // 공유는 기존 여행에서만 — 새 여행은 아직 저장된 게 없다.
     (trip ? '<div class="eshare">' +
-      '<div class="geo-lbl">내보내기</div>' +
-      '<button id="e-export" type="button">📤 이 여행을 파일로 저장</button>' +
-      '<p class="geo-msg">사진은 파일에 담기지 않습니다. 일정·경비·준비물만 저장됩니다.</p>' +
+      '<div class="geo-lbl">동행자에게 공유</div>' +
+      '<button id="e-share" type="button">🔗 공유 링크 만들기</button>' +
+      '<p class="geo-msg">링크를 열면 상대 앱에 이 여행이 담깁니다. ' +
+        '만든 뒤에 고친 내용은 상대에게 반영되지 않습니다.</p>' +
+      '<div class="sh-out" id="e-share-out" hidden></div>' +
       '</div>' : '');
 
   document.getElementById("e-back").addEventListener("click", function () {
     go(trip ? '#/t/' + trip.id : '#/');
   });
 
-  var exportBtn = document.getElementById("e-export");
-  if (exportBtn) exportBtn.addEventListener('click', function () {
-    // 사진(IndexedDB의 blob)은 담지 않는다 — base64로 인라인하면 파일이 수십 MB가
-    // 되고, 받는 쪽에서 다시 IndexedDB에 넣어야 해 실패 지점이 늘어난다.
-    // day.images의 id는 남지만 그 blob이 없으므로 렌더가 조용히 건너뛴다.
-    var data = JSON.stringify(trip, null, 2);
-    var blob = new Blob([data], { type: 'application/json' });
-    var url = URL.createObjectURL(blob);
-    var a = document.createElement('a');
-    a.href = url;
-    a.download = exportFilename(trip);
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+  // 공유 링크. 여행 데이터를 URL의 '#' 뒤에 담는다 — 그 부분은 HTTP 요청에 실리지
+  // 않으므로 서버(GitHub Pages)도 내용을 보지 못한다. 대신 링크를 받은 사람은 누구나
+  // 볼 수 있으니 링크 자체가 열쇠다.
+  // 담는 것은 여행 본체(일정·메모·숙소·준비물·섹션·결제내역)뿐이다. 현지 경비 기록과
+  // 준비물 체크는 그 사람 개인의 것이라 넘기지 않는다.
+  var shareBtn = document.getElementById("e-share");
+  if (shareBtn) shareBtn.addEventListener('click', function () {
+    var out = document.getElementById("e-share-out");
+    shareBtn.disabled = true;
+    packShare(JSON.stringify(trip)).then(function (payload) {
+      shareBtn.disabled = false;
+      var url = shareUrl(location.href, payload);
+      out.hidden = false;
+      // 메신저·브라우저마다 감당하는 URL 길이가 다르다. 지나치게 길면 중간에 잘려
+      // 상대가 열지 못하므로, 링크를 주기 전에 먼저 알린다.
+      var tooLong = url.length > SHARE_URL_WARN;
+      out.innerHTML =
+        (tooLong ? '<p class="sh-warn">링크가 깁니다(' + url.length +
+          '자). 메신저에서 잘릴 수 있으니 열리는지 확인해 보세요.</p>' : '') +
+        '<textarea class="sh-url" readonly rows="3">' + escHtml(url) + '</textarea>' +
+        '<div class="sh-btns">' +
+          (navigator.share ? '<button class="sh-send" type="button">공유하기</button>' : '') +
+          '<button class="sh-copy" type="button">링크 복사</button>' +
+        '</div>';
+      var copyBtn = out.querySelector('.sh-copy');
+      copyBtn.addEventListener('click', function () {
+        var ta = out.querySelector('.sh-url');
+        // navigator.clipboard는 https/localhost에서만 쓸 수 있다 — 안 되면 선택 후
+        // execCommand로 물러나고, 그것도 막히면 직접 복사하라고 알린다.
+        var done = function () { copyBtn.textContent = '복사됨'; };
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(ta.value).then(done, function () { fallback(); });
+        } else fallback();
+        function fallback() {
+          ta.select();
+          var ok = false;
+          try { ok = document.execCommand('copy'); } catch (e) {}
+          if (ok) done(); else copyBtn.textContent = '길게 눌러 복사하세요';
+        }
+      });
+      var sendBtn = out.querySelector('.sh-send');
+      if (sendBtn) sendBtn.addEventListener('click', function () {
+        navigator.share({ title: trip.title, url: url }).catch(function () {});
+      });
+    }, function () {
+      shareBtn.disabled = false;
+      alert('공유 링크를 만들지 못했습니다.');
+    });
   });
 
   // 날짜를 고칠 때마다 기간을 다시 셈해 보여준다. 요약 헤더와 같은 문구(nightsLabel)를

@@ -376,3 +376,27 @@ body.modal-open { overflow:hidden; }
 .ci-note { margin:10px 0 0; padding-top:10px; border-top:1px dashed #dde4e8;
   font-size:.78rem; color:var(--muted); line-height:1.6; }
 .ci-note a { color:var(--accent); }
+
+/* 공유 — 설정 안의 링크 만들기 */
+.sh-out { display:flex; flex-direction:column; gap:8px; }
+.sh-url { font:inherit; font-size:.78rem; padding:10px; border:1px solid #d5dde1;
+  border-radius:10px; background:var(--card); color:var(--muted); resize:none;
+  word-break:break-all; }
+.sh-btns { display:flex; gap:8px; }
+.sh-btns button { flex:1; font:inherit; font-weight:700; padding:11px; border:0;
+  border-radius:10px; background:var(--accent); color:#fff; cursor:pointer; }
+.sh-btns .sh-copy { background:var(--card); color:var(--accent);
+  border:1px solid var(--accent); }
+.sh-warn { margin:0; font-size:.8rem; color:#c92a2a; }
+
+/* 공유 링크로 들어왔을 때 보는 화면 */
+.sh-wrap { max-width:420px; margin:0 auto; padding:48px 20px; text-align:center; }
+.sh-eyebrow { margin:0; font-size:.8rem; font-weight:700; color:var(--accent); }
+.sh-h { margin:6px 0 10px; font-size:1.5rem; }
+.sh-msg { margin:2px 0; color:var(--muted); font-size:.92rem; }
+.sh-load { color:var(--muted); }
+.sh-wrap button { display:block; width:100%; font:inherit; font-weight:700;
+  padding:14px; margin-top:10px; border:0; border-radius:12px; cursor:pointer; }
+.sh-go { background:var(--accent); color:#fff; margin-top:22px !important; }
+.sh-cancel { background:var(--card); color:var(--muted); border:1px solid #d5dde1 !important; }
+.sh-hint { margin:16px 0 0; font-size:.78rem; color:var(--muted); line-height:1.6; }

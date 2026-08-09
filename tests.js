@@ -1284,13 +1284,7 @@ eq('본문 없으면 거부', validateSectionForm({ title:'팁', icon:'💡', bo
   eq('없는 id 삭제는 무해', removeSection(trip, 'nope').sections.length, 1);
 })();
 
-// ---- 내보내기·가져오기 (3단계) ----
-eq('내보내기 파일명', exportFilename({ title:'오사카 여행', start:'2026-07-28' }),
-  '오사카 여행-2026-07-28.json');
-eq('파일명에서 경로문자 제거',
-  exportFilename({ title:'a/b' + String.fromCharCode(92) + 'c:d*e?f"g<h>i|j', start:'2026-01-01' }), 'a-b-c-d-e-f-g-h-i-j-2026-01-01.json');
-eq('제목 없으면 기본값', exportFilename({ start:'2026-01-01' }), '여행-2026-01-01.json');
-
+// ---- 가져오기 검증 ----
 // 검증: 정상
 var GOOD = { schema:1, title:'다낭', start:'2026-09-01', end:'2026-09-03', party:2,
   place:null, currency:{code:'VND',symbol:'₫',decimals:0,unit:1000}, hotel:'', budgetKRW:0,
@@ -1699,4 +1693,57 @@ eq('도시가 있는 나라는 정보도 있다',
   // 표에 없는 나라도 카드를 내지 않는다.
   eq('모르는 나라도 카드 없음',
     panelHtml({ countryCode: 'ZZ', sections: [], days: [] }, 'info').indexOf('class="ci"') === -1, true);
+})();
+
+// ---- 동행자 공유 (링크) ----
+// 서버가 없으므로 여행 데이터를 링크 자체에 담는다. '#' 뒤(fragment)는 서버로
+// 전송되지 않으므로 GitHub Pages도 그 내용을 보지 못한다.
+(function () {
+  // base64url: 링크에 그대로 실을 수 있게 +/= 를 -_ 로 바꾸고 패딩을 뗀다.
+  var bytes = new Uint8Array([0, 1, 250, 251, 252, 253, 254, 255]);
+  var enc = b64urlEncode(bytes);
+  eq('base64url에는 +/= 가 없다', /^[A-Za-z0-9_-]*$/.test(enc), true);
+  eq('바이트 왕복', Array.prototype.slice.call(b64urlDecode(enc)),
+    Array.prototype.slice.call(bytes));
+  eq('빈 바이트열', b64urlDecode(b64urlEncode(new Uint8Array([]))).length, 0);
+  eq('잘못된 문자열은 null', b64urlDecode('!!!not base64!!!'), null);
+
+  // 압축 없이 담는 경로(CompressionStream이 없는 환경). 마커 '0'으로 구분한다.
+  var json = JSON.stringify({ title: '베트남 여행', note: '한글도 담긴다 · ¥€₫' });
+  var packed = packShareSync(json);
+  eq('압축 없는 페이로드는 0으로 시작', packed.charAt(0), '0');
+  eq('한글·기호 왕복', unpackShareSync(packed), json);
+  eq('망가진 페이로드는 null', unpackShareSync('0!!!'), null);
+  eq('모르는 마커는 null', unpackShareSync('9abc'), null);
+  eq('빈 문자열은 null', unpackShareSync(''), null);
+
+  // 링크 모양
+  eq('공유 해시', shareHash('0abc'), '#/s/0abc');
+  eq('해시에서 페이로드 뽑기', parseShareHash('#/s/0abc'), '0abc');
+  eq('다른 해시는 null', parseShareHash('#/t/t_a/money'), null);
+  eq('페이로드가 없으면 null', parseShareHash('#/s/'), null);
+  // 링크 주소는 현재 페이지에서 해시만 갈아 끼운다 — 배포 경로(/osaka-trip/)가 유지된다.
+  eq('공유 주소', shareUrl('https://x.dev/osaka-trip/index.html#/t/t_a/money', '0abc'),
+    'https://x.dev/osaka-trip/#/s/0abc');
+  // index.html이 아닌 파일명은 그대로 둔다 — 떼면 그 주소로는 앱이 열리지 않는다.
+  eq('공유 주소(쿼리 있음)', shareUrl('https://x.dev/a/b.html?q=1#/x', '0z'),
+    'https://x.dev/a/b.html#/s/0z');
+})();
+
+// 공유로 받은 여행은 가져오기와 같은 검증을 거친다 — 남이 보낸 링크도 결국 외부 입력이다.
+(function () {
+  __resetStorage();
+  var trip = { schema: 1, title: '공유받은 여행', start: '2026-09-01', end: '2026-09-02',
+               party: 2, days: [] };
+  var payload = packShareSync(JSON.stringify(trip));
+  var res = importShare(payload);
+  eq('공유 링크로 담기', res.error, null);
+  eq('담긴 여행 제목', res.trip.title, '공유받은 여행');
+  eq('저장소에도 들어간다', listTrips().length, 1);
+  // 링크로 받을 때마다 새 여행이 된다 — 내 것을 덮어쓰지 않는다.
+  eq('두 번 담으면 두 개', (importShare(payload), listTrips().length), 2);
+  eq('id가 새로 생긴다', loadTrip(listTrips()[0].id).id === loadTrip(listTrips()[1].id).id, false);
+
+  eq('망가진 링크', importShare('0!!!').error, '공유 링크를 읽을 수 없습니다.');
+  eq('여행이 아닌 데이터', importShare(packShareSync('{"a":1}')).error, '제목이 없습니다.');
 })();
