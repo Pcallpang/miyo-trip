@@ -13,7 +13,7 @@ var MIYO = {
   packing: "yarr-miyo",     // 준비물 — 브이, 준비 완료
   money: "ppak-miyo",       // 경비 — 돈 나갈 때 그 표정
   info: "tip-miyo",         // 정보 — 안경 쓰고 훈수
-  god: "god-miyo",          // 대표 — 헤더·앱 아이콘
+  // 목록 헤더와 앱 아이콘은 야르미요다(index.html·icon-*).
   share: "parrot-miyo",     // 공유 — 말을 옮기는
   note: "why-miyo",         // 메모
   empty: "clear-eye-miyo",  // 빈 화면

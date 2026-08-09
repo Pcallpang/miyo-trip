@@ -1,9 +1,9 @@
-const CACHE = "trip-v28";
+const CACHE = "trip-v29";
 const ASSETS = ["./", "./index.html", "./styles.css",
   "./sample-trip.js", "./store.js", "./schema.js", "./cities.js", "./country-info.js", "./money.js", "./remote.js", "./views.js", "./editor.js", "./app.js",
   "./manifest.json", "./icon.svg", "./icon-180.png", "./icon-512.png",
-  // 미요 캐릭터 — 오프라인에서도 아이콘이 비지 않아야 한다(전부 합쳐 72KB).
-  "./assets/miyo/god-miyo.webp", "./assets/miyo/nep-miyo.webp",
+  // 미요 캐릭터 — 오프라인에서도 아이콘이 비지 않아야 한다.
+  "./assets/miyo/nep-miyo.webp",
   "./assets/miyo/pingp-miyo.webp", "./assets/miyo/yarr-miyo.webp",
   "./assets/miyo/ppak-miyo.webp", "./assets/miyo/tip-miyo.webp",
   "./assets/miyo/parrot-miyo.webp", "./assets/miyo/why-miyo.webp",
