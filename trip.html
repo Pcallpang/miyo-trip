@@ -69,17 +69,30 @@ body { margin:0; background:var(--bg); color:var(--text);
 .acc td.num,.acc th.num { text-align:right; white-space:nowrap; }
 .acc tfoot td { font-weight:700; }
 .acc ul { margin:8px 0 0; padding-left:18px; }
-.packlist { list-style:none; padding:0; margin:8px 0 0; }
-.packlist li { padding:6px 0; display:flex; align-items:center; gap:6px; }
-.packlist li label { flex:1; display:flex; align-items:center; }
-.packlist li.done label { text-decoration:line-through; color:var(--muted); }
-.packlist input[type=checkbox] { transform:scale(1.2); margin-right:8px; }
-.pack-del { flex:0 0 auto; border:none; background:#f1f3f5; color:var(--muted);
-  width:26px; height:26px; border-radius:50%; font-size:1.1rem; line-height:1; cursor:pointer; }
-.pack-add { display:flex; gap:6px; margin-top:10px; }
-.pack-add input { flex:1; padding:8px 10px; border:1px solid #d5dde1; border-radius:8px; font:inherit; }
-.pack-add button { flex:0 0 auto; padding:8px 14px; border:none; border-radius:8px;
-  background:var(--accent); color:#fff; font:inherit; font-weight:600; cursor:pointer; }
+/* 준비물 — 줄 전체가 체크 버튼이다(가장 잦은 동작). 손가락이 닿을 만큼 키우고,
+   체크 상자도 눈에 보이는 크기로 그린다(브라우저 기본 체크박스는 폰에서 너무 작다). */
+.pk-h { display:flex; align-items:baseline; gap:8px; font-weight:700;
+  color:var(--accent); margin-bottom:4px; }
+.pk-n { margin-left:auto; font-size:.85rem; color:var(--muted); font-weight:700; }
+.packlist { list-style:none; padding:0; margin:0; }
+.packlist .pk-r { display:flex; align-items:center; gap:6px;
+  border-bottom:1px solid #eef2f4; }
+.packlist .pk-r:last-child { border-bottom:0; }
+.pk-t { flex:1; min-width:0; display:flex; align-items:center; gap:10px;
+  padding:12px 0; border:0; background:none; font:inherit; color:inherit;
+  text-align:left; cursor:pointer; }
+.pk-box { flex:0 0 auto; width:22px; height:22px; border:2px solid #c3ced4;
+  border-radius:7px; display:flex; align-items:center; justify-content:center;
+  font-size:.85rem; font-weight:800; color:#fff; }
+.pk-x { flex:1; min-width:0; font-size:.92rem; }
+.pk-r.done .pk-box { background:var(--accent); border-color:var(--accent); }
+.pk-r.done .pk-x { text-decoration:line-through; color:var(--muted); }
+.pack-del { flex:0 0 auto; border:none; background:none; color:#c3ced4;
+  width:40px; height:40px; font-size:1.2rem; line-height:1; cursor:pointer; }
+.pk-empty { margin:0; padding:20px 0; text-align:center; color:var(--muted); font-size:.88rem; }
+.pack-add-btn { margin-top:10px; font:inherit; font-weight:700; font-size:.88rem;
+  padding:11px; width:100%; border:1px solid var(--accent); border-radius:10px;
+  background:var(--card); color:var(--accent); cursor:pointer; }
 .meals { padding:12px 16px; border-top:1px solid #eef2f4; background:#fff9f2; }
 .meals-h { font-weight:700; color:var(--accent2); margin-bottom:8px; }
 .meal { margin-bottom:12px; }
@@ -4371,34 +4384,76 @@ function renderSpend(trip, st) {
   });
 }
 
+// ---- 준비물 ----
+// 기본 목록(trip.packing)과 사용자가 더한 것(packing_add)을 한 목록으로 합친다.
+// 지울 수 있는 건 더한 것뿐이다 — 기본 목록은 여행 설정에서 다룬다.
+function packingItems(trip, st) {
+  var customs = st.get("packing_add", []);
+  var checked = st.get("packing_checked", {}) || {};
+  var base = (Array.isArray(trip.packing) ? trip.packing : []).map(function (t) {
+    return { text: t, custom: false, done: !!checked[t] };
+  });
+  return base.concat((Array.isArray(customs) ? customs : []).map(function (t) {
+    return { text: t, custom: true, done: !!checked[t] };
+  }));
+}
+
+function packingProgress(items) {
+  var done = 0;
+  (items || []).forEach(function (i) { if (i.done) done++; });
+  return { done: done, total: (items || []).length };
+}
+
+// 준비물은 "여권, 유심, 우비…" 하고 몰아서 적는 일이 잦다 — 줄 단위로 나눠 한 번에
+// 넣는다. 빈 줄과 같은 줄은 걸러낸다.
+function packingAddLines(text) {
+  var out = [];
+  String(text == null ? "" : text).split('\n').forEach(function (l) {
+    var t = l.trim();
+    if (t && out.indexOf(t) === -1) out.push(t);
+  });
+  return out;
+}
+
+// 줄 전체가 체크 버튼이다(가장 잦은 동작). 삭제는 오른쪽 버튼으로 따로 둔다 —
+// 다른 탭처럼 "탭하면 편집 모달"로 하면 체크가 두 번 손이 간다.
+function packingListHtml(trip, st) {
+  var items = packingItems(trip, st);
+  var pr = packingProgress(items);
+  var rows = items.map(function (it) {
+    return '<li class="pk-r' + (it.done ? ' done' : '') + '">' +
+      '<button class="pk-t" type="button" data-text="' + escHtml(it.text) + '" ' +
+        'aria-pressed="' + (it.done ? 'true' : 'false') + '">' +
+        '<span class="pk-box">' + (it.done ? '✓' : '') + '</span>' +
+        '<span class="pk-x">' + escHtml(it.text) + '</span></button>' +
+      (it.custom
+        ? '<button class="pack-del" type="button" data-text="' + escHtml(it.text) +
+          '" aria-label="삭제">×</button>'
+        : '') +
+      '</li>';
+  }).join('');
+  return '<div class="pk-h">🎒 준비물' +
+      (pr.total ? '<span class="pk-n">' + pr.done + ' / ' + pr.total + '</span>' : '') +
+    '</div>' +
+    (rows ? '<ul class="packlist">' + rows + '</ul>'
+          : '<p class="pk-empty">아직 준비물이 없습니다.</p>') +
+    '<button class="pack-add-btn" type="button">+ 준비물 추가</button>';
+}
+
 function renderPacking(trip, st) {
   const body = document.getElementById("packing-body");
   if (!body) return;
-  const customs = st.get("packing_add", []);
-  const checked = st.get("packing_checked", {});
-  const items = trip.packing.map(function (t) { return { text: t, custom: false }; })
-    .concat(customs.map(function (t) { return { text: t, custom: true }; }));
-  body.innerHTML =
-    '<ul class="packlist">' + items.map(function (it) {
-      const on = checked[it.text] ? ' checked' : '';
-      const doneCls = checked[it.text] ? ' class="done"' : '';
-      const del = it.custom
-        ? '<button class="pack-del" type="button" data-text="' + escHtml(it.text) + '" aria-label="삭제">×</button>'
-        : '';
-      return '<li' + doneCls + '><label><input type="checkbox" data-text="' + escHtml(it.text) + '"' +
-        on + '> ' + escHtml(it.text) + '</label>' + del + '</li>';
-    }).join('') + '</ul>' +
-    '<form class="pack-add"><input type="text" placeholder="준비물 추가" aria-label="준비물 추가">' +
-    '<button type="submit">추가</button></form>';
+  body.innerHTML = packingListHtml(trip, st);
 
-  body.querySelectorAll('input[type=checkbox]').forEach(function (cb) {
-    cb.addEventListener('change', function () {
-      const c = st.get("packing_checked", {});
-      c[cb.dataset.text] = cb.checked;
+  body.querySelectorAll('.pk-t').forEach(function (b) {
+    b.addEventListener('click', function () {
+      const c = st.get("packing_checked", {}) || {};
+      c[b.dataset.text] = !c[b.dataset.text];
       st.set("packing_checked", c);
-      cb.closest('li').classList.toggle('done', cb.checked);
+      renderPacking(trip, st);
     });
   });
+
   body.querySelectorAll('.pack-del').forEach(function (btn) {
     btn.addEventListener('click', function () {
       const list = st.get("packing_add", []).filter(function (t) { return t !== btn.dataset.text; });
@@ -4406,20 +4461,29 @@ function renderPacking(trip, st) {
       renderPacking(trip, st);
     });
   });
-  const form = body.querySelector('.pack-add');
-  form.addEventListener('submit', function (e) {
-    e.preventDefault();
-    const inp = form.querySelector('input');
-    const v = inp.value.trim();
-    if (!v) return;
-    const list = st.get("packing_add", []);
-    if (list.indexOf(v) === -1 && trip.packing.indexOf(v) === -1) {
-      list.push(v);
-      st.set("packing_add", list);
-    }
-    renderPacking(trip, st);
-    const nextInput = body.querySelector('.pack-add input');
-    if (nextInput) nextInput.focus();
+
+  const addBtn = body.querySelector('.pack-add-btn');
+  if (addBtn) addBtn.addEventListener('click', function () {
+    modalOpen({
+      title: '준비물 추가',
+      submitLabel: '추가',
+      html:
+        '<label>준비물<textarea class="pk-in" rows="5" required ' +
+          'placeholder="여권&#10;유심/eSIM&#10;멀티어댑터"></textarea></label>' +
+        '<p class="modal-hint">한 줄에 하나씩 적으면 한 번에 여러 개가 들어갑니다.</p>',
+      onSubmit: function (form) {
+        var lines = packingAddLines(form.querySelector('.pk-in').value);
+        if (!lines.length) return '준비물을 입력하세요.';
+        var list = st.get("packing_add", []);
+        var base = Array.isArray(trip.packing) ? trip.packing : [];
+        lines.forEach(function (t) {
+          if (list.indexOf(t) === -1 && base.indexOf(t) === -1) list.push(t);
+        });
+        st.set("packing_add", list);
+        renderPacking(trip, st);
+        return null;
+      }
+    });
   });
 }
 

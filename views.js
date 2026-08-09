@@ -1103,34 +1103,76 @@ function renderSpend(trip, st) {
   });
 }
 
+// ---- 준비물 ----
+// 기본 목록(trip.packing)과 사용자가 더한 것(packing_add)을 한 목록으로 합친다.
+// 지울 수 있는 건 더한 것뿐이다 — 기본 목록은 여행 설정에서 다룬다.
+function packingItems(trip, st) {
+  var customs = st.get("packing_add", []);
+  var checked = st.get("packing_checked", {}) || {};
+  var base = (Array.isArray(trip.packing) ? trip.packing : []).map(function (t) {
+    return { text: t, custom: false, done: !!checked[t] };
+  });
+  return base.concat((Array.isArray(customs) ? customs : []).map(function (t) {
+    return { text: t, custom: true, done: !!checked[t] };
+  }));
+}
+
+function packingProgress(items) {
+  var done = 0;
+  (items || []).forEach(function (i) { if (i.done) done++; });
+  return { done: done, total: (items || []).length };
+}
+
+// 준비물은 "여권, 유심, 우비…" 하고 몰아서 적는 일이 잦다 — 줄 단위로 나눠 한 번에
+// 넣는다. 빈 줄과 같은 줄은 걸러낸다.
+function packingAddLines(text) {
+  var out = [];
+  String(text == null ? "" : text).split('\n').forEach(function (l) {
+    var t = l.trim();
+    if (t && out.indexOf(t) === -1) out.push(t);
+  });
+  return out;
+}
+
+// 줄 전체가 체크 버튼이다(가장 잦은 동작). 삭제는 오른쪽 버튼으로 따로 둔다 —
+// 다른 탭처럼 "탭하면 편집 모달"로 하면 체크가 두 번 손이 간다.
+function packingListHtml(trip, st) {
+  var items = packingItems(trip, st);
+  var pr = packingProgress(items);
+  var rows = items.map(function (it) {
+    return '<li class="pk-r' + (it.done ? ' done' : '') + '">' +
+      '<button class="pk-t" type="button" data-text="' + escHtml(it.text) + '" ' +
+        'aria-pressed="' + (it.done ? 'true' : 'false') + '">' +
+        '<span class="pk-box">' + (it.done ? '✓' : '') + '</span>' +
+        '<span class="pk-x">' + escHtml(it.text) + '</span></button>' +
+      (it.custom
+        ? '<button class="pack-del" type="button" data-text="' + escHtml(it.text) +
+          '" aria-label="삭제">×</button>'
+        : '') +
+      '</li>';
+  }).join('');
+  return '<div class="pk-h">🎒 준비물' +
+      (pr.total ? '<span class="pk-n">' + pr.done + ' / ' + pr.total + '</span>' : '') +
+    '</div>' +
+    (rows ? '<ul class="packlist">' + rows + '</ul>'
+          : '<p class="pk-empty">아직 준비물이 없습니다.</p>') +
+    '<button class="pack-add-btn" type="button">+ 준비물 추가</button>';
+}
+
 function renderPacking(trip, st) {
   const body = document.getElementById("packing-body");
   if (!body) return;
-  const customs = st.get("packing_add", []);
-  const checked = st.get("packing_checked", {});
-  const items = trip.packing.map(function (t) { return { text: t, custom: false }; })
-    .concat(customs.map(function (t) { return { text: t, custom: true }; }));
-  body.innerHTML =
-    '<ul class="packlist">' + items.map(function (it) {
-      const on = checked[it.text] ? ' checked' : '';
-      const doneCls = checked[it.text] ? ' class="done"' : '';
-      const del = it.custom
-        ? '<button class="pack-del" type="button" data-text="' + escHtml(it.text) + '" aria-label="삭제">×</button>'
-        : '';
-      return '<li' + doneCls + '><label><input type="checkbox" data-text="' + escHtml(it.text) + '"' +
-        on + '> ' + escHtml(it.text) + '</label>' + del + '</li>';
-    }).join('') + '</ul>' +
-    '<form class="pack-add"><input type="text" placeholder="준비물 추가" aria-label="준비물 추가">' +
-    '<button type="submit">추가</button></form>';
+  body.innerHTML = packingListHtml(trip, st);
 
-  body.querySelectorAll('input[type=checkbox]').forEach(function (cb) {
-    cb.addEventListener('change', function () {
-      const c = st.get("packing_checked", {});
-      c[cb.dataset.text] = cb.checked;
+  body.querySelectorAll('.pk-t').forEach(function (b) {
+    b.addEventListener('click', function () {
+      const c = st.get("packing_checked", {}) || {};
+      c[b.dataset.text] = !c[b.dataset.text];
       st.set("packing_checked", c);
-      cb.closest('li').classList.toggle('done', cb.checked);
+      renderPacking(trip, st);
     });
   });
+
   body.querySelectorAll('.pack-del').forEach(function (btn) {
     btn.addEventListener('click', function () {
       const list = st.get("packing_add", []).filter(function (t) { return t !== btn.dataset.text; });
@@ -1138,19 +1180,28 @@ function renderPacking(trip, st) {
       renderPacking(trip, st);
     });
   });
-  const form = body.querySelector('.pack-add');
-  form.addEventListener('submit', function (e) {
-    e.preventDefault();
-    const inp = form.querySelector('input');
-    const v = inp.value.trim();
-    if (!v) return;
-    const list = st.get("packing_add", []);
-    if (list.indexOf(v) === -1 && trip.packing.indexOf(v) === -1) {
-      list.push(v);
-      st.set("packing_add", list);
-    }
-    renderPacking(trip, st);
-    const nextInput = body.querySelector('.pack-add input');
-    if (nextInput) nextInput.focus();
+
+  const addBtn = body.querySelector('.pack-add-btn');
+  if (addBtn) addBtn.addEventListener('click', function () {
+    modalOpen({
+      title: '준비물 추가',
+      submitLabel: '추가',
+      html:
+        '<label>준비물<textarea class="pk-in" rows="5" required ' +
+          'placeholder="여권&#10;유심/eSIM&#10;멀티어댑터"></textarea></label>' +
+        '<p class="modal-hint">한 줄에 하나씩 적으면 한 번에 여러 개가 들어갑니다.</p>',
+      onSubmit: function (form) {
+        var lines = packingAddLines(form.querySelector('.pk-in').value);
+        if (!lines.length) return '준비물을 입력하세요.';
+        var list = st.get("packing_add", []);
+        var base = Array.isArray(trip.packing) ? trip.packing : [];
+        lines.forEach(function (t) {
+          if (list.indexOf(t) === -1 && base.indexOf(t) === -1) list.push(t);
+        });
+        st.set("packing_add", list);
+        renderPacking(trip, st);
+        return null;
+      }
+    });
   });
 }

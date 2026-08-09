@@ -1598,3 +1598,49 @@ eq('기간 라벨: 날짜가 아니면 빈 문자열', nightsLabel('어제', '20
   eq('통화가 여럿이면 개수 배지', daySpendBadge(st, '2026-08-10'), '2개 통화');
   eq('기록 없는 날은 배지 없음', daySpendBadge(st, '2026-08-12'), '');
 })();
+
+// ---- 준비물 ----
+// 기본 목록(trip.packing)과 사용자가 더한 것(packing_add)을 한 목록으로 합치고,
+// 체크 상태(packing_checked)를 붙인다. 삭제는 사용자가 더한 것만 된다.
+(function () {
+  var mem = { packing_add: ['멀미약', '우산'], packing_checked: { '여권': true, '멀미약': true } };
+  var st = {
+    get: function (k, fb) { return Object.prototype.hasOwnProperty.call(mem, k) ? mem[k] : fb; },
+    set: function (k, v) { mem[k] = v; }
+  };
+  var trip = { packing: ['여권', '유심'] };
+  var items = packingItems(trip, st);
+  eq('기본 + 추가를 한 목록으로', items.map(function (i) { return i.text; }),
+    ['여권', '유심', '멀미약', '우산']);
+  eq('기본 항목은 지울 수 없다', items[0].custom, false);
+  eq('더한 항목은 지울 수 있다', items[2].custom, true);
+  eq('체크 상태가 붙는다', items.map(function (i) { return i.done; }),
+    [true, false, true, false]);
+
+  eq('진행 상황', packingProgress(items), { done: 2, total: 4 });
+  eq('빈 목록의 진행 상황', packingProgress([]), { done: 0, total: 0 });
+
+  // 준비물은 몰아서 적는 일이 잦다 — 줄 단위로 나눠 한 번에 넣는다.
+  eq('여러 줄을 한 번에', packingAddLines(' 우비 \n\n 보조배터리 \n'), ['우비', '보조배터리']);
+  eq('빈 입력은 빈 배열', packingAddLines('   \n \n'), []);
+  eq('같은 줄이 겹치면 하나만', packingAddLines('우비\n우비'), ['우비']);
+})();
+
+// 준비물 목록 HTML: 체크 상태·삭제 버튼·이스케이프.
+(function () {
+  var mem = { packing_add: ['<img src=x onerror=alert(1)>'], packing_checked: { '여권': true } };
+  var st = {
+    get: function (k, fb) { return Object.prototype.hasOwnProperty.call(mem, k) ? mem[k] : fb; },
+    set: function (k, v) { mem[k] = v; }
+  };
+  var html = packingListHtml({ packing: ['여권', '유심'] }, st);
+  eq('줄 수는 항목 수와 같다', (html.match(/class="pk-r/g) || []).length, 3);
+  eq('체크된 항목에 표시가 붙는다', html.indexOf('pk-r done') >= 0, true);
+  eq('기본 항목에는 삭제 버튼이 없다', (html.match(/class="pack-del"/g) || []).length, 1);
+  eq('악의적인 항목명은 이스케이프됨', html.indexOf('<img') === -1, true);
+  eq('진행 표시', html.indexOf('1 / 3') >= 0, true);
+  eq('추가 버튼은 늘 보인다', html.indexOf('class="pack-add-btn"') >= 0, true);
+  eq('아무것도 없으면 안내',
+    packingListHtml({ packing: [] }, { get: function (k, fb) { return fb; }, set: function () {} })
+      .indexOf('아직 준비물이 없습니다') >= 0, true);
+})();
