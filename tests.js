@@ -276,13 +276,9 @@ eq('D-day 이후', dday('2026-08-05', '2026-07-28', '2026-08-03'), '여행 종�
     var trip = { days: [day] };
     var st = makeSt();
 
-    // 메모의 수정·삭제 버튼(data-id)은 편집 모드에서만 나온다.
-    var prevEdit = EDIT_MODE;
-    EDIT_MODE = true;
     var el = global.__setDomTarget("timeline");
     renderTimeline(trip, day, st);
     var html = el.innerHTML;
-    EDIT_MODE = prevEdit;
 
     eq('renderTimeline: raw <img> 태그가 어디에도 없음', html.indexOf('<img') === -1, true);
     eq('renderTimeline: 문자열이 와야 할 data-item 속성은 이스케이프됨',
@@ -661,8 +657,8 @@ eq('normalizeTimeInput: 분이 두 자리가 아니면 null', normalizeTimeInput
 eq('normalizeTimeInput: 시각 형식이 아니면 null', normalizeTimeInput('9시'), null);
 eq('normalizeTimeInput: 빈 문자열은 null', normalizeTimeInput(''), null);
 
-// ---- Minor: renderTimeline(EDIT_MODE=true) — Task 8에서 새로 생긴 두 data-id 싱크
-// (.it-edit, .it-del)는 지금까지 자동화된 이스케이프 커버리지가 없었다.
+// ---- 일정 줄은 그 자체가 편집 버튼이다(.slot). 편집 진입점이 data-item 하나로
+// 줄었으므로 그 속성의 이스케이프를 지킨다.
 (function () {
   var HOSTILE = '"><img src=x onerror=alert(1)>';
   var escHostile = escHtml(HOSTILE);
@@ -673,17 +669,14 @@ eq('normalizeTimeInput: 빈 문자열은 null', normalizeTimeInput(''), null);
   var trip = { days: [day] };
   var st = { get: function (k, fb) { return fb; }, set: function () {} };
   var el = global.__setDomTarget("timeline");
-  var prevEditMode = EDIT_MODE;
-  EDIT_MODE = true;
   renderTimeline(trip, day, st);
-  EDIT_MODE = prevEditMode;
   var html = el.innerHTML;
 
-  eq('EDIT_MODE renderTimeline: raw <img> 태그가 어디에도 없음', html.indexOf('<img') === -1, true);
-  eq('EDIT_MODE renderTimeline: it-edit 버튼의 data-id는 이스케이프됨',
-    html.indexOf('class="it-edit" type="button" data-id="' + escHostile + '"') !== -1, true);
-  eq('EDIT_MODE renderTimeline: it-del 버튼의 data-id는 이스케이프됨',
-    html.indexOf('class="it-del" type="button" data-id="' + escHostile + '"') !== -1, true);
+  eq('탭편집 renderTimeline: raw <img> 태그가 어디에도 없음', html.indexOf('<img') === -1, true);
+  eq('탭편집 renderTimeline: 일정 줄은 button이고 data-item이 이스케이프됨',
+    html.indexOf('<button class="slot" type="button" data-item="' + escHostile + '"') !== -1, true);
+  eq('탭편집 renderTimeline: 일정 추가 버튼은 편집 토글 없이도 항상 나온다',
+    html.indexOf('class="day-add-item"') !== -1, true);
 })();
 
 // ---- Minor: afterItemEdit의 saveTripBody 실패 경로 — 이전 두 차례 리뷰가 계속 돌려보냈던
@@ -867,38 +860,28 @@ eq('두 입력 경로가 같은 시간 오류 메시지를 쓴다', MSG_BAD_TIME
 
 // ---- Important(F4): 일정이 하나도 없는 일차(새 여행의 1일차)에 안내 문구를 보여준다.
 (function () {
-  var EMPTY_MSG = '아직 일정이 없습니다. 편집을 눌러 추가해 보세요.';
+  var EMPTY_MSG = '아직 일정이 없습니다. 위 + 일정을 눌러 추가해 보세요.';
   var trip = { days: [{ n: 1, date: '2026-07-28', theme: '', items: [], meals: [] }] };
   var st = { get: function (k, fb) { return fb; }, set: function () {} };
-  var prev = EDIT_MODE;
 
   var el = global.__setDomTarget('timeline');
-  EDIT_MODE = false;
   renderTimeline(trip, trip.days[0], st);
   eq('빈 일차에는 안내 문구가 보인다', el.innerHTML.indexOf(EMPTY_MSG) !== -1, true);
-
-  // 편집 모드에서는 날짜 바로 밑에 추가 버튼이 있으므로 안내가 필요 없다.
-  // (입력 폼은 카드 아래가 아니라 모달에서 받는다 — 스크롤이 길어지지 않게.)
-  var el2 = global.__setDomTarget('timeline');
-  EDIT_MODE = true;
-  renderTimeline(trip, trip.days[0], st);
-  eq('편집 모드의 빈 일차에는 안내 대신 추가 버튼', el2.innerHTML.indexOf(EMPTY_MSG) === -1, true);
-  eq('편집 모드의 빈 일차에는 일정 추가 버튼이 있다',
-    el2.innerHTML.indexOf('class="day-add-item"') !== -1, true);
-  eq('편집 모드의 빈 일차에는 메모 추가 버튼이 있다',
-    el2.innerHTML.indexOf('class="day-add-note"') !== -1, true);
+  // 추가 버튼은 편집 토글 없이 늘 보인다. 입력은 카드에 붙는 폼이 아니라 모달에서
+  // 받는다 — 스크롤이 길어지지 않게.
+  eq('빈 일차에도 일정 추가 버튼이 있다',
+    el.innerHTML.indexOf('class="day-add-item"') !== -1, true);
+  eq('빈 일차에도 메모 추가 버튼이 있다',
+    el.innerHTML.indexOf('class="day-add-note"') !== -1, true);
   eq('추가 폼은 카드에 붙지 않는다(모달로 이동)',
-    el2.innerHTML.indexOf('class="item-add"') === -1, true);
+    el.innerHTML.indexOf('class="item-add"') === -1, true);
 
   // 일정이 있으면 안내 문구는 나오지 않는다.
   var el3 = global.__setDomTarget('timeline');
-  EDIT_MODE = false;
   var day2 = { n: 1, date: '2026-07-28', theme: '', meals: [],
                items: [{ id: 'a', time: '09:00', text: '출발' }] };
   renderTimeline({ days: [day2] }, day2, st);
   eq('일정이 있으면 안내 문구는 없다', el3.innerHTML.indexOf(EMPTY_MSG) === -1, true);
-
-  EDIT_MODE = prev;
 })();
 
 // ---- Minor(F5): 숙소는 여러 줄 textarea다 — 줄바꿈이 사라지면 안 된다.

@@ -148,11 +148,7 @@ function showTrip(id, tab, dayN) {
   if (!trip) { go('#/'); return; }
 
   CUR.id = id; CUR.trip = trip; CUR.st = tripStore(id);
-  // EDIT_MODE는 세션에 묶인 UI 상태일 뿐 trip 데이터가 아니다(views.js 위 주석 참고) —
-  // 다른 여행으로 전환하면서 편집 모드가 그대로 넘어가면, A에서 편집 모드를 켠 채 목록으로
-  // 돌아가 B를 열었을 때 B가 편집 모드로 열려버린다. 새로고침은 전역 변수 자체가 초기화되며
-  // 자연히 꺼지므로 여기서는 "여행이 바뀌는" 경우만 챙기면 된다.
-  if (switched) { wxResetAll(); EDIT_MODE = false; }
+  if (switched) { wxResetAll(); }
   showScreen("trip");
 
   if (opening) renderSummary(trip, CUR.st);

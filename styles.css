@@ -4,9 +4,8 @@ html { background:var(--bg); }
 body { margin:0; background:var(--bg); color:var(--text);
   font-family:-apple-system,"Segoe UI",Roboto,"Noto Sans KR",sans-serif; line-height:1.5; }
 #summary { background:var(--accent); color:#fff; padding:20px 16px; }
-/* 56px는 ⚙ 버튼(right:14px) 하나만 셈한 값이었다. 편집 버튼(.edit-mode, right:52px)까지
-   더하면 왼쪽 끝이 오른쪽에서 대략 98px 지점에서 시작하므로, 긴 D-day 문자열이 그
-   버튼 밑으로 파고들지 않게 두 버튼을 함께 감안한 여백을 준다.
+/* 오른쪽에는 ⚙ 설정과 여행 종료 두 버튼이 절대 배치로 얹힌다 — 왼쪽 끝이 오른쪽에서
+   대략 98px 지점이라 긴 제목·D-day가 그 밑으로 파고들지 않게 100px을 비운다.
    왼쪽에는 목록으로 돌아가는 버튼(.back-list) 하나뿐이라 40px면 충분하다. */
 #summary h1 { margin:4px 0; font-size:1.5rem; padding-right:100px; padding-left:40px; }
 #summary .dday { font-weight:700; opacity:.9; padding-right:100px; padding-left:40px; }
@@ -23,7 +22,13 @@ body { margin:0; background:var(--bg); color:var(--text);
 .dayhead { padding:14px 16px; border-bottom:1px solid #eef2f4; }
 .dayhead .dnum { font-weight:700; color:var(--accent); }
 .dayhead .dtheme { color:var(--muted); font-size:.85rem; margin-top:3px; }
-.slot { display:flex; gap:10px; padding:12px 16px; border-bottom:1px solid #f0f3f5; }
+/* 줄 자체가 편집 버튼이다 — 버튼 기본 모양(테두리·가운데 정렬·회색 배경)을 지워
+   원래의 목록 줄처럼 보이게 한다. */
+.slot { display:flex; gap:10px; padding:12px 16px; width:100%; text-align:left;
+  border:0; border-bottom:1px solid #f0f3f5; background:none; font:inherit;
+  color:inherit; cursor:pointer; }
+.slot .what { flex:1; min-width:0; }
+.slot:active { background:#f2f6f8; }
 .slot:last-child { border-bottom:0; }
 .slot .time { flex:0 0 46px; font-weight:700; color:var(--accent); font-size:.85rem; }
 .slot .what .line { font-size:.9rem; }
@@ -145,21 +150,6 @@ body { margin:0; background:var(--bg); color:var(--text);
 .eerr { background:#fff0f0; color:#c92a2a; border-left:4px solid #e03131;
   padding:9px 12px; border-radius:8px; font-size:.85rem; }
 
-.edit-mode { position:absolute; z-index:1; top:16px; right:52px; border:0; background:rgba(255,255,255,.18);
-  color:#fff; font-size:.8rem; font-weight:700; line-height:1; padding:8px 10px;
-  border-radius:10px; cursor:pointer; }
-.edit-mode[aria-pressed=true] { background:#fff; color:var(--accent); }
-.slot-btns { display:flex; gap:6px; margin-top:6px; }
-.slot-btns button { font:inherit; font-size:.75rem; padding:4px 10px; border-radius:8px;
-  border:1px solid #d5dde1; background:var(--card); color:var(--muted); cursor:pointer; }
-.slot-btns .it-del { color:#c92a2a; border-color:#ffc9c9; }
-.item-add { display:flex; flex-wrap:wrap; gap:8px; padding:12px 16px; border-top:1px dashed #dde4e8; }
-.item-add .ia-time { flex:0 0 110px; }
-.item-add .ia-text { flex:1 1 100%; }
-.item-add input, .item-add textarea { font:inherit; padding:9px; border:1px solid #d5dde1;
-  border-radius:10px; background:var(--card); color:var(--text); }
-.item-add button { font:inherit; font-weight:700; padding:9px 16px; border:0; border-radius:10px;
-  background:var(--accent); color:#fff; cursor:pointer; }
 #tabbar { position:fixed; left:0; right:0; bottom:0; z-index:10;
   display:flex; background:var(--card); border-top:1px solid #dde4e8;
   padding-bottom:env(safe-area-inset-bottom); }
@@ -225,27 +215,11 @@ body { margin:0; background:var(--bg); color:var(--text);
 .sec-actions { display:flex; gap:8px; margin-top:4px; }
 .sec-actions button { flex:1; font:inherit; font-size:.85rem; padding:10px; border:1px solid #d5dde1;
   border-radius:10px; background:var(--card); color:var(--text); cursor:pointer; }
-.sec-actions .sec-mode[data-on] { background:var(--accent); color:#fff; border-color:var(--accent);
-  font-weight:700; }
 .sec-actions .sec-new { background:var(--accent); color:#fff; border-color:var(--accent); font-weight:700; }
 .sec-tools { display:flex; gap:6px; margin-top:10px; padding-top:10px; border-top:1px dashed #dde4e8; }
 .sec-tools button { font:inherit; font-size:.75rem; padding:4px 10px; border:1px solid #d5dde1;
   border-radius:8px; background:var(--card); color:var(--muted); cursor:pointer; }
-.sec-tools .sec-rm { color:#c92a2a; border-color:#ffc9c9; }
 .sec-tools .sec-ro { font-size:.75rem; color:var(--muted); }
-.sec-form { display:flex; flex-direction:column; gap:8px; margin-top:10px; padding:12px;
-  background:var(--card); border-radius:14px; box-shadow:0 1px 4px rgba(0,0,0,.06); }
-.sec-form input, .sec-form textarea, .sec-form select { font:inherit; color:var(--text);
-  padding:10px; border:1px solid #d5dde1; border-radius:10px; background:var(--card); }
-.sec-row { display:flex; gap:8px; }
-.sec-row .sec-icon { flex:0 0 62px; text-align:center; }
-.sec-row .sec-title { flex:1; min-width:0; }
-.sec-row button { flex:1; font:inherit; font-weight:700; padding:11px; border:0; border-radius:10px;
-  background:var(--accent); color:#fff; cursor:pointer; }
-.sec-row .sec-cancel { background:var(--card); color:var(--muted); border:1px solid #d5dde1;
-  font-weight:400; }
-.sec-err { background:#fff0f0; color:#c92a2a; border-left:4px solid #e03131;
-  padding:9px 12px; border-radius:8px; font-size:.85rem; }
 
 .dayimgs { display:flex; flex-wrap:wrap; gap:8px; padding:12px 16px; border-bottom:1px solid #eef2f4; }
 .dayimg { position:relative; margin:0; flex:0 0 auto; }
@@ -266,41 +240,21 @@ body { margin:0; background:var(--bg); color:var(--text);
 
 .notes { padding:12px 16px; border-top:1px solid #eef2f4; background:#fff9f2; }
 .notes-h { font-weight:700; color:var(--accent2); margin-bottom:8px; }
-.notes-empty { margin:0; color:var(--muted); font-size:.85rem; }
-.note { padding:8px 0; border-bottom:1px solid #ffe9d0; }
+.note { display:block; width:100%; text-align:left; padding:8px 0; border:0;
+  border-bottom:1px solid #ffe9d0; background:none; font:inherit; color:inherit;
+  cursor:pointer; }
 .note:last-of-type { border-bottom:0; }
 .note-text .line { font-size:.9rem; }
-.note-btns { display:flex; gap:6px; margin-top:6px; }
-.note-btns button { font:inherit; font-size:.75rem; padding:4px 10px; border-radius:8px;
-  border:1px solid #ffd8a8; background:#fff; color:var(--muted); cursor:pointer; }
-.note-btns .nt-del { color:#c92a2a; border-color:#ffc9c9; }
-.note-add { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
-.note-add .nt-text { flex:1 1 100%; font:inherit; padding:9px; border:1px solid #ffd8a8;
-  border-radius:10px; background:#fff; color:var(--text); }
-.note-add button { font:inherit; font-weight:700; padding:9px 16px; border:0; border-radius:10px;
-  background:var(--accent2); color:#fff; cursor:pointer; }
 
 .exp-actions { display:flex; gap:8px; margin-top:10px; }
 .exp-actions button { flex:1; font:inherit; font-size:.85rem; padding:10px; border:1px solid #d5dde1;
   border-radius:10px; background:var(--card); color:var(--text); cursor:pointer; }
-.exp-actions .exp-mode[data-on] { background:var(--accent); color:#fff; border-color:var(--accent);
-  font-weight:700; }
 .exp-actions .exp-new { background:var(--accent); color:#fff; border-color:var(--accent); font-weight:700; }
-.exp-tools { white-space:nowrap; }
-.exp-tools button { font:inherit; font-size:.72rem; padding:3px 8px; border:1px solid #d5dde1;
-  border-radius:6px; background:var(--card); color:var(--muted); cursor:pointer; margin-left:4px; }
-.exp-tools .exp-rm { color:#c92a2a; border-color:#ffc9c9; }
-.exp-form { display:flex; flex-direction:column; gap:8px; margin-top:10px; }
-.exp-form input { font:inherit; color:var(--text); padding:10px; border:1px solid #d5dde1;
-  border-radius:10px; background:var(--card); min-width:0; }
-.exp-row { display:flex; gap:8px; }
-.exp-row > * { flex:1; min-width:0; }
-.exp-row button { font:inherit; font-weight:700; padding:11px; border:0; border-radius:10px;
-  background:var(--accent); color:#fff; cursor:pointer; }
-.exp-row .exp-cancel { background:var(--card); color:var(--muted); border:1px solid #d5dde1;
-  font-weight:400; }
-.exp-err { background:#fff0f0; color:#c92a2a; border-left:4px solid #e03131;
-  padding:9px 12px; border-radius:8px; font-size:.85rem; }
+/* 결제 내역은 표라 줄을 <button>으로 만들 수 없다 — <tr>에 role/tabindex를 주고
+   눌리는 곳임을 커서와 눌림 배경으로 알린다(키 입력은 views.js에서 받는다). */
+.exp-r { cursor:pointer; }
+.exp-r:active { background:#f2f6f8; }
+.exp-r:focus-visible { outline:2px solid var(--accent); outline-offset:-2px; }
 
 .cur-line { font-size:.9rem; color:var(--muted); margin-top:-6px; }
 .cur-line b { color:var(--text); }
@@ -335,6 +289,12 @@ body.modal-open { overflow:hidden; }
 .modal-btns { display:flex; gap:8px; margin-top:2px; }
 .modal-btns button { flex:1; font:inherit; font-weight:700; padding:13px; border:0;
   border-radius:12px; background:var(--accent); color:#fff; cursor:pointer; }
+/* 삭제는 저장·취소와 한 줄에 두지 않는다 — 되돌릴 수 없는 동작이라 실수로 누르기
+   쉬운 자리를 피해 아래에 따로 둔다. */
+.modal-del { margin-top:6px; font:inherit; font-size:.85rem; padding:11px; width:100%;
+  border:1px solid #ffc9c9; border-radius:10px; background:var(--card); color:#c92a2a;
+  cursor:pointer; }
+.modal-form .m-narrow { flex:0 0 82px; }
 .modal-btns .modal-cancel { background:var(--card); color:var(--muted);
   border:1px solid #d5dde1; font-weight:400; }
 

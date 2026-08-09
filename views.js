@@ -23,9 +23,9 @@ function itemLinesHtml(text) {
   }).join('');
 }
 
-// 여행 화면의 편집 토글 상태. 여행을 넘나들거나 새로고침하면 꺼진 상태로 돌아간다 —
-// 세션에 묶인 UI 상태일 뿐 trip 데이터가 아니므로 저장소에 넣지 않는다.
-var EDIT_MODE = false;
+// 편집 토글은 두지 않는다. 이 앱은 내 여행을 내가 고치는 것뿐이라 "보는 사람"과
+// "고치는 사람"이 갈리지 않고, 입력이 모달로 옮겨간 뒤로는 폼이 화면을 어지럽히지도
+// 않는다. 항목을 탭하면 편집 모달이 열리고(삭제도 그 안에서), 추가 버튼은 늘 보인다.
 
 // text가 문자열이 아닌 손상된 항목(검증 없이 가져온 JSON 등)에서도 던지지 않는다 —
 // normalizeDay가 렌더 전에 보정하지만, 이 판정 자체도 같은 계약을 지킨다.
@@ -96,13 +96,6 @@ function renderSummary(trip, st) {
   el.innerHTML =
     '<button class="back-list" type="button" aria-label="여행 목록">←</button>' +
     '<button class="edit-trip" type="button" aria-label="여행 설정">⚙</button>' +
-    // 편집 토글은 일정 탭에서만 의미가 있다. CUR은 app.js에 있고 런타임에만
-    // 참조되므로 로드 순서 문제는 없다. 앱 화면이 없는 test.html에서는 CUR이
-    // 없을 수 있으므로 typeof로 막는다.
-    ((typeof CUR !== 'undefined' && CUR.tab !== 'day')
-      ? ''
-      : '<button class="edit-mode" type="button" aria-pressed="' + (EDIT_MODE ? 'true' : 'false') +
-        '">' + (EDIT_MODE ? '완료' : '편집') + '</button>') +
     '<div class="dday">' + dday(today, trip.start, trip.end) + '</div>' +
     '<h1>' + escHtml(trip.title) + '</h1>' +
     '<div class="period">' + escHtml(trip.start) + ' ~ ' + escHtml(trip.end) +
@@ -133,18 +126,6 @@ function renderSummary(trip, st) {
   if (bl) bl.addEventListener('click', function () { go('#/'); });
   var eb = el.querySelector('.edit-trip');
   if (eb) eb.addEventListener('click', function () { go('#/t/' + trip.id + '/edit'); });
-  var mb = el.querySelector('.edit-mode');
-  if (mb) mb.addEventListener('click', function () {
-    // showTrip(trip.id, ...)로는 안 된다 — 같은 여행을 다시 "열게" 되면 opening 경로를
-    // 타서 #fixed 전체가 다시 그려지며 열어 둔 아코디언이 닫힌다(showDay 위 주석 참고).
-    // showDay(trip, CUR.dayN)도 안 된다 — 그건 renderTabs를 다시 불러 탭 목록의
-    // scrollIntoView가 실행되는데, 여기서 바뀐 건 EDIT_MODE뿐이라 탭은 그대로다(wxRepaint가
-    // 같은 이유로 renderTimeline을 직접 부르는 것과 동일한 사정 — app.js의 repaintDay 참고).
-    // 여기서는 요약(토글 버튼 자체)과 타임라인(수정/삭제 버튼)만 다시 그리면 된다.
-    EDIT_MODE = !EDIT_MODE;
-    renderSummary(trip, CUR.st);
-    repaintDay(trip, CUR.dayN, CUR.st);
-  });
 }
 
 // ---- 일차 탭 / 타임라인 ----
@@ -180,7 +161,7 @@ function reconcileAfterSaveFail(trip, ok) {
   return { reverted: false, lost: true };
 }
 
-// EDIT_MODE에서 일정 추가·수정·삭제 후 공통으로 거치는 경로.
+// 일정·메모 추가·수정·삭제 후 공통으로 거치는 경로.
 // saveTripBody의 성공 여부를 반드시 확인한다 — 확인 없이 넘기면 저장이 조용히 실패해도
 // 화면은 성공한 것처럼 보인다. 실패하면 사용자에게 알리고, 이미 메모리 위에서 고쳐놓은
 // trip.days를 저장소의 실제 값으로 되돌려 다음 조작이 이번에 실패한 시도 위에 쌓이지
@@ -211,8 +192,6 @@ function bindDayImages(trip, day, st, root) {
       else fig.remove();   // 저장소에서 사라진 사진은 자리만 차지한다
     }).catch(function () { fig.remove(); });
   });
-
-  if (!EDIT_MODE) return;
 
   root.querySelectorAll('.img-del').forEach(function (b) {
     b.addEventListener('click', function () {
@@ -269,56 +248,39 @@ function bindDayImages(trip, day, st, root) {
 // blob URL은 동기적으로 만들 수 없기 때문이다(bindDayImages 참고).
 function imagesHtml(day) {
   var ids = (day && Array.isArray(day.images)) ? day.images : [];
-  if (!ids.length && !EDIT_MODE) return '';
   var thumbs = ids.map(function (id) {
     return '<figure class="dayimg" data-img="' + escHtml(id) + '">' +
       '<img alt="" loading="lazy">' +
-      (EDIT_MODE ? '<button class="img-del" type="button" data-img="' + escHtml(id) +
-        '" aria-label="사진 삭제">×</button>' : '') +
+      '<button class="img-del" type="button" data-img="' + escHtml(id) +
+        '" aria-label="사진 삭제">×</button>' +
       '</figure>';
   }).join('');
-  var adder = EDIT_MODE
-    ? '<label class="img-add">+ 사진 추가' +
-      '<input type="file" accept="image/*" multiple hidden></label>'
-    : '';
-  return '<div class="dayimgs">' + thumbs + adder + '</div>';
+  return '<div class="dayimgs">' + thumbs +
+    '<label class="img-add">+ 사진' +
+    '<input type="file" accept="image/*" multiple hidden></label></div>';
 }
 
 function renderTimeline(trip, day, st) {
   const main = document.getElementById("timeline");
+  // 줄 자체가 편집 버튼이다 — 수정·삭제 버튼을 매 줄에 붙이면 읽을 때 복잡하고,
+  // 폰에서 잘못 누르기도 쉽다. 삭제는 편집 모달 안에 둔다.
   const slots = day.items.map(function (it) {
     const cls = isUndecided(it.text) ? ' undecided' : '';
-    const btns = EDIT_MODE
-      ? '<div class="slot-btns">' +
-        '<button class="it-edit" type="button" data-id="' + escHtml(it.id) + '">수정</button>' +
-        '<button class="it-del" type="button" data-id="' + escHtml(it.id) + '">삭제</button></div>'
-      : '';
-    return '<div class="slot' + cls + '" data-item="' + escHtml(it.id) + '">' +
+    return '<button class="slot' + cls + '" type="button" data-item="' + escHtml(it.id) + '">' +
       '<div class="time">' + escHtml(it.time) + '</div>' +
-      '<div class="what">' + itemLinesHtml(it.text) + btns + '</div></div>';
+      '<div class="what">' + itemLinesHtml(it.text) + '</div></button>';
   }).join('');
-  // 새로 만든 여행의 1일차는 일정이 하나도 없다. 편집 모드가 아니면 추가 폼도 없어서
-  // 예전에는 완전히 빈 카드만 보였다 — 무엇을 해야 하는지 알려 주는 줄을 넣는다.
-  // 편집 모드에서는 바로 아래에 추가 폼이 있으므로 안내가 필요 없다.
-  const rows = slots || (EDIT_MODE
-    ? ''
-    : '<p class="empty">아직 일정이 없습니다. 편집을 눌러 추가해 보세요.</p>');
+  // 새로 만든 여행의 1일차는 일정이 하나도 없다 — 무엇을 하면 되는지 알려 준다.
+  const rows = slots || '<p class="empty">아직 일정이 없습니다. 위 + 일정을 눌러 추가해 보세요.</p>';
   // 자유 메모. 예전의 "뭐먹지"(엑셀에서 온 문구 + 답 입력칸)를 대체한다 —
   // 그 틀에 맞지 않는 메모(예약 번호, 챙길 것)를 적을 곳이 없었다.
   const noteList = Array.isArray(day.notes) ? day.notes : [];
-  const notes = (noteList.length || EDIT_MODE)
+  const notes = noteList.length
     ? '<div class="notes"><div class="notes-h">📝 메모</div>' +
-      (noteList.length
-        ? noteList.map(function (n) {
-            return '<div class="note"><div class="note-text">' + itemLinesHtml(n.text) + '</div>' +
-              (EDIT_MODE
-                ? '<div class="note-btns">' +
-                  '<button class="nt-edit" type="button" data-id="' + escHtml(n.id) + '">수정</button>' +
-                  '<button class="nt-del" type="button" data-id="' + escHtml(n.id) + '">삭제</button>' +
-                  '</div>'
-                : '') + '</div>';
-          }).join('')
-        : '<p class="notes-empty">아직 메모가 없습니다.</p>') +
+      noteList.map(function (n) {
+        return '<button class="note" type="button" data-id="' + escHtml(n.id) + '">' +
+          '<div class="note-text">' + itemLinesHtml(n.text) + '</div></button>';
+      }).join('') +
       '</div>'
     : '';
   main.innerHTML =
@@ -339,60 +301,40 @@ function renderTimeline(trip, day, st) {
       })() +
       // 추가 폼을 카드 아래에 붙이면 스크롤이 길어져 불편하다 — 날짜 바로 밑에
       // 버튼만 두고 입력은 모달에서 받는다.
-      (EDIT_MODE
-        ? '<div class="day-actions">' +
-          '<button class="day-add-item" type="button">+ 일정</button>' +
-          '<button class="day-add-note" type="button">+ 메모</button>' +
-          '</div>'
-        : '') + '</div>' +
+      '<div class="day-actions">' +
+        '<button class="day-add-item" type="button">+ 일정</button>' +
+        '<button class="day-add-note" type="button">+ 메모</button>' +
+      '</div></div>' +
       imagesHtml(day) +
       '<div class="slots">' + rows + '</div>' +
 
       notes + '</div>';
   bindDayImages(trip, day, st, main);
 
-  if (EDIT_MODE) {
-    main.querySelectorAll('.nt-del').forEach(function (b) {
-      b.addEventListener('click', function () {
-        if (!confirm('이 메모를 삭제할까요?')) return;
-        removeNote(day, b.dataset.id);
-        afterItemEdit(trip, day, st, saveTripBody(trip));
-      });
+  main.querySelectorAll('.note').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var n = (day.notes || []).filter(function (x) { return x.id === b.dataset.id; })[0];
+      if (n) openNoteModal(trip, day, st, n);
     });
-    main.querySelectorAll('.nt-edit').forEach(function (b) {
-      b.addEventListener('click', function () {
-        var n = (day.notes || []).filter(function (x) { return x.id === b.dataset.id; })[0];
-        if (n) openNoteModal(trip, day, st, n);
-      });
-    });
-    var addNoteBtn = main.querySelector('.day-add-note');
-    if (addNoteBtn) addNoteBtn.addEventListener('click', function () {
-      openNoteModal(trip, day, st, null);
-    });
-  }
+  });
+  var addNoteBtn = main.querySelector('.day-add-note');
+  if (addNoteBtn) addNoteBtn.addEventListener('click', function () {
+    openNoteModal(trip, day, st, null);
+  });
 
   main.querySelectorAll('.memo').forEach(function (inp) {
     inp.addEventListener('input', function () { st.set(inp.dataset.key, inp.value); });
   });
-  if (EDIT_MODE) {
-    main.querySelectorAll('.it-del').forEach(function (b) {
-      b.addEventListener('click', function () {
-        if (!confirm('이 일정을 삭제할까요?')) return;
-        removeItem(trip, day.n, b.dataset.id);
-        afterItemEdit(trip, day, st, saveTripBody(trip));
-      });
+  main.querySelectorAll('.slot').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var it = day.items.filter(function (x) { return x.id === b.dataset.item; })[0];
+      if (it) openItemModal(trip, day, st, it);
     });
-    main.querySelectorAll('.it-edit').forEach(function (b) {
-      b.addEventListener('click', function () {
-        var it = day.items.filter(function (x) { return x.id === b.dataset.id; })[0];
-        if (it) openItemModal(trip, day, st, it);
-      });
-    });
-    var addItemBtn = main.querySelector('.day-add-item');
-    if (addItemBtn) addItemBtn.addEventListener('click', function () {
-      openItemModal(trip, day, st, null);
-    });
-  }
+  });
+  var addItemBtn = main.querySelector('.day-add-item');
+  if (addItemBtn) addItemBtn.addEventListener('click', function () {
+    openItemModal(trip, day, st, null);
+  });
 }
 
 // 일정 추가·수정. 두 경우가 같은 폼을 쓰므로 검증도 한 곳(parseItemInput)만 거친다.
@@ -400,6 +342,13 @@ function openItemModal(trip, day, st, it) {
   modalOpen({
     title: (it ? '일정 수정' : '일정 추가') + ' · ' + Number(day.n) + '일차',
     submitLabel: it ? '저장' : '추가',
+    // 삭제는 모달 안에 둔다 — 목록에 삭제 버튼을 늘어놓으면 읽을 때 복잡하고
+    // 폰에서 잘못 누르기 쉽다.
+    onDelete: it ? function () {
+      removeItem(trip, day.n, it.id);
+      afterItemEdit(trip, day, st, saveTripBody(trip));
+    } : null,
+    deleteConfirm: '이 일정을 삭제할까요?',
     html:
       '<label>시간<input class="m-time" type="time" step="300" required ' +
         'value="' + escHtml(it ? it.time : '') + '"></label>' +
@@ -421,6 +370,11 @@ function openNoteModal(trip, day, st, note) {
   modalOpen({
     title: (note ? '메모 수정' : '메모 추가') + ' · ' + Number(day.n) + '일차',
     submitLabel: note ? '저장' : '추가',
+    onDelete: note ? function () {
+      removeNote(day, note.id);
+      afterItemEdit(trip, day, st, saveTripBody(trip));
+    } : null,
+    deleteConfirm: '이 메모를 삭제할까요?',
     html:
       '<label>메모<textarea class="m-note" rows="5" required ' +
         'placeholder="예: 스시야 19시 예약 · 010-1234-5678">' +
@@ -464,41 +418,24 @@ function sectionBodyHtml(trip, sec) {
 
 // 합계는 trip.expenses에서 직접 계산한다 — 사용자가 항목을 추가해도 어긋나지 않게.
 function expensesTableHtml(trip) {
+  // 줄을 탭하면 수정 모달이 열린다(일정·메모와 같은 방식). 표 안에 버튼 열을
+  // 따로 두면 폭이 좁은 폰에서 금액이 밀린다.
   const rows = trip.expenses.map(function (e) {
-    return '<tr><td>' + escHtml(e.cat) + '</td><td>' + escHtml(e.detail) + '</td>' +
-      '<td class="num">' + Number(e.krw).toLocaleString('ko-KR') + '</td>' +
-      (EXP_EDIT
-        ? '<td class="num exp-tools">' +
-          '<button class="exp-ed" type="button" data-id="' + escHtml(e.id) + '">수정</button>' +
-          '<button class="exp-rm" type="button" data-id="' + escHtml(e.id) + '">삭제</button></td>'
-        : '') +
-      '</tr>';
+    return '<tr class="exp-r" tabindex="0" role="button" data-id="' + escHtml(e.id) + '">' +
+      '<td>' + escHtml(e.cat) + '</td><td>' + escHtml(e.detail) + '</td>' +
+      '<td class="num">' + Number(e.krw).toLocaleString('ko-KR') + '</td></tr>';
   }).join('');
   const total = trip.expenses.reduce(function (s, e) { return s + Number(e.krw || 0); }, 0);
   return '<div class="tblwrap"><table>' +
-    '<thead><tr><th>항목</th><th>상세</th><th class="num">금액(원)</th>' +
-      (EXP_EDIT ? '<th></th>' : '') + '</tr></thead>' +
+    '<thead><tr><th>항목</th><th>상세</th><th class="num">금액(원)</th></tr></thead>' +
     '<tbody>' + rows + '</tbody>' +
     '<tfoot><tr><td colspan="2">합계</td><td class="num">' +
-      total.toLocaleString('ko-KR') + '</td>' + (EXP_EDIT ? '<td></td>' : '') +
-      '</tr></tfoot></table></div>';
+      total.toLocaleString('ko-KR') + '</td></tr></tfoot></table></div>';
 }
 
-// 경비 탭의 '출발 전 결제 내역' 편집 모드. EDIT_MODE·SECT_EDIT와 같은 성격의
-// 세션 상태다 — trip 데이터가 아니므로 저장소에 넣지 않는다.
-var EXP_EDIT = false;
-var EXP_TARGET = null;
-
 function expenseEditorHtml(trip) {
-  var has = Array.isArray(trip.expenses) && trip.expenses.length;
-  if (!EXP_EDIT) {
-    return '<div class="exp-actions">' +
-      '<button class="exp-mode" type="button">✏️ 내역 편집</button></div>';
-  }
   return '<div class="exp-actions">' +
-      '<button class="exp-mode" type="button" data-on="1">완료</button>' +
-      '<button class="exp-new" type="button">+ 내역 추가</button>' +
-    '</div>';
+    '<button class="exp-new" type="button">+ 내역 추가</button></div>';
 }
 
 // ---- 모달 ----
@@ -546,6 +483,7 @@ function modalOpen(opts) {
           '<button type="submit">' + escHtml(opts.submitLabel || '저장') + '</button>' +
           '<button class="modal-cancel" type="button">취소</button>' +
         '</div>' +
+        (opts.onDelete ? '<button class="modal-del" type="button">삭제</button>' : '') +
       '</form>' +
     '</div>';
   document.body.appendChild(el);
@@ -556,6 +494,13 @@ function modalOpen(opts) {
   el.querySelector('.modal-x').addEventListener('click', modalClose);
   el.querySelector('.modal-cancel').addEventListener('click', modalClose);
   document.addEventListener('keydown', _modalKey);
+
+  var delBtn = el.querySelector('.modal-del');
+  if (delBtn) delBtn.addEventListener('click', function () {
+    if (opts.deleteConfirm && !confirm(opts.deleteConfirm)) return;
+    opts.onDelete();
+    modalClose();
+  });
 
   var form = el.querySelector('.modal-form');
   form.addEventListener('submit', function (e) {
@@ -576,37 +521,9 @@ function modalOpen(opts) {
   return form;
 }
 
-// 정보 탭의 섹션 편집 모드. EDIT_MODE와 같은 성격의 세션 상태다 —
-// trip 데이터가 아니므로 저장소에 넣지 않는다.
-var SECT_EDIT = false;
-// 편집 중인 섹션 id. null이면 "새로 추가" 상태다.
-var SECT_TARGET = null;
-
 function sectionEditorHtml() {
-  if (!SECT_EDIT) {
-    return '<div class="sec-actions">' +
-      '<button class="sec-mode" type="button">✏️ 항목 편집</button></div>';
-  }
   return '<div class="sec-actions">' +
-      '<button class="sec-mode" type="button" data-on="1">완료</button>' +
-      '<button class="sec-new" type="button">+ 새 항목</button>' +
-    '</div>' +
-    '<form class="sec-form" hidden>' +
-      '<div class="sec-row">' +
-        '<input class="sec-icon" type="text" maxlength="2" placeholder="📌" aria-label="아이콘">' +
-        '<input class="sec-title" type="text" placeholder="제목 (예: 맛집 목록)" aria-label="제목">' +
-      '</div>' +
-      '<select class="sec-type" aria-label="형식">' +
-        '<option value="list">목록 — 한 줄에 하나씩</option>' +
-        '<option value="text">글 — 줄바꿈 그대로</option>' +
-      '</select>' +
-      '<textarea class="sec-body" rows="5" placeholder="내용" aria-label="내용"></textarea>' +
-      '<div class="sec-err" hidden></div>' +
-      '<div class="sec-row">' +
-        '<button type="submit">저장</button>' +
-        '<button class="sec-cancel" type="button">취소</button>' +
-      '</div>' +
-    '</form>';
+    '<button class="sec-new" type="button">+ 새 항목</button></div>';
 }
 
 // 탭 본문. 일정 탭은 #daytabs/#timeline을 따로 쓰므로 여기서는 빈 문자열.
@@ -632,17 +549,16 @@ function panelHtml(trip, tab) {
     var secs = trip.sections || [];
     var body = secs.length
       ? secs.map(function (sec, i) {
+          // 섹션은 <details>라 제목 탭이 이미 펼치기다 — 일정처럼 "탭하면 수정"으로
+          // 만들 수 없어 펼친 내용 아래에 도구줄을 둔다. 삭제는 수정 모달 안에 있다.
           // 표는 편집기가 다루지 않는다(읽기 전용) — 버튼 자체를 내지 않는다.
-          var tools = SECT_EDIT && sectionEditable(sec)
+          var tools = sectionEditable(sec)
             ? '<div class="sec-tools">' +
               '<button class="sec-up" type="button" data-id="' + escHtml(sec.id) + '">↑</button>' +
               '<button class="sec-dn" type="button" data-id="' + escHtml(sec.id) + '">↓</button>' +
               '<button class="sec-ed" type="button" data-id="' + escHtml(sec.id) + '">수정</button>' +
-              '<button class="sec-rm" type="button" data-id="' + escHtml(sec.id) + '">삭제</button>' +
               '</div>'
-            : (SECT_EDIT
-                ? '<div class="sec-tools"><span class="sec-ro">표는 여기서 수정할 수 없습니다</span></div>'
-                : '');
+            : '<div class="sec-tools"><span class="sec-ro">표는 여기서 수정할 수 없습니다</span></div>';
           return '<details' + (i === 0 ? ' open' : '') + '>' +
             '<summary>' + escHtml(sec.icon) + ' ' + escHtml(sec.title) + '</summary>' +
             '<div class="acc">' + sectionBodyHtml(trip, sec) + tools + '</div></details>';
@@ -685,17 +601,12 @@ function bindExpenseEditor(trip, st, el) {
     renderPanel(trip, st, "money");
   }
 
-  var modeBtn = el.querySelector('.exp-mode');
-  if (modeBtn) modeBtn.addEventListener('click', function () {
-    EXP_EDIT = !EXP_EDIT;
-    EXP_TARGET = null;
-    renderPanel(trip, st, "money");
-  });
-
   function openForm(e) {
     modalOpen({
       title: e ? '내역 수정' : '내역 추가',
       submitLabel: e ? '저장' : '추가',
+      onDelete: e ? function () { removeExpense(trip, e.id); save(); } : null,
+      deleteConfirm: e ? ('"' + e.cat + '" 내역을 삭제할까요?') : null,
       html:
         '<label>항목<input class="exp-cat" type="text" required ' +
           'placeholder="예: 항공권" value="' + escHtml(e ? e.cat : '') + '"></label>' +
@@ -731,44 +642,58 @@ function bindExpenseEditor(trip, st, el) {
   var newBtn = el.querySelector('.exp-new');
   if (newBtn) newBtn.addEventListener('click', function () { openForm(null); });
 
-  el.querySelectorAll('.exp-ed').forEach(function (b) {
-    b.addEventListener('click', function () {
-      var e = (trip.expenses || []).filter(function (x) { return x.id === b.dataset.id; })[0];
+  el.querySelectorAll('.exp-r').forEach(function (tr) {
+    function open() {
+      var e = (trip.expenses || []).filter(function (x) { return x.id === tr.dataset.id; })[0];
       if (e) openForm(e);
+    }
+    tr.addEventListener('click', open);
+    // <tr>은 버튼이 아니라 키보드로는 열리지 않는다 — Enter/Space를 직접 받는다.
+    tr.addEventListener('keydown', function (ev) {
+      if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); open(); }
     });
   });
-  el.querySelectorAll('.exp-rm').forEach(function (b) {
-    b.addEventListener('click', function () {
-      var e = (trip.expenses || []).filter(function (x) { return x.id === b.dataset.id; })[0];
-      if (!e) return;
-      if (!confirm('"' + e.cat + '" 내역을 삭제할까요?')) return;
-      removeExpense(trip, b.dataset.id);
-      save();
-    });
-  });
-
 }
 
 function bindSectionEditor(trip, st, el) {
-  var form = el.querySelector('.sec-form');
-
-  var modeBtn = el.querySelector('.sec-mode');
-  if (modeBtn) modeBtn.addEventListener('click', function () {
-    SECT_EDIT = !SECT_EDIT;
-    SECT_TARGET = null;
-    renderPanel(trip, st, "info");
-  });
-
   function openForm(sec) {
-    if (!form) return;
-    SECT_TARGET = sec ? sec.id : null;
-    form.querySelector('.sec-icon').value = sec ? sec.icon : '';
-    form.querySelector('.sec-title').value = sec ? sec.title : '';
-    form.querySelector('.sec-type').value = sec ? sec.type : 'list';
-    form.querySelector('.sec-body').value = sec ? sectionBodyToText(sec) : '';
-    form.querySelector('.sec-err').hidden = true;
-    form.hidden = false;
-    form.querySelector('.sec-title').focus();
+    var t = sec ? sec.type : 'list';
+    modalOpen({
+      title: sec ? '항목 수정' : '새 항목',
+      submitLabel: sec ? '저장' : '추가',
+      onDelete: sec ? function () {
+        removeSection(trip, sec.id);
+        saveSections(trip, st, el);
+      } : null,
+      deleteConfirm: sec ? ('"' + sec.title + '" 항목을 삭제할까요?') : null,
+      html:
+        '<div class="modal-row">' +
+          '<label class="m-narrow">아이콘<input class="sec-icon" type="text" maxlength="2" ' +
+            'placeholder="📌" value="' + escHtml(sec ? sec.icon : '') + '"></label>' +
+          '<label>제목<input class="sec-title" type="text" required ' +
+            'placeholder="예: 맛집 목록" value="' + escHtml(sec ? sec.title : '') + '"></label>' +
+        '</div>' +
+        '<label>형식<select class="sec-type">' +
+          '<option value="list"' + (t === 'list' ? ' selected' : '') + '>목록 — 한 줄에 하나씩</option>' +
+          '<option value="text"' + (t === 'text' ? ' selected' : '') + '>글 — 줄바꿈 그대로</option>' +
+        '</select></label>' +
+        '<label>내용<textarea class="sec-body" rows="6">' +
+          escHtml(sec ? sectionBodyToText(sec) : '') + '</textarea></label>',
+      onSubmit: function (form) {
+        var f = {
+          icon: form.querySelector('.sec-icon').value,
+          title: form.querySelector('.sec-title').value,
+          type: form.querySelector('.sec-type').value,
+          body: form.querySelector('.sec-body').value
+        };
+        var err = validateSectionForm(f);
+        if (err) return err;
+        if (sec) updateSection(trip, sec.id, f);
+        else addSection(trip, f);
+        saveSections(trip, st, el);
+        return null;
+      }
+    });
   }
 
   var newBtn = el.querySelector('.sec-new');
@@ -778,15 +703,6 @@ function bindSectionEditor(trip, st, el) {
     b.addEventListener('click', function () {
       var sec = (trip.sections || []).filter(function (s) { return s.id === b.dataset.id; })[0];
       if (sec) openForm(sec);
-    });
-  });
-  el.querySelectorAll('.sec-rm').forEach(function (b) {
-    b.addEventListener('click', function () {
-      var sec = (trip.sections || []).filter(function (s) { return s.id === b.dataset.id; })[0];
-      if (!sec) return;
-      if (!confirm('"' + sec.title + '" 항목을 삭제할까요?')) return;
-      removeSection(trip, b.dataset.id);
-      saveSections(trip, st, el);
     });
   });
   el.querySelectorAll('.sec-up').forEach(function (b) {
@@ -802,28 +718,6 @@ function bindSectionEditor(trip, st, el) {
     });
   });
 
-  if (form) {
-    form.querySelector('.sec-cancel').addEventListener('click', function () {
-      form.hidden = true;
-      SECT_TARGET = null;
-    });
-    form.addEventListener('submit', function (e) {
-      e.preventDefault();
-      var f = {
-        icon: form.querySelector('.sec-icon').value,
-        title: form.querySelector('.sec-title').value,
-        type: form.querySelector('.sec-type').value,
-        body: form.querySelector('.sec-body').value
-      };
-      var err = validateSectionForm(f);
-      var box = form.querySelector('.sec-err');
-      if (err) { box.textContent = err; box.hidden = false; return; }
-      if (SECT_TARGET) updateSection(trip, SECT_TARGET, f);
-      else addSection(trip, f);
-      SECT_TARGET = null;
-      saveSections(trip, st, el);
-    });
-  }
 }
 
 function renderTabbar(trip, tab, onSelect) {
