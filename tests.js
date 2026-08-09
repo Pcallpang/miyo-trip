@@ -862,7 +862,7 @@ eq('두 입력 경로가 같은 시간 오류 메시지를 쓴다', MSG_BAD_TIME
 
 // ---- Important(F4): 일정이 하나도 없는 일차(새 여행의 1일차)에 안내 문구를 보여준다.
 (function () {
-  var EMPTY_MSG = '아직 일정이 없습니다. 위 + 일정을 눌러 추가해 보세요.';
+  var EMPTY_MSG = '아직 일정이 없습니다. 위 + 를 눌러 추가해 보세요.';
   var trip = { days: [{ n: 1, date: '2026-07-28', theme: '', items: [], meals: [] }] };
   var st = { get: function (k, fb) { return fb; }, set: function () {} };
 
@@ -1521,4 +1521,66 @@ eq('기간 라벨: 날짜가 아니면 빈 문자열', nightsLabel('어제', '20
   eq('숙소 탭: 기본 숙소가 없어도 일차별 목록은 나온다',
     panelHtml(emptyTrip({ title: 'x', start: '2026-08-10', end: '2026-08-10',
                           party: 1, hotel: '' }), 'hotel').indexOf('hr-day') >= 0, true);
+})();
+
+// ---- 일차별 경비 ----
+// 여행 중에는 "오늘 얼마 썼나"를 그날 화면에서 바로 보고 바로 적을 수 있어야 한다.
+// 경비 탭의 기록과 같은 저장소(trip:<id>:spend)를 쓰되, 일차 카드에서 넣는 기록은
+// 오늘이 아니라 그 일차의 날짜로 붙는다(지난 날의 지출을 나중에 적을 수 있어야 한다).
+(function () {
+  var mem = {};
+  var st = {
+    get: function (k, fb) { return Object.prototype.hasOwnProperty.call(mem, k) ? mem[k] : fb; },
+    set: function (k, v) { mem[k] = v; }
+  };
+
+  var a = spendAdd(st, { date: '2026-08-10', amount: 50000, cur: 'VND', cat: '식비', note: '퍼' });
+  var b = spendAdd(st, { date: '2026-08-11', amount: 30000, cur: 'VND', cat: '교통', note: '택시' });
+  eq('경비 추가는 id를 붙여 돌려준다', typeof a.id === 'number', true);
+  eq('id는 서로 다르다', a.id === b.id, false);
+  eq('저장소에 쌓인다', spendList(st).length, 2);
+
+  eq('그날 것만 고른다', daySpend(st, '2026-08-10').length, 1);
+  eq('그날 것의 내용', daySpend(st, '2026-08-10')[0].note, '퍼');
+  eq('기록 없는 날은 빈 배열', daySpend(st, '2026-08-12'), []);
+  eq('날짜가 없으면 빈 배열', daySpend(st, ''), []);
+
+  spendUpdate(st, a.id, { amount: 60000, cur: 'VND', cat: '식비', note: '퍼 곱빼기' });
+  eq('수정은 그 기록만 바꾼다', daySpend(st, '2026-08-10')[0].amount, 60000);
+  eq('수정해도 날짜는 그대로', daySpend(st, '2026-08-10')[0].date, '2026-08-10');
+  eq('없는 id 수정은 무해', spendUpdate(st, 999999, { amount: 1 }), false);
+
+  spendRemove(st, a.id);
+  eq('삭제하면 그날에서 사라진다', daySpend(st, '2026-08-10'), []);
+  eq('다른 날은 그대로', daySpend(st, '2026-08-11').length, 1);
+  eq('전체 목록에서도 사라진다', spendList(st).length, 1);
+})();
+
+// 일차 카드의 경비 블록: 그날 합계와 목록, 추가 버튼. 분류·내용은 외부 입력이므로
+// 이스케이프를 지킨다.
+(function () {
+  var mem = {};
+  var st = {
+    get: function (k, fb) { return Object.prototype.hasOwnProperty.call(mem, k) ? mem[k] : fb; },
+    set: function (k, v) { mem[k] = v; }
+  };
+  var day = { n: 1, date: '2026-08-10', theme: '', items: [], meals: [], notes: [] };
+  var trip = { days: [day], hotel: '', currency: { code: 'VND', symbol: '₫', decimals: 0, unit: 1000 } };
+
+  var el = global.__setDomTarget('timeline');
+  renderTimeline(trip, day, st);
+  eq('기록이 없으면 그렇다고 알린다', el.innerHTML.indexOf('아직 기록이 없습니다') >= 0, true);
+  eq('경비 추가 버튼은 늘 보인다', el.innerHTML.indexOf('class="day-add-spend"') >= 0, true);
+
+  spendAdd(st, { date: '2026-08-10', amount: 50000, cur: 'VND', cat: '식비',
+                 note: '<img src=x onerror=alert(1)>' });
+  spendAdd(st, { date: '2026-08-10', amount: 20000, cur: 'VND', cat: '교통', note: '택시' });
+  spendAdd(st, { date: '2026-08-11', amount: 99000, cur: 'VND', cat: '쇼핑', note: '다른 날' });
+  var el2 = global.__setDomTarget('timeline');
+  renderTimeline(trip, day, st);
+  var html = el2.innerHTML;
+  eq('그날 기록만 줄로 나온다', (html.match(/class="dsp-r"/g) || []).length, 2);
+  eq('다른 날 기록은 섞이지 않는다', html.indexOf('다른 날') === -1, true);
+  eq('그날 합계를 보여준다', html.indexOf('₫70,000') >= 0, true);
+  eq('악의적인 내용은 이스케이프됨', html.indexOf('<img') === -1, true);
 })();

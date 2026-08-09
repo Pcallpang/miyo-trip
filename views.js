@@ -51,6 +51,53 @@ function spendList(st) {
   return Array.isArray(v) ? v : [];
 }
 
+// 경비 탭과 일차 카드가 같은 저장소를 쓴다 — 어디서 넣었든 한 곳에 쌓이고 합계도
+// 하나다. id는 시간 기준이라 같은 밀리초에 두 건이 들어오면 겹칠 수 있어 비켜 준다.
+function spendAdd(st, rec) {
+  var list = spendList(st);
+  var id = Date.now();
+  while (list.some(function (x) { return x.id === id; })) id++;
+  var made = {
+    id: id,
+    date: rec.date,
+    amount: rec.amount,
+    cur: rec.cur,
+    cat: rec.cat,
+    note: String(rec.note == null ? '' : rec.note).trim()
+  };
+  list.push(made);
+  st.set("spend", list);
+  return made;
+}
+
+// 날짜는 건드리지 않는다 — 기록을 넣은 날이 곧 그 지출이 일어난 날이고, 금액을
+// 고치다가 다른 일차로 옮겨가면 안 된다.
+function spendUpdate(st, id, f) {
+  var list = spendList(st);
+  var hit = false;
+  list.forEach(function (e) {
+    if (!e || e.id !== id) return;
+    hit = true;
+    e.amount = f.amount;
+    e.cur = f.cur;
+    e.cat = f.cat;
+    e.note = String(f.note == null ? '' : f.note).trim();
+  });
+  if (hit) st.set("spend", list);
+  return hit;
+}
+
+function spendRemove(st, id) {
+  st.set("spend", spendList(st).filter(function (x) { return x && x.id !== id; }));
+}
+
+// 그 일차의 기록만. 최근에 넣은 것이 아래로 가도록 넣은 순서 그대로 둔다 —
+// 하루치는 몇 줄뿐이라 시간순으로 읽는 편이 자연스럽다.
+function daySpend(st, date) {
+  if (!date) return [];
+  return spendList(st).filter(function (e) { return e && e.date === date; });
+}
+
 // 일차 번호(n)가 아니라 날짜로 키를 잡는다 — resyncDays가 날짜를 기준으로 일차를
 // 보존하면서 n을 1부터 다시 매기기 때문에, n으로 키를 잡으면 시작일을 하루만 앞당겨도
 // 메모가 통째로 밀려 엉뚱한 날에 붙거나 화면에서 사라진다(store.js의 migrateMealKeys 참고).
@@ -188,7 +235,7 @@ function renderTimeline(trip, day, st) {
       '<div class="what">' + itemLinesHtml(it.text) + '</div></button>';
   }).join('');
   // 새로 만든 여행의 1일차는 일정이 하나도 없다 — 무엇을 하면 되는지 알려 준다.
-  const rows = slots || '<p class="empty">아직 일정이 없습니다. 위 + 일정을 눌러 추가해 보세요.</p>';
+  const rows = slots || '<p class="empty">아직 일정이 없습니다. 위 + 를 눌러 추가해 보세요.</p>';
   // 자유 메모. 예전의 "뭐먹지"(엑셀에서 온 문구 + 답 입력칸)를 대체한다 —
   // 그 틀에 맞지 않는 메모(예약 번호, 챙길 것)를 적을 곳이 없었다.
   const noteList = Array.isArray(day.notes) ? day.notes : [];
@@ -221,12 +268,14 @@ function renderTimeline(trip, day, st) {
           (noteCount ? ' <span class="nbadge">' + noteCount + '</span>' : '') +
         '</button>' +
       '</div></div>' +
-      '<div class="slots">' + rows + '</div></div>';
+      '<div class="slots">' + rows + '</div>' +
+      daySpendHtml(trip, day, st) + '</div>';
 
   var noteBtn = main.querySelector('.day-note');
   if (noteBtn) noteBtn.addEventListener('click', function () {
     openNotesModal(trip, day, st);
   });
+  bindDaySpend(trip, day, st, main);
 
   main.querySelectorAll('.memo').forEach(function (inp) {
     inp.addEventListener('input', function () { st.set(inp.dataset.key, inp.value); });
@@ -240,6 +289,104 @@ function renderTimeline(trip, day, st) {
   var addItemBtn = main.querySelector('.day-add-item');
   if (addItemBtn) addItemBtn.addEventListener('click', function () {
     openItemModal(trip, day, st, null);
+  });
+}
+
+// ---- 일차 카드의 경비 ----
+// 여행 중에는 "오늘 얼마 썼나"를 그날 화면에서 바로 보고 바로 적을 수 있어야 한다.
+// 경비 탭과 같은 저장소를 쓰므로 어디서 넣든 합계는 하나다. 다만 여기서 넣는 기록은
+// 오늘이 아니라 그 일차의 날짜로 붙는다 — 지난 날의 지출을 나중에 적을 수 있어야 한다.
+function daySpendHtml(trip, day, st) {
+  var list = daySpend(st, day.date);
+  var rows = list.map(function (e) {
+    return '<button class="dsp-r" type="button" data-id="' + Number(e.id) + '">' +
+      '<span class="dsp-cat">' + escHtml(e.cat) + '</span>' +
+      '<span class="dsp-note">' + escHtml(e.note || e.cat) + '</span>' +
+      '<span class="dsp-amt">' +
+        escHtml(fmtAmount(e.amount, currencyByCode(e.cur))) + '</span></button>';
+  }).join('');
+  // 하루 안에서도 통화가 섞일 수 있다(국경을 넘는 날) — 통화별로 한 줄씩 낸다.
+  var totals = spendTotals(list).map(function (t) {
+    return '<span class="dsp-t">' +
+      escHtml(fmtAmount(t.amount, currencyByCode(t.cur))) + '</span>';
+  }).join('');
+  return '<div class="dspend">' +
+    '<div class="dsp-h">💰 경비' + (totals ? '<span class="dsp-ts">' + totals + '</span>' : '') + '</div>' +
+    (rows || '<p class="dsp-empty">아직 기록이 없습니다.</p>') +
+    '<button class="day-add-spend" type="button">+ 경비</button></div>';
+}
+
+function bindDaySpend(trip, day, st, root) {
+  function repaint() {
+    repaintDay(trip, day.n, st);
+    // 요약 헤더의 지출 합계도 같이 움직여야 한다.
+    renderSummary(trip, st);
+  }
+
+  function openSpendModal(e) {
+    // 기본 통화는 그 일차의 통화다(없으면 여행 기본값) — 일차마다 다를 수 있다.
+    var def = currencyByCode((dayCurrency(trip, day) || {}).code || 'KRW');
+    var code = e ? e.cur : def.code;
+    var cur = currencyByCode(code);
+    var codes = CURRENCIES.map(function (c) { return c.code; });
+    if (codes.indexOf(code) === -1) codes.unshift(code);
+    modalOpen({
+      title: (e ? '경비 수정' : '경비 추가') + ' · ' + Number(day.n) + '일차',
+      submitLabel: e ? '저장' : '추가',
+      onDelete: e ? function () { spendRemove(st, e.id); repaint(); } : null,
+      deleteConfirm: '이 기록을 삭제할까요?',
+      html:
+        '<div class="modal-row">' +
+          '<label>금액<input class="sp-amt" type="number" inputmode="decimal" min="0" ' +
+            'step="' + (cur.decimals > 0 ? '0.01' : '1') + '" required ' +
+            'value="' + (e ? Number(e.amount) : '') + '"></label>' +
+          '<label class="m-narrow2">통화<select class="sp-cur">' +
+            codes.map(function (c) {
+              return '<option value="' + escHtml(c) + '"' +
+                (c === code ? ' selected' : '') + '>' + escHtml(c) + '</option>';
+            }).join('') + '</select></label>' +
+        '</div>' +
+        '<label>분류<select class="sp-cat">' +
+          SPEND_CATS.map(function (c) {
+            return '<option' + (e && e.cat === c ? ' selected' : '') + '>' + escHtml(c) + '</option>';
+          }).join('') + '</select></label>' +
+        '<label>내용<input class="sp-note" type="text" placeholder="예: 반미 2개" ' +
+          'value="' + escHtml(e ? (e.note || '') : '') + '"></label>',
+      onSubmit: function (form) {
+        var codeNow = form.querySelector('.sp-cur').value;
+        var c = currencyByCode(codeNow);
+        // 소수점 자릿수에 맞춰 반올림한다 — JPY에 12.5를 넣으면 13이 된다.
+        var p = Math.pow(10, c.decimals);
+        var amount = Math.round(Number(form.querySelector('.sp-amt').value) * p) / p;
+        if (!isFinite(amount) || amount <= 0) return '금액을 올바르게 입력하세요.';
+        var f = { amount: amount, cur: codeNow,
+                  cat: form.querySelector('.sp-cat').value,
+                  note: form.querySelector('.sp-note').value };
+        if (e) spendUpdate(st, e.id, f);
+        else spendAdd(st, { date: day.date, amount: f.amount, cur: f.cur,
+                            cat: f.cat, note: f.note });
+        repaint();
+        return null;
+      }
+    });
+    // 통화를 바꾸면 금액 입력의 step도 따라가야 한다 — 기본값이 VND(step=1)인데
+    // USD를 고르면 12.50을 넣을 수 없다(HTML5 검증에 걸려 제출 자체가 막힌다).
+    var curSel = document.querySelector('.modal-form .sp-cur');
+    if (curSel) curSel.addEventListener('change', function () {
+      var c2 = currencyByCode(curSel.value);
+      document.querySelector('.modal-form .sp-amt').step = c2.decimals > 0 ? '0.01' : '1';
+    });
+  }
+
+  var addBtn = root.querySelector('.day-add-spend');
+  if (addBtn) addBtn.addEventListener('click', function () { openSpendModal(null); });
+  root.querySelectorAll('.dsp-r').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var e = daySpend(st, day.date).filter(function (x) {
+        return String(x.id) === b.dataset.id;
+      })[0];
+      if (e) openSpendModal(e);
+    });
   });
 }
 
@@ -866,18 +1013,14 @@ function renderSpend(trip, st) {
     const p = Math.pow(10, c.decimals);
     const amount = Math.round(Number(ain.value) * p) / p;
     if (!isFinite(amount) || amount <= 0) { ain.focus(); return; }
-    const cur = spendList(st);
-    let id = Date.now();
-    while (cur.some(function (x) { return x.id === id; })) id++;
-    cur.push({
-      id: id,
+    // 경비 탭에서 넣는 기록은 오늘 날짜다 — 지난 날 것은 그 일차 카드에서 넣는다.
+    spendAdd(st, {
       date: todayLocal(),
       amount: amount,
       cur: code,
       cat: form.querySelector('.scat-in').value,
-      note: form.querySelector('.snote-in').value.trim()
+      note: form.querySelector('.snote-in').value
     });
-    st.set("spend", cur);
     // 방금 기록한 값이 폼에 되살아나지 않도록 명시적으로 비운다.
     ain.value = '';
     form.querySelector('.snote-in').value = '';
@@ -889,8 +1032,7 @@ function renderSpend(trip, st) {
 
   body.querySelectorAll('.spend-del').forEach(function (btn) {
     btn.addEventListener('click', function () {
-      const id = Number(btn.dataset.id);
-      st.set("spend", spendList(st).filter(function (x) { return x.id !== id; }));
+      spendRemove(st, Number(btn.dataset.id));
       renderSpend(trip, st);
       renderSummary(trip, st);
     });
