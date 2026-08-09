@@ -100,9 +100,6 @@ function renderSummary(trip, st) {
     '<h1>' + escHtml(trip.title) + '</h1>' +
     '<div class="period">' + escHtml(trip.start) + ' ~ ' + escHtml(trip.end) +
       ' · ' + nights + '박 ' + (nights + 1) + '일</div>' +
-    // 숙소는 여러 줄 textarea다(editor.js) — day.theme과 같은 방식으로 줄바꿈을
-    // 가운뎃점으로 이어 한 줄에 눌러 담는다. 그냥 두면 줄바꿈이 사라져 붙어 보인다.
-    (trip.hotel ? '<div class="hotel">🏨 ' + escHtml(trip.hotel).replace(/\n/g, ' · ') + '</div>' : '') +
     (function () {
       // 여행 기본 도시의 오늘 날씨. 도시를 지정하지 않은 여행이면 캐시가 비어
       // 줄 자체가 사라진다(예보 없는 날짜와 같은 처리 — 오류 문구를 넣지 않는다).
@@ -179,86 +176,6 @@ function afterItemEdit(trip, day, st, ok) {
   repaintDay(trip, day.n, st);
 }
 
-// 썸네일의 src를 채우고(비동기), 편집 모드면 추가·삭제를 잇는다.
-// IndexedDB가 없는 환경(file://, 일부 브라우저)에서는 조용히 넘어간다 —
-// 이미지 첨부만 동작하지 않고 앱의 나머지는 그대로 쓸 수 있어야 한다.
-function bindDayImages(trip, day, st, root) {
-  root.querySelectorAll('.dayimg').forEach(function (fig) {
-    var id = fig.dataset.img;
-    imgUrl(id).then(function (url) {
-      var im = fig.querySelector('img');
-      if (!im) return;
-      if (url) im.src = url;
-      else fig.remove();   // 저장소에서 사라진 사진은 자리만 차지한다
-    }).catch(function () { fig.remove(); });
-  });
-
-  root.querySelectorAll('.img-del').forEach(function (b) {
-    b.addEventListener('click', function () {
-      if (!confirm('이 사진을 삭제할까요?')) return;
-      var id = b.dataset.img;
-      detachImage(day, id);
-      var ok = saveTripBody(trip);
-      if (!ok) {
-        var fresh = loadTrip(trip.id);
-        if (fresh) trip.days = fresh.days;
-        alert('저장에 실패했습니다. 기기 저장 공간을 확인해 주세요.');
-      } else {
-        imgForget(id);
-        imgDel(id).catch(function () {});
-      }
-      repaintDay(trip, day.n, st);
-    });
-  });
-
-  var input = root.querySelector('.img-add input[type=file]');
-  if (!input) return;
-  input.addEventListener('change', function () {
-    var files = Array.prototype.slice.call(input.files || []);
-    if (!files.length) return;
-    if (!imgAvailable()) {
-      alert('이 환경에서는 사진을 저장할 수 없습니다. 주소창으로 앱을 열어 주세요.');
-      input.value = '';
-      return;
-    }
-    var lbl = root.querySelector('.img-add');
-    if (lbl) lbl.classList.add('busy');
-    // 한 장씩 차례로 처리한다 — 큰 사진 여러 장을 동시에 디코딩하면 폰에서 버겁다.
-    files.reduce(function (chain, file) {
-      return chain.then(function () {
-        return imgShrink(file).then(function (blob) {
-          var id = newImageId();
-          return imgPut(id, blob).then(function () { attachImage(day, id); });
-        });
-      }).catch(function () { /* 못 읽는 파일 하나 때문에 나머지를 막지 않는다 */ });
-    }, Promise.resolve()).then(function () {
-      if (lbl) lbl.classList.remove('busy');
-      input.value = '';
-      if (!saveTripBody(trip)) {
-        var fresh = loadTrip(trip.id);
-        if (fresh) trip.days = fresh.days;
-        alert('저장에 실패했습니다. 기기 저장 공간을 확인해 주세요.');
-      }
-      repaintDay(trip, day.n, st);
-    });
-  });
-}
-
-// 일차에 붙은 사진. src는 비워 두고 렌더 후 IndexedDB에서 읽어 채운다 —
-// blob URL은 동기적으로 만들 수 없기 때문이다(bindDayImages 참고).
-function imagesHtml(day) {
-  var ids = (day && Array.isArray(day.images)) ? day.images : [];
-  var thumbs = ids.map(function (id) {
-    return '<figure class="dayimg" data-img="' + escHtml(id) + '">' +
-      '<img alt="" loading="lazy">' +
-      '<button class="img-del" type="button" data-img="' + escHtml(id) +
-        '" aria-label="사진 삭제">×</button>' +
-      '</figure>';
-  }).join('');
-  return '<div class="dayimgs">' + thumbs +
-    '<label class="img-add">+ 사진' +
-    '<input type="file" accept="image/*" multiple hidden></label></div>';
-}
 
 function renderTimeline(trip, day, st) {
   const main = document.getElementById("timeline");
@@ -275,51 +192,40 @@ function renderTimeline(trip, day, st) {
   // 자유 메모. 예전의 "뭐먹지"(엑셀에서 온 문구 + 답 입력칸)를 대체한다 —
   // 그 틀에 맞지 않는 메모(예약 번호, 챙길 것)를 적을 곳이 없었다.
   const noteList = Array.isArray(day.notes) ? day.notes : [];
-  const notes = noteList.length
-    ? '<div class="notes"><div class="notes-h">📝 메모</div>' +
-      noteList.map(function (n) {
-        return '<button class="note" type="button" data-id="' + escHtml(n.id) + '">' +
-          '<div class="note-text">' + itemLinesHtml(n.text) + '</div></button>';
-      }).join('') +
-      '</div>'
-    : '';
+  // 메모는 카드 밑에 늘어놓지 않고 모달 안에서 본다 — 일정 흐름을 읽는 데 방해가
+  // 되지 않으면서, 열면 목록·추가·수정·삭제가 한자리에 있다. 버튼에 개수만 알린다.
+  const noteCount = noteList.length;
   main.innerHTML =
     '<div class="daycard"><div class="dayhead">' +
       '<span class="dnum">' + Number(day.n) + '일차</span> ' +
       '<span class="ddate">' + escHtml(day.date) + '(' + dowOf(day.date) + ')</span>' +
-      '<div class="dtheme">' + escHtml(day.theme).replace(/\n/g, ' · ') + '</div>' +
+      // 그날 어디서 자고 어느 도시에 있는지가 그 일차에서 가장 먼저 알고 싶은 것이다.
+      // 여행 설정에서 정한 도시(일차 오버라이드가 있으면 그것)와 숙소를 여기 붙인다 —
+      // 요약 헤더의 숙소 줄은 이것과 겹쳐 없앴다.
       (function () {
-        // 그 일차에 지정된 도시(없으면 여행 기본값)의 예보를 쓴다.
         var dp = dayPlace(trip, day);
-        // 배지는 여행 기본 도시와 다른 일차에만 붙인다 — 모든 일차에 붙이면
-        // 단일 도시 여행에서 같은 이름이 일곱 번 반복돼 소음이 된다.
-        var moved = dp && trip.place && wxKey(dp) !== wxKey(trip.place);
-        var badge = moved ? '<span class="daycity">📍 ' + escHtml(dp.name) + '</span>' : '';
+        var city = dp && dp.name
+          ? '<div class="dcity">📍 ' + escHtml(dp.name) + '</div>' : '';
+        var h = dayHotel(trip, day);
+        // 숙소는 여러 줄 textarea다 — 줄바꿈을 가운뎃점으로 이어 한 줄에 눌러 담는다.
+        var hotel = h ? '<div class="dhotel">🏨 ' + escHtml(h).replace(/\n/g, ' · ') + '</div>' : '';
         var line = wxLine(wxGet(st, dp).map, day.date);
         var wx = line ? '<div class="dwx">' + line + wxStamp(dp) + '</div>' : '';
-        return badge + wx;
+        return city + hotel + wx;
       })() +
-      // 추가 폼을 카드 아래에 붙이면 스크롤이 길어져 불편하다 — 날짜 바로 밑에
-      // 버튼만 두고 입력은 모달에서 받는다.
+      // 입력은 모달에서 받는다 — 폼을 카드에 붙이면 스크롤이 길어져 불편하다.
+      // 일정 추가는 아이콘 하나로 충분하다(무엇에 대한 +인지는 자리가 말해 준다).
       '<div class="day-actions">' +
-        '<button class="day-add-item" type="button">+ 일정</button>' +
-        '<button class="day-add-note" type="button">+ 메모</button>' +
+        '<button class="day-add-item" type="button" aria-label="일정 추가">+</button>' +
+        '<button class="day-note" type="button">📝 메모' +
+          (noteCount ? ' <span class="nbadge">' + noteCount + '</span>' : '') +
+        '</button>' +
       '</div></div>' +
-      imagesHtml(day) +
-      '<div class="slots">' + rows + '</div>' +
+      '<div class="slots">' + rows + '</div></div>';
 
-      notes + '</div>';
-  bindDayImages(trip, day, st, main);
-
-  main.querySelectorAll('.note').forEach(function (b) {
-    b.addEventListener('click', function () {
-      var n = (day.notes || []).filter(function (x) { return x.id === b.dataset.id; })[0];
-      if (n) openNoteModal(trip, day, st, n);
-    });
-  });
-  var addNoteBtn = main.querySelector('.day-add-note');
-  if (addNoteBtn) addNoteBtn.addEventListener('click', function () {
-    openNoteModal(trip, day, st, null);
+  var noteBtn = main.querySelector('.day-note');
+  if (noteBtn) noteBtn.addEventListener('click', function () {
+    openNotesModal(trip, day, st);
   });
 
   main.querySelectorAll('.memo').forEach(function (inp) {
@@ -366,6 +272,33 @@ function openItemModal(trip, day, st, it) {
   });
 }
 
+// 메모 목록 모달. 여기서 항목을 누르면 편집 모달로 넘어가고, 저장·삭제 뒤에는
+// 다시 이 목록으로 돌아온다 — 메모를 여러 개 손볼 때 매번 카드에서 다시 여는
+// 왕복을 없앤다.
+function openNotesModal(trip, day, st) {
+  var list = Array.isArray(day.notes) ? day.notes : [];
+  var body = list.length
+    ? '<div class="mnotes">' + list.map(function (n) {
+        return '<button class="mnote" type="button" data-id="' + escHtml(n.id) + '">' +
+          itemLinesHtml(n.text) + '</button>';
+      }).join('') + '</div>'
+    : '<p class="mnote-empty">아직 메모가 없습니다.</p>';
+  var form = modalOpen({
+    title: '메모 · ' + Number(day.n) + '일차',
+    closeLabel: '닫기',
+    html: body + '<button class="mnote-add" type="button">+ 메모 추가</button>'
+  });
+  form.querySelector('.mnote-add').addEventListener('click', function () {
+    openNoteModal(trip, day, st, null);
+  });
+  form.querySelectorAll('.mnote').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var n = list.filter(function (x) { return x.id === b.dataset.id; })[0];
+      if (n) openNoteModal(trip, day, st, n);
+    });
+  });
+}
+
 function openNoteModal(trip, day, st, note) {
   modalOpen({
     title: (note ? '메모 수정' : '메모 추가') + ' · ' + Number(day.n) + '일차',
@@ -375,6 +308,8 @@ function openNoteModal(trip, day, st, note) {
       afterItemEdit(trip, day, st, saveTripBody(trip));
     } : null,
     deleteConfirm: '이 메모를 삭제할까요?',
+    // 저장·삭제가 끝나면 목록으로 돌아간다 — 메모를 이어서 손보기 쉽게.
+    onDone: function () { openNotesModal(trip, day, st); },
     html:
       '<label>메모<textarea class="m-note" rows="5" required ' +
         'placeholder="예: 스시야 19시 예약 · 010-1234-5678">' +
@@ -463,6 +398,8 @@ function _modalKey(e) {
 
 // opts: { title, html, submitLabel, onSubmit(form) -> 오류 문자열 또는 null }
 // onSubmit이 문자열을 돌려주면 모달을 닫지 않고 그 오류를 보여준다.
+// closeLabel을 주면 입력 폼이 아니라 목록형 모달이 된다 — 저장 버튼 없이 닫기만
+// 둔다(메모 목록처럼 내용이 그 자리에서 바뀌지 않는 화면).
 function modalOpen(opts) {
   modalClose();
   _modalPrevFocus = document.activeElement;
@@ -480,8 +417,11 @@ function modalOpen(opts) {
         opts.html +
         '<div class="modal-err" hidden></div>' +
         '<div class="modal-btns">' +
-          '<button type="submit">' + escHtml(opts.submitLabel || '저장') + '</button>' +
-          '<button class="modal-cancel" type="button">취소</button>' +
+          (opts.closeLabel
+            ? ''
+            : '<button type="submit">' + escHtml(opts.submitLabel || '저장') + '</button>') +
+          '<button class="modal-cancel" type="button">' +
+            escHtml(opts.closeLabel || '취소') + '</button>' +
         '</div>' +
         (opts.onDelete ? '<button class="modal-del" type="button">삭제</button>' : '') +
       '</form>' +
@@ -495,11 +435,18 @@ function modalOpen(opts) {
   el.querySelector('.modal-cancel').addEventListener('click', modalClose);
   document.addEventListener('keydown', _modalKey);
 
+  // 일을 끝낸 뒤 이어서 열 화면(onDone)은 반드시 modalClose 다음에 부른다 — 콜백
+  // 안에서 다른 모달을 열면 뒤따르는 modalClose가 그 새 모달을 닫아버린다.
+  function finish() {
+    modalClose();
+    if (opts.onDone) opts.onDone();
+  }
+
   var delBtn = el.querySelector('.modal-del');
   if (delBtn) delBtn.addEventListener('click', function () {
     if (opts.deleteConfirm && !confirm(opts.deleteConfirm)) return;
     opts.onDelete();
-    modalClose();
+    finish();
   });
 
   var form = el.querySelector('.modal-form');
@@ -512,7 +459,7 @@ function modalOpen(opts) {
       box.hidden = false;
       return;
     }
-    modalClose();
+    finish();
   });
 
   // 첫 입력칸에 포커스를 준다 — 폰에서 바로 타이핑할 수 있게.
@@ -526,13 +473,84 @@ function sectionEditorHtml() {
     '<button class="sec-new" type="button">+ 새 항목</button></div>';
 }
 
+// 숙소 탭. 여행 기본 숙소 하나에 일차별 목록이 딸린다 — 여행 중에 호텔을 옮기는
+// 일정(오사카 3박 → 교토 2박)이 흔하다. 두 줄 모두 탭하면 편집 모달이 열린다.
+function hotelPanelHtml(trip) {
+  var days = Array.isArray(trip.days) ? trip.days : [];
+  var base = '<button class="hr hr-base" type="button">' +
+    '<div class="hr-k">여행 기본</div>' +
+    '<div class="hr-v">' +
+      (trip.hotel ? itemLinesHtml(trip.hotel)
+                  : '<span class="hr-none">숙소를 입력하려면 누르세요</span>') +
+    '</div></button>';
+  var rows = days.map(function (d) {
+    // 오버라이드가 있는 날만 숙소를 되풀이해 적는다 — 매일 같은 호텔인 여행에서
+    // 같은 이름이 7번 늘어서 있으면 "어느 날이 다른지"가 오히려 안 보인다.
+    var own = d.hotel;
+    return '<button class="hr hr-day" type="button" data-n="' + Number(d.n) + '">' +
+      '<div class="hr-k">' + Number(d.n) + '일차 ' +
+        '<span class="hr-d">' + escHtml(String(d.date).slice(5)) +
+        '(' + dowOf(d.date) + ')</span></div>' +
+      '<div class="hr-v">' +
+        (own ? itemLinesHtml(own)
+             : '<span class="hr-same">기본 숙소와 같음</span>') +
+      '</div></button>';
+  }).join('');
+  return '<div class="panel-card"><h2 class="panel-h">🏨 숙소</h2>' +
+    '<div class="hrs">' + base + rows + '</div>' +
+    '<p class="hr-hint">묵는 곳이 바뀌는 날만 따로 적으면 됩니다.</p></div>';
+}
+
+function bindHotelPanel(trip, st, el) {
+  function save() {
+    if (!saveTripBody(trip)) {
+      var fresh = loadTrip(trip.id);
+      if (fresh) { trip.hotel = fresh.hotel; trip.days = fresh.days; }
+      alert('저장에 실패했습니다. 기기 저장 공간을 확인해 주세요.');
+    }
+    renderPanel(trip, st, "hotel");
+  }
+
+  // dayN이 null이면 여행 기본 숙소를 고친다.
+  function openHotelModal(dayN) {
+    var day = dayN === null ? null : findDay(trip, dayN);
+    if (dayN !== null && !day) return;
+    var cur = dayN === null ? (trip.hotel || '') : (day.hotel || '');
+    modalOpen({
+      title: dayN === null ? '여행 기본 숙소' : (Number(dayN) + '일차 숙소'),
+      submitLabel: '저장',
+      // 일차 숙소는 비우면 기본값으로 되돌아간다 — "삭제"보다 그 뜻을 그대로 쓴다.
+      onDelete: (dayN !== null && day.hotel) ? function () {
+        setDayHotel(trip, dayN, '');
+        save();
+      } : null,
+      html:
+        '<label>숙소<textarea class="m-hotel" rows="4" ' +
+          'placeholder="예: 포포인츠 신사이바시&#10;체크인 15시 · 체크아웃 11시">' +
+          escHtml(cur) + '</textarea></label>' +
+        (dayN === null
+          ? '<p class="modal-hint">일차별로 따로 적지 않은 날은 모두 이 숙소를 씁니다.</p>'
+          : '<p class="modal-hint">비워서 저장하면 여행 기본 숙소를 씁니다.</p>'),
+      onSubmit: function (form) {
+        var text = form.querySelector('.m-hotel').value;
+        if (dayN === null) trip.hotel = String(text).trim();
+        else setDayHotel(trip, dayN, text);
+        save();
+        return null;
+      }
+    });
+  }
+
+  var baseBtn = el.querySelector('.hr-base');
+  if (baseBtn) baseBtn.addEventListener('click', function () { openHotelModal(null); });
+  el.querySelectorAll('.hr-day').forEach(function (b) {
+    b.addEventListener('click', function () { openHotelModal(Number(b.dataset.n)); });
+  });
+}
+
 // 탭 본문. 일정 탭은 #daytabs/#timeline을 따로 쓰므로 여기서는 빈 문자열.
 function panelHtml(trip, tab) {
-  if (tab === "hotel") {
-    return trip.hotel
-      ? '<div class="panel-card">' + itemLinesHtml(trip.hotel) + '</div>'
-      : '<p class="empty">숙소가 아직 없습니다. ⚙ 여행 설정에서 입력할 수 있습니다.</p>';
-  }
+  if (tab === "hotel") return hotelPanelHtml(trip);
   if (tab === "packing") {
     return '<div class="panel-card" id="packing-body"></div>';
   }
@@ -573,6 +591,7 @@ function renderPanel(trip, st, tab) {
   var el = document.getElementById("tab-panel");
   if (!el) return;
   el.innerHTML = panelHtml(trip, tab);
+  if (tab === "hotel") bindHotelPanel(trip, st, el);
   if (tab === "packing") renderPacking(trip, st);
   if (tab === "money") renderSpend(trip, st);
   if (tab === "info") bindSectionEditor(trip, st, el);

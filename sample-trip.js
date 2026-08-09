@@ -59,7 +59,6 @@ window.SAMPLE_TRIP = {
         }
       ],
       "meals": [],
-      "images": [],
       "notes": []
     },
     {
@@ -121,7 +120,6 @@ window.SAMPLE_TRIP = {
         }
       ],
       "meals": [],
-      "images": [],
       "notes": [
         {
           "id": "n_s1",
@@ -163,7 +161,6 @@ window.SAMPLE_TRIP = {
         }
       ],
       "meals": [],
-      "images": [],
       "notes": [
         {
           "id": "n_s2",
@@ -214,7 +211,6 @@ window.SAMPLE_TRIP = {
         }
       ],
       "meals": [],
-      "images": [],
       "notes": [
         {
           "id": "n_s4",
@@ -260,7 +256,6 @@ window.SAMPLE_TRIP = {
         }
       ],
       "meals": [],
-      "images": [],
       "notes": [
         {
           "id": "n_s6",
@@ -301,7 +296,6 @@ window.SAMPLE_TRIP = {
         }
       ],
       "meals": [],
-      "images": [],
       "notes": [
         {
           "id": "n_s8",
@@ -342,7 +336,6 @@ window.SAMPLE_TRIP = {
         }
       ],
       "meals": [],
-      "images": [],
       "notes": [
         {
           "id": "n_s10",

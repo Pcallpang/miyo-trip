@@ -306,7 +306,6 @@ function normalizeImport(o) {
       d.curCode = typeof src.curCode === "string" ? src.curCode : null;
       d.items = Array.isArray(src.items) ? src.items.filter(function (x) { return x && typeof x === "object"; }) : [];
       d.meals = Array.isArray(src.meals) ? src.meals : [];
-      d.images = Array.isArray(src.images) ? src.images : [];
       normalizeDay(d);
     });
   }

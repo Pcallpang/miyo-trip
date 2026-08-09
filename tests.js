@@ -105,8 +105,8 @@ eq('일차 개수', D.length, 3);
 eq('일차 번호와 날짜', D.map(function (d) { return d.n + ':' + d.date; }),
   ['1:2026-07-28', '2:2026-07-29', '3:2026-07-30']);
 eq('빈 일차 형태', D[0],
-  { n: 1, date: '2026-07-28', theme: '', place: null, curCode: null,
-    items: [], meals: [], notes: [], images: [] });
+  { n: 1, date: '2026-07-28', theme: '', place: null, curCode: null, hotel: null,
+    items: [], meals: [], notes: [] });
 
 // 재동기화: 앞을 하루 자르고 뒤를 하루 늘려도 남는 날짜의 일정은 보존된다
 D[1].items.push({ id: 'i_x', time: '09:00', text: '유니버셜' });
@@ -283,12 +283,14 @@ eq('D-day 이후', dday('2026-08-05', '2026-07-28', '2026-08-03'), '여행 종�
     eq('renderTimeline: raw <img> 태그가 어디에도 없음', html.indexOf('<img') === -1, true);
     eq('renderTimeline: 문자열이 와야 할 data-item 속성은 이스케이프됨',
       html.indexOf('data-item="' + escHostile + '"') !== -1, true);
-    // 뭐먹지(meals)는 자유 메모(notes)로 바뀌었다 — 메모 본문과 그 id 모두
-    // 외부에서 올 수 있으므로(가져온 JSON) 같은 계약으로 이스케이프해야 한다.
-    eq('renderTimeline: 악의적인 메모 본문은 이스케이프됨',
-      html.indexOf(escHostile) !== -1, true);
-    eq('renderTimeline: 악의적인 메모 id는 data-id 속성에서 이스케이프됨',
-      html.indexOf('data-id="' + escHostile + '"') !== -1, true);
+    // 메모 본문·id는 이제 카드가 아니라 메모 모달 안에서만 그려진다 — 카드에는
+    // 개수만 나오므로 외부 문자열이 흘러들 자리가 없다(모달 쪽 계약은 아래에서 잰다).
+    // (escHostile 자체는 item.id로도 쓰이는 fixture라 존재한다 — 메모 쪽 진입점인
+    // data-id가 사라졌는지로 잰다.)
+    eq('renderTimeline: 메모 id는 카드에 나오지 않는다',
+      html.indexOf('data-id=') === -1, true);
+    eq('renderTimeline: 메모 개수만 배지로 알린다',
+      html.indexOf('<span class="nbadge">1</span>') !== -1, true);
     // day.n은 숫자 필드 — 문자열이 들어오면 이스케이프 대신 숫자로 강제 변환한다.
     eq('renderTimeline: 숫자 필드 day.n은 표시 라벨에서 NaN으로 강제 변환됨',
       html.indexOf('<span class="dnum">NaN일차</span>') !== -1, true);
@@ -871,8 +873,11 @@ eq('두 입력 경로가 같은 시간 오류 메시지를 쓴다', MSG_BAD_TIME
   // 받는다 — 스크롤이 길어지지 않게.
   eq('빈 일차에도 일정 추가 버튼이 있다',
     el.innerHTML.indexOf('class="day-add-item"') !== -1, true);
-  eq('빈 일차에도 메모 추가 버튼이 있다',
-    el.innerHTML.indexOf('class="day-add-note"') !== -1, true);
+  eq('빈 일차에도 메모 버튼이 있다',
+    el.innerHTML.indexOf('class="day-note"') !== -1, true);
+  // 메모가 없으면 개수 배지도 없다.
+  eq('메모가 없으면 배지도 없다',
+    el.innerHTML.indexOf('nbadge') === -1, true);
   eq('추가 폼은 카드에 붙지 않는다(모달로 이동)',
     el.innerHTML.indexOf('class="item-add"') === -1, true);
 
@@ -890,19 +895,24 @@ eq('두 입력 경로가 같은 시간 오류 메시지를 쓴다', MSG_BAD_TIME
   var trip = { title: '테스트', start: '2026-07-28', end: '2026-08-03',
                hotel: HOTEL, party: 2, budgetKRW: 0 };
   var st = { get: function (k, fb) { return fb; }, set: function () {} };
+  // 숙소는 요약 헤더에서 뺐다 — 일차 카드가 그날 숙소를 보여주므로 겹친다.
   var el = global.__setDomTarget('summary');
   renderSummary(trip, st);
-  eq('요약 헤더의 숙소 줄바꿈은 가운뎃점으로 이어진다(day.theme과 동일)',
-    el.innerHTML.indexOf('🏨 호텔 그란비아 · 체크인 15:00 / 체크아웃 11:00') !== -1, true);
+  eq('요약 헤더에는 숙소 줄이 없다', el.innerHTML.indexOf('🏨') === -1, true);
 
-  // 숙소는 builtin 섹션에서 숙소 탭으로 옮겨갔다 — 줄 단위 렌더 계약은 그대로다.
+  // 대신 일차 카드에 그날 숙소가 한 줄로 붙는다(줄바꿈은 가운뎃점으로).
+  var day = { n: 1, date: '2026-07-28', theme: '', items: [], meals: [], notes: [] };
+  var el2 = global.__setDomTarget('timeline');
+  renderTimeline({ days: [day], hotel: HOTEL }, day, st);
+  eq('일차 카드의 숙소 줄바꿈은 가운뎃점으로 이어진다',
+    el2.innerHTML.indexOf('🏨 호텔 그란비아 · 체크인 15:00 / 체크아웃 11:00') !== -1, true);
+
+  // 숙소 탭은 여행 기본 숙소를 줄 단위로 그린다(계약 그대로).
   var body = panelHtml(trip, 'hotel');
   eq('숙소 탭 본문은 줄 단위로 그린다',
-    body, '<div class="panel-card">' +
-          '<div class="line">호텔 그란비아</div>' +
-          '<div class="line">체크인 15:00 / 체크아웃 11:00</div></div>');
-  eq('숙소가 비면 빈 상태를 보여준다',
-    panelHtml({ hotel: '' }, 'hotel').indexOf('class="empty"') >= 0, true);
+    body.indexOf('<div class="line">체크인 15:00 / 체크아웃 11:00</div>') >= 0, true);
+  eq('숙소가 비면 입력하라고 알린다',
+    panelHtml({ hotel: '', days: [] }, 'hotel').indexOf('hr-none') >= 0, true);
 })();
 
 // ---- Minor(F7): installSample은 저장 성공 여부를 삼키지 않는다.
@@ -992,10 +1002,10 @@ var PT = {
 
 eq('숙소 패널은 줄바꿈을 살린다',
   panelHtml(PT, 'hotel').indexOf('<div class="line">체크인 14시</div>') >= 0, true);
-eq('숙소 없으면 빈 상태',
-  panelHtml({ hotel: '' }, 'hotel').indexOf('class="empty"') >= 0, true);
+eq('숙소 없으면 입력 안내',
+  panelHtml({ hotel: '', days: [] }, 'hotel').indexOf('hr-none') >= 0, true);
 eq('숙소 패널 XSS',
-  panelHtml({ hotel: '<img src=x onerror=alert(1)>' }, 'hotel').indexOf('<img') === -1, true);
+  panelHtml({ hotel: '<img src=x onerror=alert(1)>', days: [] }, 'hotel').indexOf('<img') === -1, true);
 
 eq('준비물 패널은 packing-body 컨테이너',
   panelHtml(PT, 'packing').indexOf('id="packing-body"') >= 0, true);
@@ -1274,40 +1284,6 @@ eq('본문 없으면 거부', validateSectionForm({ title:'팁', icon:'💡', bo
   eq('없는 id 삭제는 무해', removeSection(trip, 'nope').sections.length, 1);
 })();
 
-// ---- 이미지 첨부 ----
-eq('새 이미지 id 접두사', newImageId().slice(0,3), 'im_');
-eq('이미지 id는 유일', newImageId() === newImageId(), false);
-
-// 리사이즈 목표 크기 계산 — 긴 변을 maxPx에 맞추고 비율을 유지한다.
-eq('가로가 긴 사진', fitSize(4000, 3000, 1600), { w: 1600, h: 1200 });
-eq('세로가 긴 사진', fitSize(3000, 4000, 1600), { w: 1200, h: 1600 });
-eq('정사각형', fitSize(2000, 2000, 1600), { w: 1600, h: 1600 });
-eq('이미 작으면 그대로', fitSize(800, 600, 1600), { w: 800, h: 600 });
-eq('반올림', fitSize(1000, 333, 500), { w: 500, h: 167 });
-
-(function () {
-  var day = { n: 1, images: [] };
-  attachImage(day, 'im_a');
-  attachImage(day, 'im_b');
-  eq('첨부', day.images, ['im_a', 'im_b']);
-  eq('중복은 안 붙는다', attachImage(day, 'im_a').images, ['im_a', 'im_b']);
-  detachImage(day, 'im_a');
-  eq('떼어내기', day.images, ['im_b']);
-  eq('없는 id 제거는 무해', detachImage(day, 'nope').images, ['im_b']);
-
-  // images가 없거나 배열이 아닌 손상된 day도 던지지 않는다
-  var bad = { n: 2 };
-  eq('images 없어도 첨부됨', attachImage(bad, 'im_c').images, ['im_c']);
-  eq('배열 아니어도 보정', attachImage({ n: 3, images: 'x' }, 'im_d').images, ['im_d']);
-})();
-
-// 여행 전체에서 쓰이는 이미지 id를 모은다 — 지워진 일차의 이미지를 정리할 때 쓴다.
-eq('사용 중인 이미지 수집', usedImageIds({ days: [
-  { images: ['a','b'] }, { images: [] }, { images: ['c'] }, { n: 9 }
-]}), ['a','b','c']);
-eq('빈 여행', usedImageIds({ days: [] }), []);
-eq('days 없어도 안전', usedImageIds({}), []);
-
 // ---- 내보내기·가져오기 (3단계) ----
 eq('내보내기 파일명', exportFilename({ title:'오사카 여행', start:'2026-07-28' }),
   '오사카 여행-2026-07-28.json');
@@ -1318,7 +1294,7 @@ eq('제목 없으면 기본값', exportFilename({ start:'2026-01-01' }), '여행
 // 검증: 정상
 var GOOD = { schema:1, title:'다낭', start:'2026-09-01', end:'2026-09-03', party:2,
   place:null, currency:{code:'VND',symbol:'₫',decimals:0,unit:1000}, hotel:'', budgetKRW:0,
-  days:[{n:1,date:'2026-09-01',theme:'',place:null,curCode:null,items:[],meals:[],images:[]}],
+  days:[{n:1,date:'2026-09-01',theme:'',place:null,curCode:null,items:[],meals:[]}],
   sections:[], packing:[], expenses:[] };
 eq('정상 데이터는 통과', validateImport(GOOD), null);
 
@@ -1350,11 +1326,10 @@ eq('스키마 버전이 미래면 거부', validateImport(Object.assign({}, GOOD
   // 악의적인 값이 있어도 구조만 받아들인다 — 렌더는 escHtml이 막지만
   // 저장 단계에서도 타입을 맞춰 둔다.
   var bad = normalizeImport({ schema:1, title:'x', start:'2026-09-01', end:'2026-09-01',
-    party:'많이', budgetKRW:'무한', days:[{ n:1, date:'2026-09-01', items:'x', images:'y' }] });
+    party:'많이', budgetKRW:'무한', days:[{ n:1, date:'2026-09-01', items:'x' }] });
   eq('인원은 숫자로', bad.party, 2);
   eq('예산은 숫자로', bad.budgetKRW, 0);
   eq('items는 배열로', bad.days[0].items, []);
-  eq('images는 배열로', bad.days[0].images, []);
 })();
 
 // 같은 파일을 두 번 가져와도 id가 겹치지 않는다
@@ -1486,3 +1461,64 @@ eq('cityToPlace가 나라 코드를 붙인다',
 eq('cityToPlace 좌표 보존', cityToPlace({ name:'a', lat:1, lon:2, tz:'X' }, 'JP').lat, 1);
 eq('cityToPlace 국가명도 붙인다', cityToPlace({ name:'a', lat:1, lon:2, tz:'X' }, 'JP').country, '일본');
 eq('cityToPlace null 안전', cityToPlace(null, 'JP'), null);
+
+// ---- 기간 라벨 ----
+// 여행 설정 폼이 날짜를 고치는 즉시 "몇 박 몇 일"을 보여준다. 요약 헤더와 같은
+// 문구를 써야 폼에서 본 것과 저장 후 본 것이 어긋나지 않는다.
+eq('기간 라벨: 2박 3일', nightsLabel('2026-08-10', '2026-08-12'), '2박 3일');
+eq('기간 라벨: 6박 7일', nightsLabel('2026-07-28', '2026-08-03'), '6박 7일');
+eq('기간 라벨: 같은 날은 당일치기', nightsLabel('2026-08-10', '2026-08-10'), '당일치기');
+eq('기간 라벨: 종료가 시작보다 빠르면 빈 문자열', nightsLabel('2026-08-12', '2026-08-10'), '');
+eq('기간 라벨: 비어 있으면 빈 문자열', nightsLabel('', '2026-08-10'), '');
+eq('기간 라벨: 날짜가 아니면 빈 문자열', nightsLabel('어제', '2026-08-10'), '');
+
+// ---- 일차별 숙소 ----
+// 숙소는 여행 중에 옮길 수 있다(오사카 3박 → 교토 2박). day.place와 같은 상속 규칙을
+// 쓴다: 일차에 값이 있으면 그것, 없으면 여행 기본 숙소.
+(function () {
+  var trip = emptyTrip({ title: '간사이', start: '2026-08-10', end: '2026-08-12',
+                         party: 2, hotel: '오사카 호텔' });
+  eq('새 일차의 숙소는 비어 있다', trip.days[0].hotel, null);
+  eq('일차 숙소가 없으면 여행 기본 숙소', dayHotel(trip, trip.days[0]), '오사카 호텔');
+
+  setDayHotel(trip, 3, '교토 료칸\n체크인 15시');
+  eq('setDayHotel이 그 일차에만 붙는다', trip.days[2].hotel, '교토 료칸\n체크인 15시');
+  eq('지정한 일차는 그 숙소', dayHotel(trip, trip.days[2]), '교토 료칸\n체크인 15시');
+  eq('다른 일차는 그대로 기본값', dayHotel(trip, trip.days[1]), '오사카 호텔');
+
+  // 빈 문자열은 "기본값으로 되돌리기"다 — 빈 숙소를 저장해두면 기본값이 가려진다.
+  setDayHotel(trip, 3, '   ');
+  eq('빈 값을 넣으면 오버라이드가 지워진다', trip.days[2].hotel, null);
+  eq('지워지면 다시 기본값 상속', dayHotel(trip, trip.days[2]), '오사카 호텔');
+
+  eq('없는 일차는 조용히 무시', setDayHotel(trip, 99, '아무거나'), false);
+  eq('기본 숙소도 없으면 빈 문자열', dayHotel({ hotel: '' }, { hotel: null }), '');
+})();
+
+// 손상된 저장값(가져온 JSON)에서 day.hotel이 문자열이 아닐 수 있다 — 렌더가
+// itemLinesHtml에 넘기므로 문자열/null로 맞춘다.
+(function () {
+  var d = normalizeDay({ n: 1, date: '2026-08-10', items: [], meals: [], notes: [], hotel: 42 });
+  eq('normalizeDay: 숫자 숙소는 문자열로 보정', d.hotel, '42');
+  eq('normalizeDay: 없는 숙소는 null', normalizeDay({ n: 1, date: '', items: [] }).hotel, null);
+})();
+
+// 숙소 탭은 여행 기본 + 일차별 목록을 함께 보여준다. 외부 입력(가져온 JSON)이
+// 그대로 들어오므로 이스케이프를 지킨다.
+(function () {
+  var trip = emptyTrip({ title: '간사이', start: '2026-08-10', end: '2026-08-11',
+                         party: 2, hotel: '오사카 호텔\n체크인 15시' });
+  setDayHotel(trip, 2, '<img src=x onerror=alert(1)>');
+  var html = panelHtml(trip, 'hotel');
+  eq('숙소 탭: 기본 숙소가 보인다', html.indexOf('오사카 호텔') >= 0, true);
+  eq('숙소 탭: 여러 줄 숙소는 줄 단위로 그린다',
+    html.indexOf('<div class="line">체크인 15시</div>') >= 0, true);
+  eq('숙소 탭: 일차별 줄이 일수만큼 있다',
+    (html.match(/hr-day/g) || []).length, 2);
+  eq('숙소 탭: 악의적인 일차 숙소는 이스케이프됨', html.indexOf('<img') === -1, true);
+  eq('숙소 탭: 기본값을 쓰는 일차는 그렇다고 알려준다',
+    html.indexOf('기본 숙소와 같음') >= 0, true);
+  eq('숙소 탭: 기본 숙소가 없어도 일차별 목록은 나온다',
+    panelHtml(emptyTrip({ title: 'x', start: '2026-08-10', end: '2026-08-10',
+                          party: 1, hotel: '' }), 'hotel').indexOf('hr-day') >= 0, true);
+})();

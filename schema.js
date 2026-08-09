@@ -22,9 +22,18 @@ function newSectionId() { return "s_" + Date.now().toString(36) + (_seq++).toStr
 function newNoteId() { return "n_" + Date.now().toString(36) + (_seq++).toString(36); }
 function newExpenseId() { return "e_" + Date.now().toString(36) + (_seq++).toString(36); }
 
+// 기간을 사람이 읽는 문구로. 요약 헤더와 여행 설정 폼이 같은 문구를 쓴다 —
+// 폼에서 본 것과 저장 후 헤더에서 본 것이 어긋나면 안 된다.
+function nightsLabel(start, end) {
+  var days = daysBetween(start, end);
+  if (!(days >= 1)) return "";
+  if (days === 1) return "당일치기";
+  return (days - 1) + "박 " + days + "일";
+}
+
 function blankDay(n, iso) {
-  return { n: n, date: iso, theme: "", place: null, curCode: null,
-           items: [], meals: [], notes: [], images: [] };
+  return { n: n, date: iso, theme: "", place: null, curCode: null, hotel: null,
+           items: [], meals: [], notes: [] };
 }
 
 // 손상된 저장값(검증 없이 가져온 JSON, 손으로 고친 localStorage)이 렌더에서 예외를
@@ -55,6 +64,13 @@ function normalizeDay(day) {
       console.warn('normalizeDay: day.notes가 배열이 아니어서 빈 배열로 보정함', day.notes);
     }
     day.notes = [];
+  }
+  // day.hotel은 "없으면 여행 기본값 상속"이라 null이 정상값이다 — 문자열이 아니면서
+  // 비어 있지도 않은 값(가져온 JSON의 숫자·객체)만 문자열로 맞춘다.
+  if (day.hotel == null) day.hotel = null;
+  else if (typeof day.hotel !== 'string') {
+    console.warn('normalizeDay: day.hotel이 문자열이 아니어서 문자열로 보정함', day.hotel);
+    day.hotel = String(day.hotel);
   }
   day.items = day.items.filter(function (it) { return it && typeof it === 'object'; });
   day.items.forEach(function (it) {
@@ -117,4 +133,8 @@ function dayPlace(trip, day) {
 function dayCurrency(trip, day) {
   if (day && day.curCode) return { code: day.curCode };
   return (trip && trip.currency) || null;
+}
+// 숙소도 여행 중에 옮길 수 있다(오사카 3박 → 교토 2박). 상속 규칙은 도시와 같다.
+function dayHotel(trip, day) {
+  return (day && day.hotel) || (trip && trip.hotel) || "";
 }

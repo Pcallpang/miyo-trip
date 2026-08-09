@@ -88,14 +88,21 @@ function showEdit(id) {
     '<form id="trip-form" class="eform">' +
       '<label>제목<input name="title" type="text" required placeholder="예: 오사카 여행" ' +
         'value="' + escHtml(trip ? trip.title : '') + '"></label>' +
-      '<label>시작일<input name="start" type="date" required ' +
-        'value="' + escHtml(trip ? trip.start : '') + '"></label>' +
-      '<label>종료일<input name="end" type="date" required ' +
-        'value="' + escHtml(trip ? trip.end : '') + '"></label>' +
+      // 시작일과 종료일은 한 쌍이라 나란히 둔다. 고르는 즉시 며칠짜리 여행인지
+      // 알려 준다 — 날짜만 보고 머릿속으로 세는 것보다 실수를 바로 알아챈다.
+      '<div class="eform-row">' +
+        '<label>시작일<input name="start" type="date" required ' +
+          'value="' + escHtml(trip ? trip.start : '') + '"></label>' +
+        '<label>종료일<input name="end" type="date" required ' +
+          'value="' + escHtml(trip ? trip.end : '') + '"></label>' +
+      '</div>' +
+      '<div class="dur-line" id="dur-line"></div>' +
       '<label>인원<input name="party" type="number" min="1" step="1" ' +
         'value="' + (trip ? Number(trip.party) : 2) + '"></label>' +
+      // 일차별로 다른 숙소는 숙소 탭에서 적는다 — 여기서는 기본값만 받는다.
       '<label>숙소<textarea name="hotel" rows="2" ' +
         'placeholder="숙소명 · 체크인/아웃">' + escHtml(trip ? trip.hotel : '') + '</textarea></label>' +
+      '<p class="eform-hint">묵는 곳이 날마다 다르면 숙소 탭에서 그 날만 따로 적을 수 있습니다.</p>' +
       // 나라를 고르면 통화가 따라온다 — 통화 코드를 외우는 것보다 자연스럽다.
       // 통화는 표시만 하고 값은 나라에서 끌어온다(둘이 어긋날 수 없다).
       '<label>나라<select name="country">' +
@@ -155,6 +162,23 @@ function showEdit(id) {
     a.click();
     document.body.removeChild(a);
     setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+  });
+
+  // 날짜를 고칠 때마다 기간을 다시 셈해 보여준다. 요약 헤더와 같은 문구(nightsLabel)를
+  // 쓰므로 저장 뒤에 보게 될 것과 어긋나지 않는다.
+  var durLine = document.getElementById("dur-line");
+  var startEl = document.querySelector('#trip-form [name=start]');
+  var endEl = document.querySelector('#trip-form [name=end]');
+  function paintDur() {
+    if (!durLine) return;
+    var label = nightsLabel(startEl.value, endEl.value);
+    durLine.textContent = label || '';
+    durLine.hidden = !label;
+  }
+  paintDur();
+  [startEl, endEl].forEach(function (el2) {
+    if (el2) el2.addEventListener('change', paintDur);
+    if (el2) el2.addEventListener('input', paintDur);
   });
 
   var countrySel = document.querySelector('#trip-form [name=country]');
@@ -511,6 +535,16 @@ function setDayPlace(trip, dayN, place) {
   if (!day) return trip;
   day.place = place || null;
   return trip;
+}
+
+// 일차별 숙소. 빈 값은 "여행 기본 숙소로 되돌리기"다 — 빈 문자열을 그대로 저장하면
+// dayHotel의 상속이 끊겨 기본 숙소가 가려진다.
+function setDayHotel(trip, dayN, text) {
+  var day = findDay(trip, dayN);
+  if (!day) return false;
+  var t = String(text == null ? "" : text).trim();
+  day.hotel = t || null;
+  return true;
 }
 
 // ---- 섹션 편집 (2단계-C) ----

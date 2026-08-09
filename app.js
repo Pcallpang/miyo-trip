@@ -230,6 +230,9 @@ document.addEventListener("DOMContentLoaded", function () {
   migrateMeals();
   // 구 결제 내역에 id를 부여한다(편집하려면 항목을 가리킬 수단이 필요하다).
   migrateExpenseIds();
+  // 사진 첨부 기능을 걷어냈다 — 예전에 붙인 사진이 IndexedDB에 남아 용량만 차지하므로
+  // 한 번 지운다. 없거나 막힌 환경(file://)에서는 조용히 넘어간다.
+  try { if (window.indexedDB) indexedDB.deleteDatabase("trip-images"); } catch (e) {}
 
   document.getElementById("new-trip")
     .addEventListener("click", function () { go('#/new'); });

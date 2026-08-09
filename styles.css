@@ -21,7 +21,8 @@ body { margin:0; background:var(--bg); color:var(--text);
   box-shadow:0 1px 4px rgba(0,0,0,.06); }
 .dayhead { padding:14px 16px; border-bottom:1px solid #eef2f4; }
 .dayhead .dnum { font-weight:700; color:var(--accent); }
-.dayhead .dtheme { color:var(--muted); font-size:.85rem; margin-top:3px; }
+.dayhead .dcity { color:var(--accent); font-weight:700; font-size:.85rem; margin-top:5px; }
+.dayhead .dhotel { color:var(--muted); font-size:.85rem; margin-top:2px; }
 /* 줄 자체가 편집 버튼이다 — 버튼 기본 모양(테두리·가운데 정렬·회색 배경)을 지워
    원래의 목록 줄처럼 보이게 한다. */
 .slot { display:flex; gap:10px; padding:12px 16px; width:100%; text-align:left;
@@ -221,30 +222,24 @@ body { margin:0; background:var(--bg); color:var(--text);
   border-radius:8px; background:var(--card); color:var(--muted); cursor:pointer; }
 .sec-tools .sec-ro { font-size:.75rem; color:var(--muted); }
 
-.dayimgs { display:flex; flex-wrap:wrap; gap:8px; padding:12px 16px; border-bottom:1px solid #eef2f4; }
-.dayimg { position:relative; margin:0; flex:0 0 auto; }
-.dayimg img { display:block; width:104px; height:104px; object-fit:cover; border-radius:10px;
-  background:#eef2f4; }
-.dayimg .img-del { position:absolute; top:4px; right:4px; border:0; border-radius:50%;
-  width:24px; height:24px; line-height:1; font-size:1rem; cursor:pointer;
-  background:rgba(0,0,0,.55); color:#fff; }
-.img-add { display:flex; align-items:center; justify-content:center; width:104px; height:104px;
-  border:1px dashed #c3ced4; border-radius:10px; color:var(--muted); font-size:.82rem;
-  cursor:pointer; text-align:center; padding:6px; }
-.img-add.busy { opacity:.5; pointer-events:none; }
-
 .eshare { display:flex; flex-direction:column; gap:6px; padding:0 16px 20px; }
 .eshare button { font:inherit; padding:12px; border:1px solid #d5dde1; border-radius:10px;
   background:var(--card); color:var(--text); cursor:pointer; }
 .eshare .geo-msg { margin:0; }
 
-.notes { padding:12px 16px; border-top:1px solid #eef2f4; background:#fff9f2; }
-.notes-h { font-weight:700; color:var(--accent2); margin-bottom:8px; }
-.note { display:block; width:100%; text-align:left; padding:8px 0; border:0;
+/* 메모는 카드가 아니라 모달 안에서 본다 — 목록의 각 줄이 곧 편집 버튼이다. */
+.mnotes { display:flex; flex-direction:column; border:1px solid #ffd8a8;
+  border-radius:12px; overflow:hidden; background:#fff9f2; }
+.mnote { display:block; width:100%; text-align:left; padding:11px 13px; border:0;
   border-bottom:1px solid #ffe9d0; background:none; font:inherit; color:inherit;
-  cursor:pointer; }
-.note:last-of-type { border-bottom:0; }
-.note-text .line { font-size:.9rem; }
+  cursor:pointer; font-size:.9rem; }
+.mnote:last-child { border-bottom:0; }
+.mnote:active { background:#fff2e0; }
+.mnote-empty { margin:0; padding:18px 0; text-align:center;
+  color:var(--muted); font-size:.88rem; }
+.mnote-add { font:inherit; font-weight:700; font-size:.88rem; padding:11px; width:100%;
+  border:1px solid var(--accent2); border-radius:10px; background:var(--card);
+  color:var(--accent2); cursor:pointer; }
 
 .exp-actions { display:flex; gap:8px; margin-top:10px; }
 .exp-actions button { flex:1; font:inherit; font-size:.85rem; padding:10px; border:1px solid #d5dde1;
@@ -298,11 +293,41 @@ body.modal-open { overflow:hidden; }
 .modal-btns .modal-cancel { background:var(--card); color:var(--muted);
   border:1px solid #d5dde1; font-weight:400; }
 
-/* 일차 머리의 추가 버튼 — 폼을 아래에 붙이지 않고 여기서 모달을 연다. */
-.day-actions { display:flex; gap:8px; margin-top:10px; }
-.day-actions button { flex:1; font:inherit; font-size:.85rem; font-weight:700; padding:9px;
+/* 일차 머리의 버튼 — 폼을 아래에 붙이지 않고 여기서 모달을 연다.
+   일정 추가는 +만으로 충분하다(자리가 무엇에 대한 +인지 말해 준다) — 대신
+   손가락이 닿을 만큼은 키운다. */
+.day-actions { display:flex; gap:8px; margin-top:10px; align-items:stretch; }
+.day-actions button { font:inherit; font-size:.85rem; font-weight:700; padding:9px;
   border:1px solid var(--accent); border-radius:10px; background:var(--card);
   color:var(--accent); cursor:pointer; }
+.day-actions .day-add-item { flex:0 0 52px; font-size:1.25rem; line-height:1.1; }
+.day-actions .day-note { flex:1; border-color:var(--accent2); color:var(--accent2); }
+.day-actions .nbadge { display:inline-block; min-width:18px; margin-left:2px;
+  font-size:.72rem; font-weight:800; color:#fff; background:var(--accent2);
+  border-radius:999px; padding:1px 6px; }
 
 #city-sel { font:inherit; color:var(--text); padding:11px; border:1px solid #d5dde1;
   border-radius:10px; background:var(--card); width:100%; }
+
+/* 숙소 탭 — 여행 기본 한 줄에 일차별 목록이 딸린다. 각 줄이 편집 버튼이다. */
+.hrs { display:flex; flex-direction:column; border:1px solid #dde4e8;
+  border-radius:12px; overflow:hidden; margin-top:4px; }
+.hr { display:flex; gap:10px; align-items:flex-start; width:100%; text-align:left;
+  padding:11px 13px; border:0; border-bottom:1px solid #eef2f4; background:none;
+  font:inherit; color:inherit; cursor:pointer; }
+.hr:last-child { border-bottom:0; }
+.hr:active { background:#f2f6f8; }
+.hr-base { background:#f7fafb; }
+.hr .hr-k { flex:0 0 92px; font-weight:700; font-size:.82rem; color:var(--accent); }
+.hr .hr-k .hr-d { font-weight:400; color:var(--muted); }
+.hr .hr-v { flex:1; min-width:0; font-size:.9rem; }
+.hr .hr-v .line + .line { margin-top:2px; }
+.hr-none, .hr-same { color:var(--muted); font-size:.85rem; }
+.hr-hint { margin:10px 0 0; font-size:.8rem; color:var(--muted); }
+.modal-hint { margin:0; font-size:.8rem; color:var(--muted); }
+
+/* 여행 설정 — 시작·종료일은 한 쌍이라 나란히, 그 아래 기간을 셈해 보여준다. */
+.eform-row { display:flex; gap:10px; }
+.eform-row > * { flex:1; min-width:0; }
+.dur-line { margin-top:-6px; font-size:.9rem; font-weight:700; color:var(--accent); }
+.eform-hint { margin:-8px 0 0; font-size:.8rem; color:var(--muted); }
