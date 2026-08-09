@@ -302,9 +302,11 @@ body.modal-open { overflow:hidden; }
   color:var(--accent); cursor:pointer; }
 .day-actions .day-add-item { flex:0 0 52px; font-size:1.25rem; line-height:1.1; }
 .day-actions .day-note { flex:1; border-color:var(--accent2); color:var(--accent2); }
-.day-actions .nbadge { display:inline-block; min-width:18px; margin-left:2px;
-  font-size:.72rem; font-weight:800; color:#fff; background:var(--accent2);
-  border-radius:999px; padding:1px 6px; }
+.day-actions .day-spend { flex:1; }
+.day-actions .nbadge, .day-actions .sbadge { display:inline-block; margin-left:2px;
+  font-size:.72rem; font-weight:800; color:#fff; border-radius:999px; padding:1px 6px; }
+.day-actions .nbadge { min-width:18px; background:var(--accent2); }
+.day-actions .sbadge { background:var(--accent); }
 
 #city-sel { font:inherit; color:var(--text); padding:11px; border:1px solid #d5dde1;
   border-radius:10px; background:var(--card); width:100%; }
@@ -332,23 +334,22 @@ body.modal-open { overflow:hidden; }
 .dur-line { margin-top:-6px; font-size:.9rem; font-weight:700; color:var(--accent); }
 .eform-hint { margin:-8px 0 0; font-size:.8rem; color:var(--muted); }
 
-/* 일차 카드의 경비 — 그날 얼마 썼는지가 일정 바로 밑에 보인다. 각 줄이 편집 버튼이다. */
-.dspend { padding:12px 16px; border-top:1px solid #eef2f4; background:#f4fbfa; }
-.dsp-h { display:flex; align-items:baseline; gap:8px; font-weight:700;
-  color:var(--accent); margin-bottom:8px; }
-.dsp-ts { margin-left:auto; text-align:right; }
-.dsp-t { display:block; font-size:.95rem; font-weight:800; }
+/* 경비 모달 — 그날 합계·목록·추가가 한자리에. 각 줄이 편집 버튼이다(메모와 같은 꼴). */
+.dsp-ts { text-align:right; margin-bottom:2px; }
+.dsp-t { font-size:1.15rem; font-weight:800; color:var(--accent); }
+.dsps { display:flex; flex-direction:column; border:1px solid #cfe6e3;
+  border-radius:12px; overflow:hidden; background:#f4fbfa; }
 .dsp-r { display:flex; align-items:baseline; gap:8px; width:100%; text-align:left;
-  padding:7px 0; border:0; border-bottom:1px solid #ddefec; background:none;
-  font:inherit; color:inherit; cursor:pointer; font-size:.88rem; }
-.dsp-r:last-of-type { border-bottom:0; }
+  padding:10px 13px; border:0; border-bottom:1px solid #ddefec; background:none;
+  font:inherit; color:inherit; cursor:pointer; font-size:.9rem; }
+.dsp-r:last-child { border-bottom:0; }
 .dsp-r:active { background:#e9f6f4; }
 .dsp-cat { flex:0 0 auto; font-size:.72rem; font-weight:700; color:var(--accent);
   background:#dcf0ed; border-radius:999px; padding:2px 8px; }
 .dsp-note { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .dsp-amt { flex:0 0 auto; font-weight:700; white-space:nowrap; }
-.dsp-empty { margin:0; padding:6px 0 10px; color:var(--muted); font-size:.85rem; }
-.day-add-spend { margin-top:8px; font:inherit; font-size:.85rem; font-weight:700;
-  padding:9px; width:100%; border:1px solid var(--accent); border-radius:10px;
-  background:var(--card); color:var(--accent); cursor:pointer; }
+.dsp-empty { margin:0; padding:18px 0; text-align:center; color:var(--muted); font-size:.88rem; }
+.dsp-add { font:inherit; font-weight:700; font-size:.88rem; padding:11px; width:100%;
+  border:1px solid var(--accent); border-radius:10px; background:var(--card);
+  color:var(--accent); cursor:pointer; }
 .modal-form .m-narrow2 { flex:0 0 104px; }

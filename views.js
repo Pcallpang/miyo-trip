@@ -242,6 +242,10 @@ function renderTimeline(trip, day, st) {
   // 메모는 카드 밑에 늘어놓지 않고 모달 안에서 본다 — 일정 흐름을 읽는 데 방해가
   // 되지 않으면서, 열면 목록·추가·수정·삭제가 한자리에 있다. 버튼에 개수만 알린다.
   const noteCount = noteList.length;
+  // 경비도 메모와 같은 자리에서 연다 — 카드에 목록을 통째로 붙이면 일정이 밀려
+  // 내려가 정작 일정을 읽기 어려워진다. 버튼에는 그날 합계를 얹어, 열지 않고도
+  // "오늘 얼마 썼나"는 바로 보이게 한다.
+  const spendBadge = daySpendBadge(st, day.date);
   main.innerHTML =
     '<div class="daycard"><div class="dayhead">' +
       '<span class="dnum">' + Number(day.n) + '일차</span> ' +
@@ -267,15 +271,20 @@ function renderTimeline(trip, day, st) {
         '<button class="day-note" type="button">📝 메모' +
           (noteCount ? ' <span class="nbadge">' + noteCount + '</span>' : '') +
         '</button>' +
+        '<button class="day-spend" type="button">💰 경비' +
+          (spendBadge ? ' <span class="sbadge">' + spendBadge + '</span>' : '') +
+        '</button>' +
       '</div></div>' +
-      '<div class="slots">' + rows + '</div>' +
-      daySpendHtml(trip, day, st) + '</div>';
+      '<div class="slots">' + rows + '</div></div>';
 
   var noteBtn = main.querySelector('.day-note');
   if (noteBtn) noteBtn.addEventListener('click', function () {
     openNotesModal(trip, day, st);
   });
-  bindDaySpend(trip, day, st, main);
+  var spendBtn = main.querySelector('.day-spend');
+  if (spendBtn) spendBtn.addEventListener('click', function () {
+    openSpendListModal(trip, day, st);
+  });
 
   main.querySelectorAll('.memo').forEach(function (inp) {
     inp.addEventListener('input', function () { st.set(inp.dataset.key, inp.value); });
@@ -296,8 +305,20 @@ function renderTimeline(trip, day, st) {
 // 여행 중에는 "오늘 얼마 썼나"를 그날 화면에서 바로 보고 바로 적을 수 있어야 한다.
 // 경비 탭과 같은 저장소를 쓰므로 어디서 넣든 합계는 하나다. 다만 여기서 넣는 기록은
 // 오늘이 아니라 그 일차의 날짜로 붙는다 — 지난 날의 지출을 나중에 적을 수 있어야 한다.
-function daySpendHtml(trip, day, st) {
-  var list = daySpend(st, day.date);
+// 버튼에 얹는 그날 합계. 통화가 하나면 금액을, 여럿이면 개수만 — 버튼 하나에
+// 여러 통화를 늘어놓으면 줄이 넘친다(자세한 건 열어서 본다).
+function daySpendBadge(st, date) {
+  var totals = spendTotals(daySpend(st, date));
+  if (!totals.length) return '';
+  if (totals.length === 1) {
+    return escHtml(fmtAmount(totals[0].amount, currencyByCode(totals[0].cur)));
+  }
+  return escHtml(totals.length + '개 통화');
+}
+
+// 경비 목록 모달의 본문. 합계·목록·추가 버튼이 한자리에 있다(메모 모달과 같은 꼴).
+function daySpendListHtml(st, date) {
+  var list = daySpend(st, date);
   var rows = list.map(function (e) {
     return '<button class="dsp-r" type="button" data-id="' + Number(e.id) + '">' +
       '<span class="dsp-cat">' + escHtml(e.cat) + '</span>' +
@@ -307,86 +328,99 @@ function daySpendHtml(trip, day, st) {
   }).join('');
   // 하루 안에서도 통화가 섞일 수 있다(국경을 넘는 날) — 통화별로 한 줄씩 낸다.
   var totals = spendTotals(list).map(function (t) {
-    return '<span class="dsp-t">' +
-      escHtml(fmtAmount(t.amount, currencyByCode(t.cur))) + '</span>';
+    return '<div class="dsp-t">' +
+      escHtml(fmtAmount(t.amount, currencyByCode(t.cur))) + '</div>';
   }).join('');
-  return '<div class="dspend">' +
-    '<div class="dsp-h">💰 경비' + (totals ? '<span class="dsp-ts">' + totals + '</span>' : '') + '</div>' +
-    (rows || '<p class="dsp-empty">아직 기록이 없습니다.</p>') +
-    '<button class="day-add-spend" type="button">+ 경비</button></div>';
+  return (totals ? '<div class="dsp-ts">' + totals + '</div>' : '') +
+    (rows ? '<div class="dsps">' + rows + '</div>'
+          : '<p class="dsp-empty">아직 기록이 없습니다.</p>') +
+    '<button class="dsp-add" type="button">+ 경비 추가</button>';
 }
 
-function bindDaySpend(trip, day, st, root) {
-  function repaint() {
-    repaintDay(trip, day.n, st);
-    // 요약 헤더의 지출 합계도 같이 움직여야 한다.
-    renderSummary(trip, st);
-  }
-
-  function openSpendModal(e) {
-    // 기본 통화는 그 일차의 통화다(없으면 여행 기본값) — 일차마다 다를 수 있다.
-    var def = currencyByCode((dayCurrency(trip, day) || {}).code || 'KRW');
-    var code = e ? e.cur : def.code;
-    var cur = currencyByCode(code);
-    var codes = CURRENCIES.map(function (c) { return c.code; });
-    if (codes.indexOf(code) === -1) codes.unshift(code);
-    modalOpen({
-      title: (e ? '경비 수정' : '경비 추가') + ' · ' + Number(day.n) + '일차',
-      submitLabel: e ? '저장' : '추가',
-      onDelete: e ? function () { spendRemove(st, e.id); repaint(); } : null,
-      deleteConfirm: '이 기록을 삭제할까요?',
-      html:
-        '<div class="modal-row">' +
-          '<label>금액<input class="sp-amt" type="number" inputmode="decimal" min="0" ' +
-            'step="' + (cur.decimals > 0 ? '0.01' : '1') + '" required ' +
-            'value="' + (e ? Number(e.amount) : '') + '"></label>' +
-          '<label class="m-narrow2">통화<select class="sp-cur">' +
-            codes.map(function (c) {
-              return '<option value="' + escHtml(c) + '"' +
-                (c === code ? ' selected' : '') + '>' + escHtml(c) + '</option>';
-            }).join('') + '</select></label>' +
-        '</div>' +
-        '<label>분류<select class="sp-cat">' +
-          SPEND_CATS.map(function (c) {
-            return '<option' + (e && e.cat === c ? ' selected' : '') + '>' + escHtml(c) + '</option>';
-          }).join('') + '</select></label>' +
-        '<label>내용<input class="sp-note" type="text" placeholder="예: 반미 2개" ' +
-          'value="' + escHtml(e ? (e.note || '') : '') + '"></label>',
-      onSubmit: function (form) {
-        var codeNow = form.querySelector('.sp-cur').value;
-        var c = currencyByCode(codeNow);
-        // 소수점 자릿수에 맞춰 반올림한다 — JPY에 12.5를 넣으면 13이 된다.
-        var p = Math.pow(10, c.decimals);
-        var amount = Math.round(Number(form.querySelector('.sp-amt').value) * p) / p;
-        if (!isFinite(amount) || amount <= 0) return '금액을 올바르게 입력하세요.';
-        var f = { amount: amount, cur: codeNow,
-                  cat: form.querySelector('.sp-cat').value,
-                  note: form.querySelector('.sp-note').value };
-        if (e) spendUpdate(st, e.id, f);
-        else spendAdd(st, { date: day.date, amount: f.amount, cur: f.cur,
-                            cat: f.cat, note: f.note });
-        repaint();
-        return null;
-      }
-    });
-    // 통화를 바꾸면 금액 입력의 step도 따라가야 한다 — 기본값이 VND(step=1)인데
-    // USD를 고르면 12.50을 넣을 수 없다(HTML5 검증에 걸려 제출 자체가 막힌다).
-    var curSel = document.querySelector('.modal-form .sp-cur');
-    if (curSel) curSel.addEventListener('change', function () {
-      var c2 = currencyByCode(curSel.value);
-      document.querySelector('.modal-form .sp-amt').step = c2.decimals > 0 ? '0.01' : '1';
-    });
-  }
-
-  var addBtn = root.querySelector('.day-add-spend');
-  if (addBtn) addBtn.addEventListener('click', function () { openSpendModal(null); });
-  root.querySelectorAll('.dsp-r').forEach(function (b) {
+// ---- 일차 카드의 경비 ----
+// 여행 중에는 "오늘 얼마 썼나"를 그날 화면에서 바로 보고 바로 적을 수 있어야 한다.
+// 경비 탭과 같은 저장소를 쓰므로 어디서 넣든 합계는 하나다. 다만 여기서 넣는 기록은
+// 오늘이 아니라 그 일차의 날짜로 붙는다 — 지난 날의 지출을 나중에 적을 수 있어야 한다.
+function openSpendListModal(trip, day, st) {
+  var form = modalOpen({
+    title: '경비 · ' + Number(day.n) + '일차',
+    closeLabel: '닫기',
+    html: daySpendListHtml(st, day.date)
+  });
+  form.querySelector('.dsp-add').addEventListener('click', function () {
+    openSpendModal(trip, day, st, null);
+  });
+  form.querySelectorAll('.dsp-r').forEach(function (b) {
     b.addEventListener('click', function () {
       var e = daySpend(st, day.date).filter(function (x) {
         return String(x.id) === b.dataset.id;
       })[0];
-      if (e) openSpendModal(e);
+      if (e) openSpendModal(trip, day, st, e);
     });
+  });
+}
+
+function openSpendModal(trip, day, st, e) {
+  // 기록이 바뀌면 카드의 합계 배지와 요약 헤더의 지출 합계가 같이 움직여야 한다.
+  function repaint() {
+    repaintDay(trip, day.n, st);
+    renderSummary(trip, st);
+  }
+
+  // 기본 통화는 그 일차의 통화다(없으면 여행 기본값) — 일차마다 다를 수 있다.
+  var def = currencyByCode((dayCurrency(trip, day) || {}).code || 'KRW');
+  var code = e ? e.cur : def.code;
+  var cur = currencyByCode(code);
+  var codes = CURRENCIES.map(function (c) { return c.code; });
+  if (codes.indexOf(code) === -1) codes.unshift(code);
+  modalOpen({
+    title: (e ? '경비 수정' : '경비 추가') + ' · ' + Number(day.n) + '일차',
+    submitLabel: e ? '저장' : '추가',
+    onDelete: e ? function () { spendRemove(st, e.id); repaint(); } : null,
+    deleteConfirm: '이 기록을 삭제할까요?',
+    // 저장·삭제가 끝나면 목록으로 돌아간다(메모와 같은 흐름) — 하루치 지출을
+    // 몰아서 적을 때 매번 카드에서 다시 여는 왕복을 없앤다.
+    onDone: function () { openSpendListModal(trip, day, st); },
+    html:
+      '<div class="modal-row">' +
+        '<label>금액<input class="sp-amt" type="number" inputmode="decimal" min="0" ' +
+          'step="' + (cur.decimals > 0 ? '0.01' : '1') + '" required ' +
+          'value="' + (e ? Number(e.amount) : '') + '"></label>' +
+        '<label class="m-narrow2">통화<select class="sp-cur">' +
+          codes.map(function (c) {
+            return '<option value="' + escHtml(c) + '"' +
+              (c === code ? ' selected' : '') + '>' + escHtml(c) + '</option>';
+          }).join('') + '</select></label>' +
+      '</div>' +
+      '<label>분류<select class="sp-cat">' +
+        SPEND_CATS.map(function (c) {
+          return '<option' + (e && e.cat === c ? ' selected' : '') + '>' + escHtml(c) + '</option>';
+        }).join('') + '</select></label>' +
+      '<label>내용<input class="sp-note" type="text" placeholder="예: 반미 2개" ' +
+        'value="' + escHtml(e ? (e.note || '') : '') + '"></label>',
+    onSubmit: function (form) {
+      var codeNow = form.querySelector('.sp-cur').value;
+      var c = currencyByCode(codeNow);
+      // 소수점 자릿수에 맞춰 반올림한다 — JPY에 12.5를 넣으면 13이 된다.
+      var p = Math.pow(10, c.decimals);
+      var amount = Math.round(Number(form.querySelector('.sp-amt').value) * p) / p;
+      if (!isFinite(amount) || amount <= 0) return '금액을 올바르게 입력하세요.';
+      var f = { amount: amount, cur: codeNow,
+                cat: form.querySelector('.sp-cat').value,
+                note: form.querySelector('.sp-note').value };
+      if (e) spendUpdate(st, e.id, f);
+      else spendAdd(st, { date: day.date, amount: f.amount, cur: f.cur,
+                          cat: f.cat, note: f.note });
+      repaint();
+      return null;
+    }
+  });
+  // 통화를 바꾸면 금액 입력의 step도 따라가야 한다 — 기본값이 VND(step=1)인데
+  // USD를 고르면 12.50을 넣을 수 없다(HTML5 검증에 걸려 제출 자체가 막힌다).
+  var curSel = document.querySelector('.modal-form .sp-cur');
+  if (curSel) curSel.addEventListener('change', function () {
+    var c2 = currencyByCode(curSel.value);
+    document.querySelector('.modal-form .sp-amt').step = c2.decimals > 0 ? '0.01' : '1';
   });
 }
 

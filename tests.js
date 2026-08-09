@@ -1569,18 +1569,32 @@ eq('기간 라벨: 날짜가 아니면 빈 문자열', nightsLabel('어제', '20
 
   var el = global.__setDomTarget('timeline');
   renderTimeline(trip, day, st);
-  eq('기록이 없으면 그렇다고 알린다', el.innerHTML.indexOf('아직 기록이 없습니다') >= 0, true);
-  eq('경비 추가 버튼은 늘 보인다', el.innerHTML.indexOf('class="day-add-spend"') >= 0, true);
+  eq('경비 버튼은 늘 보인다', el.innerHTML.indexOf('class="day-spend"') >= 0, true);
+  eq('기록이 없으면 배지도 없다', el.innerHTML.indexOf('sbadge') === -1, true);
+  eq('목록은 비었다고 알린다',
+    daySpendListHtml(st, '2026-08-10').indexOf('아직 기록이 없습니다') >= 0, true);
+  eq('추가 버튼은 목록 안에 있다',
+    daySpendListHtml(st, '2026-08-10').indexOf('class="dsp-add"') >= 0, true);
 
   spendAdd(st, { date: '2026-08-10', amount: 50000, cur: 'VND', cat: '식비',
                  note: '<img src=x onerror=alert(1)>' });
   spendAdd(st, { date: '2026-08-10', amount: 20000, cur: 'VND', cat: '교통', note: '택시' });
   spendAdd(st, { date: '2026-08-11', amount: 99000, cur: 'VND', cat: '쇼핑', note: '다른 날' });
+
+  // 카드에는 합계만 배지로 — 목록은 모달에서 본다.
   var el2 = global.__setDomTarget('timeline');
   renderTimeline(trip, day, st);
-  var html = el2.innerHTML;
+  eq('버튼 배지에 그날 합계', el2.innerHTML.indexOf('<span class="sbadge">₫70,000</span>') >= 0, true);
+  eq('카드에 목록은 붙지 않는다', el2.innerHTML.indexOf('dsp-r') === -1, true);
+
+  var html = daySpendListHtml(st, '2026-08-10');
   eq('그날 기록만 줄로 나온다', (html.match(/class="dsp-r"/g) || []).length, 2);
   eq('다른 날 기록은 섞이지 않는다', html.indexOf('다른 날') === -1, true);
-  eq('그날 합계를 보여준다', html.indexOf('₫70,000') >= 0, true);
+  eq('목록 위에 합계를 보여준다', html.indexOf('₫70,000') >= 0, true);
   eq('악의적인 내용은 이스케이프됨', html.indexOf('<img') === -1, true);
+
+  // 통화가 섞이면 버튼에는 금액 대신 개수만 — 버튼 한 줄에 다 담을 수 없다.
+  spendAdd(st, { date: '2026-08-10', amount: 12.5, cur: 'USD', cat: '교통', note: '그랩' });
+  eq('통화가 여럿이면 개수 배지', daySpendBadge(st, '2026-08-10'), '2개 통화');
+  eq('기록 없는 날은 배지 없음', daySpendBadge(st, '2026-08-12'), '');
 })();
