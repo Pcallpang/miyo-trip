@@ -299,6 +299,16 @@ body { margin:0; background:var(--bg); color:var(--text);
 .exp-r { cursor:pointer; }
 .exp-r:active { background:var(--bg-input); }
 .exp-r:focus-visible { outline:2px solid var(--accent); outline-offset:-2px; }
+/* 표 줄 구분선. 정보 탭 표(.acc table)와 달리 이 표는 .acc 밖에 있어 그 규칙이
+   닿지 않는다 — 줄이 붙어 보여 항목 구분이 안 되므로 여기서 따로 그린다. */
+.panel-card .tblwrap table { border-collapse:collapse; width:100%; font-size:.85rem; }
+.panel-card .tblwrap th,
+.panel-card .tblwrap td { border-bottom:1px solid var(--line); padding:8px; text-align:left; }
+.panel-card .tblwrap th { color:var(--muted); font-weight:600; }
+.panel-card .tblwrap td.num,
+.panel-card .tblwrap th.num { text-align:right; white-space:nowrap; }
+/* 합계는 내역과 다른 줄임을 굵은 윗선으로 끊어 준다. */
+.panel-card .tblwrap tfoot td { font-weight:700; border-top:2px solid var(--line); border-bottom:0; }
 
 .cur-line { font-size:.9rem; color:var(--muted); margin-top:-6px; }
 .cur-line b { color:var(--text); }
