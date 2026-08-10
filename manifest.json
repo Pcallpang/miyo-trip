@@ -1,6 +1,6 @@
 {
-  "name": "여행 플래너",
-  "short_name": "여행",
+  "name": "야르미요의 여행 플래너",
+  "short_name": "야르미요 여행",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#FDF3E7",

@@ -36,7 +36,7 @@ html = """<!doctype html>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#FDF3E7">
 <meta name="color-scheme" content="light">
-<title>여행 플래너</title>
+<title>야르미요의 여행 플래너</title>
 <style>
 """ + read("styles.css") + """
 </style>
