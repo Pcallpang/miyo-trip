@@ -1,0 +1,19 @@
+# 배포에 올리지 않을 것들. 저장소에는 남지만 웹으로는 서비스되지 않는다.
+
+# 홍보물 원본·캡션 원고 — 공개할 이유가 없다
+marketing/
+
+# 설계 문서와 작업 기록
+docs/
+.superpowers/
+
+# 테스트 — index.html이 부르지 않는다
+tests.js
+test.html
+test-node.js
+
+# 빌드·변환 스크립트
+*.py
+
+# 원본 엑셀
+*.xlsx

@@ -50,12 +50,6 @@
   <script src="views.js"></script>
   <script src="editor.js"></script>
   <script src="app.js"></script>
-  <script>
-    if ("serviceWorker" in navigator && location.protocol !== "file:") {
-      window.addEventListener("load", function () {
-        navigator.serviceWorker.register("sw.js").catch(function () {});
-      });
-    }
-  </script>
+  <script src="sw-register.js"></script>
 </body>
 </html>

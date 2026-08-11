@@ -443,7 +443,8 @@ function parseShareHash(hash) {
   return m ? m[1] : null;
 }
 
-// 지금 주소에서 해시만 갈아 끼운다 — 배포 경로(/miyo-trip/)가 그대로 유지된다.
+// 지금 주소에서 해시만 갈아 끼운다 — 배포 경로가 무엇이든 그대로 유지된다
+// (Vercel은 루트 /, 하위 경로에 올려도 마찬가지다).
 // 쿼리와 index.html은 떼어 낸다(링크는 짧을수록 메신저에서 잘 붙는다). 그 밖의
 // 파일명은 그대로 둔다 — 떼면 그 주소로는 앱이 열리지 않는다.
 function shareUrl(href, payload) {
