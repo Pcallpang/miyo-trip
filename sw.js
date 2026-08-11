@@ -1,5 +1,5 @@
-const CACHE = "trip-v31";
-const ASSETS = ["./", "./index.html", "./styles.css",
+const CACHE = "trip-v32";
+const ASSETS = ["./", "./index.html", "./privacy.html", "./styles.css",
   "./sample-trip.js", "./store.js", "./schema.js", "./cities.js", "./country-info.js", "./money.js", "./remote.js", "./views.js", "./editor.js", "./app.js", "./sw-register.js",
   "./manifest.json", "./icon.svg", "./icon-180.png", "./icon-512.png",
   // 미요 캐릭터 — 오프라인에서도 아이콘이 비지 않아야 한다.

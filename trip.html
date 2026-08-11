@@ -6,6 +6,9 @@
 <meta name="theme-color" content="#FDF3E7">
 <meta name="color-scheme" content="light">
 <title>야르미요의 여행 플래너</title>
+<meta name="description" content="일정·경비·준비물·날씨를 한 곳에 모으는 여행 플래너.">
+<!-- og:*와 개인정보처리방침 링크는 넣지 않는다 — 이 파일은 file://로 여는
+     단일 파일이라 미리보기 크롤러가 오지 않고, 옆에 privacy.html도 없다. -->
 <style>
 /* 미요 앱 시리즈 공통 토큰 — SNAseating/planner와 같은 값을 쓴다.
    여기 값만 바꾸면 앱 전체 색이 따라온다. */
@@ -470,6 +473,32 @@ body.modal-open { overflow:hidden; }
 .miyo-lg { display:block; width:96px; height:96px; margin:0 auto 10px; }
 #timeline .empty, #triplist .empty { padding:30px 16px; }
 #timeline .empty p, #triplist .empty p { margin:0; }
+
+/* ---- 문서 페이지(개인정보처리방침) ----
+   앱 화면이 아니라 읽는 페이지다. 폰에서도 한 줄이 너무 길지 않게 폭을 묶고,
+   앱보다 줄간격을 넉넉히 준다. */
+.doc { max-width:720px; margin:0 auto; padding:20px 18px 60px; }
+.doc h1 { font-size:1.7rem; margin:6px 0 4px; }
+.doc h2 { font-size:1.1rem; margin:28px 0 8px; color:var(--accent); }
+.doc p, .doc li { line-height:1.75; }
+.doc ul { padding-left:20px; }
+.doc li { margin:6px 0; }
+.doc-meta { color:var(--muted); font-size:.9rem; margin:0 0 20px; }
+.doc-lead { background:var(--card); border:1px solid var(--line); border-radius:16px;
+  padding:14px 16px; }
+.doc-back a { color:var(--accent); text-decoration:none; font-weight:700; }
+.doc-back-end { margin-top:36px; padding-top:20px; border-top:1px solid var(--line); }
+.doc-warn { background:var(--pop-yellow-light); border-radius:14px; padding:12px 14px; }
+.doc code { background:var(--bg-input); border-radius:6px; padding:1px 5px; font-size:.9em; }
+/* 표는 좁은 화면에서 가로로 밀린다 — 감싸지 않고 셀을 줄바꿈시킨다. */
+.doc-table { width:100%; border-collapse:collapse; margin:10px 0; font-size:.9rem; }
+.doc-table th, .doc-table td { border-bottom:1px solid var(--line); padding:10px 8px;
+  text-align:left; vertical-align:top; }
+.doc-table th { color:var(--muted); }
+.doc-host { color:var(--muted); font-size:.85em; word-break:break-all; }
+/* 앱 목록 화면 맨 아래 링크 줄. 버튼처럼 보이면 안 된다 — 그래서 .lactions 밖이다. */
+.lfoot { text-align:center; padding:0 12px 28px; font-size:.85rem; color:var(--muted); }
+.lfoot a { color:var(--muted); }
 
 </style>
 </head>
@@ -1417,7 +1446,8 @@ function parseShareHash(hash) {
   return m ? m[1] : null;
 }
 
-// 지금 주소에서 해시만 갈아 끼운다 — 배포 경로(/miyo-trip/)가 그대로 유지된다.
+// 지금 주소에서 해시만 갈아 끼운다 — 배포 경로가 무엇이든 그대로 유지된다
+// (Vercel은 루트 /, 하위 경로에 올려도 마찬가지다).
 // 쿼리와 index.html은 떼어 낸다(링크는 짧을수록 메신저에서 잘 붙는다). 그 밖의
 // 파일명은 그대로 둔다 — 떼면 그 주소로는 앱이 열리지 않는다.
 function shareUrl(href, payload) {

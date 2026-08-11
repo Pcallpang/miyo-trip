@@ -37,6 +37,9 @@ html = """<!doctype html>
 <meta name="theme-color" content="#FDF3E7">
 <meta name="color-scheme" content="light">
 <title>야르미요의 여행 플래너</title>
+<meta name="description" content="일정·경비·준비물·날씨를 한 곳에 모으는 여행 플래너.">
+<!-- og:*와 개인정보처리방침 링크는 넣지 않는다 — 이 파일은 file://로 여는
+     단일 파일이라 미리보기 크롤러가 오지 않고, 옆에 privacy.html도 없다. -->
 <style>
 """ + read("styles.css") + """
 </style>
